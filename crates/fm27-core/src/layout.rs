@@ -8,7 +8,7 @@ pub const BUILD: &str = "27.0.0+2486695";
 pub const GAME_DB_SCHEMA: u32 = 4000;
 /// Cache/parser revision. The suffix invalidates caches written before the
 /// complete player-trait and nation-name tables landed.
-pub const PARSER_VERSION: &str = concat!(env!("CARGO_PKG_VERSION"), "+nation-names");
+pub const PARSER_VERSION: &str = concat!(env!("CARGO_PKG_VERSION"), "+nation-names+listing");
 pub const EARLIEST_YEAR: i32 = 1901;
 pub const LATEST_YEAR: i32 = 2200;
 pub const MISSING_U32: u32 = 0xFFFF_FFFF;
@@ -326,6 +326,12 @@ impl ContractLayout {
     pub const TAIL_END_OFFSET: usize = 28;
     pub const TAIL_PRINTED_START_OFFSET: usize = 32;
     pub const TAIL_SQUAD_STATUS_OFFSET: usize = 36;
+    /// Bit 0 is transfer listed, bit 1 is loan listed. Other bits are game flags
+    /// (for example 0x40 on players the club will not sell).
+    pub const TAIL_LIST_FLAGS_OFFSET: usize = 39;
+    /// `5` when the club has placed the player on the transfer list.
+    pub const TAIL_LIST_CODE_OFFSET: usize = 40;
+    pub const LIST_CODE_TRANSFER: u8 = 5;
     pub const TAIL_E24_OFFSET: usize = 24;
     pub const TAIL_EVENT_COUNT_OFFSET: usize = 42;
     pub const TAIL_STRUCT_END: usize = 46;

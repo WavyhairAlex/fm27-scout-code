@@ -936,7 +936,7 @@ dependencies = [
 
 [[package]]
 name = "fm27-cli"
-version = "0.2.1"
+version = "0.3.0"
 dependencies = [
  "anyhow",
  "clap",
@@ -947,7 +947,7 @@ dependencies = [
 
 [[package]]
 name = "fm27-core"
-version = "0.2.1"
+version = "0.3.0"
 dependencies = [
  "chrono",
  "csv",
@@ -962,7 +962,7 @@ dependencies = [
 
 [[package]]
 name = "fm27-scout-desktop"
-version = "0.2.1"
+version = "0.3.0"
 dependencies = [
  "fm27-core",
  "serde",

@@ -106,6 +106,8 @@ export interface Contract {
   end: string | null;
   squad_status: number | null;
   contract_type: number | null;
+  transfer_listed: boolean;
+  loan_listed: boolean;
   clauses: Clause[];
   on_loan: boolean | null;
   loan_parent_club_uid: number | null;
@@ -168,6 +170,8 @@ export interface Player {
   positions: Positions;
   transfer_value: number | null;
   transfer_value_state: TransferValueState;
+  transfer_listed: boolean;
+  loan_listed: boolean;
   raw_condition: number;
   raw_match_sharpness: number;
   traits: Trait[];
@@ -207,6 +211,8 @@ export interface PlayerRow {
   left_foot: number | null;
   right_foot: number | null;
   on_loan: boolean | null;
+  transfer_listed: boolean;
+  loan_listed: boolean;
   traits: Trait[];
   best_role_id: string | null;
   best_role_name: string | null;
@@ -231,6 +237,7 @@ export interface PlayerQuery {
   nation_ids?: number[];
   genders?: number[];
   availability?: string | null;
+  listings?: string[];
   age_min?: number | null;
   age_max?: number | null;
   ca_min?: number | null;
@@ -328,6 +335,7 @@ export interface FilterOptions {
   nations: FilterOption[];
   genders: FilterOption[];
   availability: FilterOption[];
+  listing: FilterOption[];
   min_age: number | null;
   max_age: number | null;
   min_ca: number | null;

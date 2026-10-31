@@ -29,6 +29,7 @@ export function buildPlayerQuery(
     nation_ids: filters.nationIds,
     genders: filters.genders,
     availability: filters.availability,
+    listings: filters.listings,
     age_min: filters.ageMin,
     age_max: filters.ageMax,
     ca_min: filters.caMin,

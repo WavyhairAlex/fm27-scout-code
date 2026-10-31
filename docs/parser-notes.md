@@ -198,6 +198,12 @@ tail. Contract type is read from the head at clause base -35 (gate 5).
 Loans use the tail-shaped block before a no-terms chain record: marker `FFFFFFFF` at
 +24 and an end date at +28.
 
+The in-effect contract tail also carries transfer status. At +39 the flags byte uses
+bit 0 for listed for transfer and bit 1 for listed for loan; other bits (for example
+`0x40`) appear on many players and are unrelated to the listing result. At +40 the
+listing code is `5` for a club-placed transfer listing. The reference save has 206
+transfer-listed and 1,301 loan-listed players.
+
 ## Validation
 
 The Rust output is normalized to the same JSON keys as the oracle and compared for all

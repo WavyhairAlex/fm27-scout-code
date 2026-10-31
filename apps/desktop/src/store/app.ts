@@ -23,6 +23,7 @@ export interface Filters {
   nationIds: number[];
   genders: number[];
   availability: string | null;
+  listings: string[];
   ageMin: number | null;
   ageMax: number | null;
   caMin: number | null;
@@ -49,6 +50,7 @@ export const EMPTY_FILTERS: Filters = {
   nationIds: [],
   genders: [],
   availability: null,
+  listings: [],
   ageMin: null,
   ageMax: null,
   caMin: null,
@@ -222,6 +224,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         ...view.filters,
         attributes: view.filters.attributes ?? [],
         genders: view.filters.genders ?? [],
+        listings: view.filters.listings ?? [],
       },
       sort: view.sort?.length ? view.sort : [{ by: "ca", dir: "desc" }],
       page: 0,

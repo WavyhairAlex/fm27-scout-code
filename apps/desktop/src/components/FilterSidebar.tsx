@@ -63,6 +63,7 @@ export function FilterSidebar() {
     if (filters.nationIds.length) count++;
     if (filters.genders.length) count++;
     if (filters.availability) count++;
+    if (filters.listings.length) count++;
     if (filters.ageMin != null || filters.ageMax != null) count++;
     if (filters.caMin != null || filters.caMax != null) count++;
     if (
@@ -101,6 +102,18 @@ export function FilterSidebar() {
         .map((key) => [key, attributeLabel(key, locale)] as const)
         .sort((a, b) => a[1].localeCompare(b[1], locale)),
     [hiddenEnabled, locale],
+  );
+
+  const listingOptions = useMemo(
+    () =>
+      (options?.listing ?? []).map((option) => ({
+        ...option,
+        name:
+          option.id === 1
+            ? t("filter.listing.sale")
+            : t("filter.listing.loan"),
+      })),
+    [options?.listing, t],
   );
 
   const presets = useMemo(() => {
@@ -369,6 +382,23 @@ export function FilterSidebar() {
               );
             })}
           </div>
+        </Section>
+
+        <Section title={t("filter.listing")} icon={<SlidersHorizontal size={12} />}>
+          <MultiSelect
+            options={listingOptions}
+            selected={filters.listings.map((listing) =>
+              listing === "sale" ? 1 : 2,
+            )}
+            onChange={(ids) =>
+              patchFilters({
+                listings: ids.map((id) => (id === 1 ? "sale" : "loan")),
+              })
+            }
+            placeholder={t("filter.allListings")}
+            searchable={false}
+            maxLabel={1}
+          />
         </Section>
 
         <Section title={t("filter.ageAbility")} icon={<SlidersHorizontal size={12} />}>

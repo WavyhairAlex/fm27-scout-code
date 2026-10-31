@@ -194,6 +194,8 @@ function buildPlayer(index: number): Player {
     positions,
     transfer_value: value,
     transfer_value_state: "ok",
+    transfer_listed: index % 23 === 0,
+    loan_listed: index % 29 === 0,
     raw_condition: 7000,
     raw_match_sharpness: 7500,
     traits: index % 4 === 0 ? TRAITS : [],
@@ -251,6 +253,8 @@ function buildPlayer(index: number): Player {
       end: contractEnd,
       squad_status: 2,
       contract_type: 1,
+      transfer_listed: index % 23 === 0,
+      loan_listed: index % 29 === 0,
       clauses: [],
       on_loan: index % 17 === 0,
       loan_parent_club_uid: index % 17 === 0 ? 728 : null,
@@ -329,6 +333,8 @@ export function mockPlayerRow(player: Player): PlayerRow {
     left_foot: player.left_foot,
     right_foot: player.right_foot,
     on_loan: player.on_loan,
+    transfer_listed: player.transfer_listed,
+    loan_listed: player.loan_listed,
     traits: player.traits,
     best_role_id: player.best_role?.id ?? null,
     best_role_name: player.best_role?.name ?? null,
@@ -427,6 +433,18 @@ export function mockFilterOptions(): FilterOptions {
         count: MOCK_PLAYERS.filter((player) => player.injuries.length > 0).length,
       },
     ],
+    listing: [
+      {
+        id: 1,
+        name: "挂牌出售",
+        count: MOCK_PLAYERS.filter((player) => player.transfer_listed).length,
+      },
+      {
+        id: 2,
+        name: "挂牌出租",
+        count: MOCK_PLAYERS.filter((player) => player.loan_listed).length,
+      },
+    ],
     min_age: 16,
     max_age: 40,
     min_ca: 70,
@@ -467,6 +485,13 @@ export function mockQuery(query: PlayerQuery): {
   if (query.availability === "free") rows = rows.filter((row) => row.club_uid == null);
   if (query.availability === "available") {
     rows = rows.filter((row) => row.injury_status !== "injured" && row.suspension_count === 0);
+  }
+  if (query.listings?.length) {
+    rows = rows.filter((row) =>
+      query.listings!.some((listing) =>
+        listing === "sale" ? row.transfer_listed : row.loan_listed,
+      ),
+    );
   }
   if (query.age_min != null) rows = rows.filter((row) => (row.age ?? 0) >= query.age_min!);
   if (query.age_max != null) rows = rows.filter((row) => (row.age ?? 999) <= query.age_max!);

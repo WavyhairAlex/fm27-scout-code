@@ -53,6 +53,8 @@ fn write_csv(path: &Path, rows: &[PlayerRow]) -> Result<()> {
         "left_foot".to_owned(),
         "right_foot".to_owned(),
         "on_loan".to_owned(),
+        "transfer_listed".to_owned(),
+        "loan_listed".to_owned(),
     ];
     for key in crate::layout::ATTRIBUTE_KEYS {
         header.push(key.to_owned());
@@ -96,6 +98,8 @@ fn write_csv(path: &Path, rows: &[PlayerRow]) -> Result<()> {
                 .map(|value| if value { "yes" } else { "no" })
                 .unwrap_or_default()
                 .to_owned(),
+            if row.transfer_listed { "yes" } else { "no" }.to_owned(),
+            if row.loan_listed { "yes" } else { "no" }.to_owned(),
         ];
         for key in crate::layout::ATTRIBUTE_KEYS {
             record.push(

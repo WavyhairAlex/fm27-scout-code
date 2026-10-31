@@ -152,7 +152,7 @@ export function PlayerTable() {
                   ? "free"
                   : "available",
         header: t("table.status"),
-        size: 66,
+        size: 104,
         cell: ({ row }) => <StatusBadges row={row.original} />,
       },
       {
@@ -581,6 +581,20 @@ export function PlayerTable() {
 function StatusBadges({ row }: { row: PlayerRow }) {
   const { t } = useI18n();
   const badges: { label: string; tone: string; title?: string }[] = [];
+  if (row.transfer_listed) {
+    badges.push({
+      label: t("table.transferListedShort"),
+      tone: "bg-[var(--gold-soft)] text-[var(--gold)]",
+      title: t("table.transferListed"),
+    });
+  }
+  if (row.loan_listed) {
+    badges.push({
+      label: t("table.loanListedShort"),
+      tone: "bg-[var(--accent-soft)] text-[var(--accent-strong)]",
+      title: t("table.loanListed"),
+    });
+  }
   if (row.injury_status === "injured") {
     badges.push({
       label: t("table.injuredShort"),

@@ -19,6 +19,8 @@ struct ChainRecord {
     end: Option<NaiveDate>,
     has_terms: bool,
     squad_status: Option<u8>,
+    list_flags: Option<u8>,
+    list_code: Option<u8>,
     event_count: Option<u32>,
     clauses: Vec<Clause>,
     contract_type: Option<u8>,
@@ -69,6 +71,8 @@ impl ContractDecoder<'_> {
             start,
             in_effect_end,
             squad_status,
+            transfer_listed,
+            loan_listed,
             _event_count,
             clauses,
             contract_type,
@@ -90,6 +94,11 @@ impl ContractDecoder<'_> {
                 })
                 .collect();
             if let Some((index, record)) = selected {
+                let transfer_listed = record.has_terms
+                    && (record.list_code == Some(ContractLayout::LIST_CODE_TRANSFER)
+                        || record.list_flags.is_some_and(|flags| flags & 1 != 0));
+                let loan_listed =
+                    record.has_terms && record.list_flags.is_some_and(|flags| flags & 2 != 0);
                 (
                     record.club_uid,
                     record.club_name.clone(),
@@ -102,6 +111,8 @@ impl ContractDecoder<'_> {
                     } else {
                         None
                     },
+                    transfer_listed,
+                    loan_listed,
                     if record.has_terms {
                         record.event_count
                     } else {
@@ -130,6 +141,8 @@ impl ContractDecoder<'_> {
                     None,
                     None,
                     None,
+                    false,
+                    false,
                     None,
                     Vec::new(),
                     None,
@@ -147,6 +160,8 @@ impl ContractDecoder<'_> {
                 fallback.0,
                 None,
                 None,
+                false,
+                false,
                 None,
                 Vec::new(),
                 None,
@@ -202,6 +217,8 @@ impl ContractDecoder<'_> {
             end: end.map(|d| d.to_string()),
             squad_status,
             contract_type,
+            transfer_listed,
+            loan_listed,
             clauses,
             on_loan,
             loan_parent_club_uid,
@@ -290,6 +307,8 @@ impl ContractDecoder<'_> {
                 end: None,
                 has_terms: false,
                 squad_status: None,
+                list_flags: None,
+                list_code: None,
                 event_count: None,
                 clauses: Vec::new(),
                 contract_type: None,
@@ -298,6 +317,8 @@ impl ContractDecoder<'_> {
 
         let end = decode_date(game_db, tail + ContractLayout::TAIL_END_OFFSET);
         let squad_status = read_u8(game_db, tail + ContractLayout::TAIL_SQUAD_STATUS_OFFSET);
+        let list_flags = read_u8(game_db, tail + ContractLayout::TAIL_LIST_FLAGS_OFFSET);
+        let list_code = read_u8(game_db, tail + ContractLayout::TAIL_LIST_CODE_OFFSET);
         let event_count = read_u32(game_db, tail + ContractLayout::TAIL_EVENT_COUNT_OFFSET);
         let (clauses, contract_type) = if let Some((base, count)) =
             locate_clause_base(game_db, tail).or_else(|| locate_clause_base_fallback(game_db, tail))
@@ -319,6 +340,8 @@ impl ContractDecoder<'_> {
             end,
             has_terms: true,
             squad_status,
+            list_flags,
+            list_code,
             event_count,
             clauses,
             contract_type,

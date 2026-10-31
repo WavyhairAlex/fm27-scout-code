@@ -51,6 +51,24 @@ describe("mock player query", () => {
     expect(suspensions.rows.every((row) => row.suspension_count > 0)).toBe(true);
   });
 
+  it("filters transfer and loan listings", () => {
+    const sale = mockQuery({
+      save_id: MOCK_SAVE_ID,
+      listings: ["sale"],
+      page_size: 500,
+    });
+    expect(sale.total).toBeGreaterThan(0);
+    expect(sale.rows.every((row) => row.transfer_listed)).toBe(true);
+
+    const loan = mockQuery({
+      save_id: MOCK_SAVE_ID,
+      listings: ["loan"],
+      page_size: 500,
+    });
+    expect(loan.total).toBeGreaterThan(0);
+    expect(loan.rows.every((row) => row.loan_listed)).toBe(true);
+  });
+
   it("applies multi-column sort", () => {
     const page = mockQuery({
       save_id: MOCK_SAVE_ID,

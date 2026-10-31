@@ -377,6 +377,9 @@ pub fn parse_save_with_progress(
         let player_injuries = injuries.remove(&position).unwrap_or_default();
         let player_suspensions = suspensions.remove(&position).unwrap_or_default();
         let best_role = crate::roles::best_role(&attributes, &positions);
+        let (transfer_listed, loan_listed) = contract.as_ref().map_or((false, false), |contract| {
+            (contract.transfer_listed, contract.loan_listed)
+        });
 
         players.push(Player {
             uid: record.uid,
@@ -426,6 +429,8 @@ pub fn parse_save_with_progress(
             positions,
             transfer_value,
             transfer_value_state,
+            transfer_listed,
+            loan_listed,
             raw_condition,
             raw_match_sharpness,
             traits,

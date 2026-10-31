@@ -130,9 +130,10 @@ export function Inspector() {
                   <h2 className="text-[17px] font-semibold leading-tight tracking-tight text-[var(--ink)]">
                     {player.name ?? t("common.unnamedPlayer")}
                   </h2>
+                  <div className="mt-0.5 truncate text-[11px] text-[var(--muted)]">
+                    {player.club_name ?? t("common.freeAgent")}
+                  </div>
                   <div className="mt-0.5 flex items-center gap-1.5 text-[11px] text-[var(--muted)]">
-                    <span>{player.club_name ?? t("common.freeAgent")}</span>
-                    <span className="text-[var(--line-strong)]">·</span>
                     <span>{t("common.yearsOld", { age: player.age ?? "?" })}</span>
                     <span className="text-[var(--line-strong)]">·</span>
                     <span>
@@ -162,7 +163,7 @@ export function Inspector() {
             </div>
           </div>
 
-          <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] text-[var(--muted)]">
+          <div className="mt-3 flex flex-wrap items-center gap-x-2.5 gap-y-1 text-[10px] text-[var(--muted)]">
             <span className="inline-flex items-center gap-1">
               <Shield size={11} />
               {player.natural_positions.join(" / ") || "—"}
@@ -174,6 +175,24 @@ export function Inspector() {
             <span className="inline-flex items-center gap-1">
               <CalendarDays size={11} />
               {t("inspector.contractUntil", { date: player.contract?.end ?? "—" })}
+              {player.transfer_listed && (
+                <Badge
+                  tone="gold"
+                  title={t("inspector.transferListed")}
+                  className="px-1.5 py-0 text-[9px]"
+                >
+                  {t("inspector.transferListedShort")}
+                </Badge>
+              )}
+              {player.loan_listed && (
+                <Badge
+                  tone="accent"
+                  title={t("inspector.loanListed")}
+                  className="px-1.5 py-0 text-[9px]"
+                >
+                  {t("inspector.loanListedShort")}
+                </Badge>
+              )}
             </span>
           </div>
 
@@ -728,7 +747,19 @@ function ContractPanel({ player }: { player: Player }) {
               {contract?.club_name ?? t("inspector.noContract")}
             </div>
           </div>
-          {contract?.on_loan && <Badge tone="blue">{t("inspector.loanBadge")}</Badge>}
+          <div className="flex flex-col items-end gap-1">
+            {contract?.on_loan && <Badge tone="blue">{t("inspector.loanBadge")}</Badge>}
+            {contract?.transfer_listed && (
+              <Badge tone="gold" title={t("inspector.transferListed")}>
+                {t("inspector.transferListedShort")}
+              </Badge>
+            )}
+            {contract?.loan_listed && (
+              <Badge tone="accent" title={t("inspector.loanListed")}>
+                {t("inspector.loanListedShort")}
+              </Badge>
+            )}
+          </div>
         </div>
         <div className="mt-3 grid grid-cols-2 gap-2">
           <MiniStat

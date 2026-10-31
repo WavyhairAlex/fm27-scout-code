@@ -67,6 +67,14 @@ fn parses_the_reference_career() {
             > 10_000,
         "women's players are present"
     );
+    assert!(
+        parsed.players.iter().any(|player| player.transfer_listed),
+        "transfer-listed players are present"
+    );
+    assert!(
+        parsed.players.iter().any(|player| player.loan_listed),
+        "loan-listed players are present"
+    );
     assert_eq!(
         parsed
             .players
@@ -168,6 +176,8 @@ fn caches_queries_and_exports_the_reference_career() {
     assert!(!options.nations.is_empty());
     assert!(!options.genders.is_empty());
     assert!(!options.availability.is_empty());
+    assert_eq!(options.listing.len(), 2);
+    assert!(options.listing.iter().all(|option| option.count > 0));
     assert!(
         options
             .nations
@@ -193,6 +203,28 @@ fn caches_queries_and_exports_the_reference_career() {
         .map(|gender| gender.count)
         .unwrap_or(0);
     assert!(women_count > 10_000);
+
+    let listed = store
+        .query_players(&PlayerQuery {
+            save_id,
+            listings: vec!["sale".to_owned()],
+            page_size: Some(20),
+            ..PlayerQuery::default()
+        })
+        .expect("transfer-listed query");
+    assert!(listed.total > 0);
+    assert!(listed.rows.iter().all(|row| row.transfer_listed));
+
+    let available_for_loan = store
+        .query_players(&PlayerQuery {
+            save_id,
+            listings: vec!["loan".to_owned()],
+            page_size: Some(20),
+            ..PlayerQuery::default()
+        })
+        .expect("loan-listed query");
+    assert!(available_for_loan.total > 0);
+    assert!(available_for_loan.rows.iter().all(|row| row.loan_listed));
 
     let women = store
         .query_players(&PlayerQuery {

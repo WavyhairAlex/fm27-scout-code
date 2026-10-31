@@ -143,6 +143,10 @@ pub struct Contract {
     pub end: Option<String>,
     pub squad_status: Option<u8>,
     pub contract_type: Option<u8>,
+    #[serde(default)]
+    pub transfer_listed: bool,
+    #[serde(default)]
+    pub loan_listed: bool,
     pub clauses: Vec<Clause>,
     pub on_loan: Option<bool>,
     pub loan_parent_club_uid: Option<u32>,
@@ -251,6 +255,10 @@ pub struct Player {
     pub positions: Positions,
     pub transfer_value: Option<u32>,
     pub transfer_value_state: TransferValueState,
+    #[serde(default)]
+    pub transfer_listed: bool,
+    #[serde(default)]
+    pub loan_listed: bool,
     pub raw_condition: u16,
     pub raw_match_sharpness: u16,
     pub traits: Vec<Trait>,

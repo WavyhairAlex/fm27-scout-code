@@ -48,6 +48,8 @@ pub struct PlayerQuery {
     pub genders: Vec<u8>,
     /// One of `injured`, `suspended`, `loan`, `free`.
     pub availability: Option<String>,
+    /// Any of `sale` (transfer listed) and `loan` (loan listed).
+    pub listings: Vec<String>,
     pub age_min: Option<i32>,
     pub age_max: Option<i32>,
     pub ca_min: Option<u16>,
@@ -100,6 +102,8 @@ pub struct PlayerRow {
     pub left_foot: Option<u8>,
     pub right_foot: Option<u8>,
     pub on_loan: Option<bool>,
+    pub transfer_listed: bool,
+    pub loan_listed: bool,
     pub traits: Vec<Trait>,
     pub best_role_id: Option<String>,
     pub best_role_name: Option<String>,
@@ -210,6 +214,7 @@ pub struct FilterOptions {
     pub nations: Vec<FilterOption>,
     pub genders: Vec<FilterOption>,
     pub availability: Vec<FilterOption>,
+    pub listing: Vec<FilterOption>,
     pub min_age: Option<i32>,
     pub max_age: Option<i32>,
     pub min_ca: Option<u16>,
@@ -287,10 +292,10 @@ impl Store {
                   raw_attributes_json, best_role_id, best_role_name, best_role_score,
                   best_role_position, injury_status, injury_until, recent_injury,
                   suspension_count, injuries_json, suspensions_json, contract_end, wage, on_loan,
-                  data_json)
+                  transfer_listed, loan_listed, data_json)
                  VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18,?19,
                          ?20,?21,?22,?23,?24,?25,?26,?27,?28,?29,?30,?31,?32,?33,?34,?35,?36,
-                         ?37,?38,?39,?40,?41,?42)",
+                         ?37,?38,?39,?40,?41,?42,?43,?44)",
             )?;
             let mut snapshot_stmt = transaction.prepare(
                 "INSERT INTO player_snapshots
@@ -380,6 +385,8 @@ impl Store {
                     contract_end,
                     wage,
                     on_loan,
+                    player.transfer_listed,
+                    player.loan_listed,
                     serde_json::to_string(player)?,
                 ])?;
 
@@ -553,7 +560,7 @@ impl Store {
                     c.end_date, p.height_cm, p.left_foot, p.right_foot, c.on_loan, p.traits_json,
                     p.nation_name, p.gender, p.best_role_id, p.best_role_name,
                     p.best_role_score, p.best_role_position, p.injury_status, p.injury_until,
-                    p.recent_injury, p.suspension_count
+                    p.recent_injury, p.suspension_count, p.transfer_listed, p.loan_listed
              FROM players p
              LEFT JOIN contracts c ON c.save_id = p.save_id AND c.player_uid = p.uid
              WHERE {where_sql}
@@ -606,6 +613,8 @@ impl Store {
                 injury_until: row.get(29)?,
                 recent_injury: row.get(30)?,
                 suspension_count: row.get(31)?,
+                transfer_listed: row.get(32)?,
+                loan_listed: row.get(33)?,
             })
         })?;
         let mut rows = rows.collect::<std::result::Result<Vec<_>, _>>()?;
@@ -1036,6 +1045,10 @@ impl Store {
         status_query.on_loan = None;
         let availability = self.status_counts(&status_query)?;
 
+        let mut listing_query = base.clone();
+        listing_query.listings.clear();
+        let listing = self.listing_counts(&listing_query)?;
+
         let ranges = self.conn.query_row(
             "SELECT MIN(age), MAX(age), MIN(ca), MAX(ca), MIN(pa), MAX(pa),
                     MIN(transfer_value), MAX(transfer_value)
@@ -1065,6 +1078,7 @@ impl Store {
             nations,
             genders,
             availability,
+            listing,
             min_age: ranges.0,
             max_age: ranges.1,
             min_ca: ranges.2,
@@ -1172,6 +1186,36 @@ impl Store {
             },
         ])
     }
+
+    fn listing_counts(&self, query: &PlayerQuery) -> Result<Vec<FilterOption>> {
+        let mut params: Vec<Value> = Vec::new();
+        let where_sql = build_where(query, &mut params)?;
+        let sql = format!(
+            "SELECT
+               COALESCE(SUM(CASE WHEN p.transfer_listed = 1 THEN 1 ELSE 0 END), 0),
+               COALESCE(SUM(CASE WHEN p.loan_listed = 1 THEN 1 ELSE 0 END), 0)
+             FROM players p
+             LEFT JOIN contracts c ON c.save_id = p.save_id AND c.player_uid = p.uid
+             WHERE {where_sql}"
+        );
+        let counts = self
+            .conn
+            .query_row(&sql, params_from_iter(params.iter()), |row| {
+                Ok((row.get::<_, i64>(0)?, row.get::<_, i64>(1)?))
+            })?;
+        Ok(vec![
+            FilterOption {
+                id: 1,
+                name: "挂牌出售".to_owned(),
+                count: counts.0 as u64,
+            },
+            FilterOption {
+                id: 2,
+                name: "挂牌出租".to_owned(),
+                count: counts.1 as u64,
+            },
+        ])
+    }
 }
 
 fn migrate(conn: &Connection) -> Result<()> {
@@ -1190,6 +1234,8 @@ fn migrate(conn: &Connection) -> Result<()> {
         ("players", "suspension_count", "INTEGER NOT NULL DEFAULT 0"),
         ("players", "injuries_json", "TEXT NOT NULL DEFAULT '[]'"),
         ("players", "suspensions_json", "TEXT NOT NULL DEFAULT '[]'"),
+        ("players", "transfer_listed", "INTEGER NOT NULL DEFAULT 0"),
+        ("players", "loan_listed", "INTEGER NOT NULL DEFAULT 0"),
         ("clubs", "nation_name", "TEXT"),
         ("clubs", "fa_nation_name", "TEXT"),
         ("clubs", "gender", "INTEGER"),
@@ -1295,6 +1341,19 @@ fn build_where(query: &PlayerQuery, params: &mut Vec<Value>) -> Result<String> {
                 )));
             }
         }
+    }
+    if !query.listings.is_empty() {
+        let mut listing_clauses = Vec::with_capacity(query.listings.len());
+        for listing in &query.listings {
+            match listing.as_str() {
+                "sale" => listing_clauses.push("p.transfer_listed = 1"),
+                "loan" => listing_clauses.push("p.loan_listed = 1"),
+                other => {
+                    return Err(Error::parse(format!("unknown listing filter {other:?}")));
+                }
+            }
+        }
+        clauses.push(format!("({})", listing_clauses.join(" OR ")));
     }
     add_range(query.age_min, query.age_max, "p.age", params, &mut clauses);
     add_range(query.ca_min, query.ca_max, "p.ca", params, &mut clauses);

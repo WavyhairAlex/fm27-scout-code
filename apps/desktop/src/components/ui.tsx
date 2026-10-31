@@ -204,10 +204,12 @@ export function Badge({
   children,
   tone = "default",
   className,
+  title,
 }: {
   children: ReactNode;
   tone?: "default" | "accent" | "gold" | "blue" | "danger" | "outline";
   className?: string;
+  title?: string;
 }) {
   const tones = {
     default: "border-[var(--line)] bg-[var(--surface-2)] text-[var(--muted)]",
@@ -219,6 +221,7 @@ export function Badge({
   };
   return (
     <span
+      title={title}
       className={cn(
         "inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-semibold leading-tight",
         tones[tone],
