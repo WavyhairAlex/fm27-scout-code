@@ -7,8 +7,8 @@ pub const GAME: &str = "FM27";
 pub const BUILD: &str = "27.0.0+2486695";
 pub const GAME_DB_SCHEMA: u32 = 4000;
 /// Cache/parser revision. The suffix invalidates caches written before the
-/// complete player-trait name table landed.
-pub const PARSER_VERSION: &str = concat!(env!("CARGO_PKG_VERSION"), "+competitions");
+/// complete player-trait and nation-name tables landed.
+pub const PARSER_VERSION: &str = concat!(env!("CARGO_PKG_VERSION"), "+nation-names");
 pub const EARLIEST_YEAR: i32 = 1901;
 pub const LATEST_YEAR: i32 = 2200;
 pub const MISSING_U32: u32 = 0xFFFF_FFFF;

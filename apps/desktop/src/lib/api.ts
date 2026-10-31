@@ -168,7 +168,7 @@ export async function appInfo(): Promise<AppInfo> {
     return {
       data_dir: "~/Library/Application Support/com.fm27scout.desktop",
       version: "0.2.1",
-      nation_names: 208,
+      nation_names: 228,
       competition_names: 0,
     };
   }

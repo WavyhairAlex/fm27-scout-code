@@ -41,6 +41,10 @@ describe("localized domain labels", () => {
     expect(nationLabel("英格兰", "en")).toBe("England");
     expect(nationLabel("英格兰", "zh-CN")).toBe("英格兰");
     expect(nationLabel("Wales", "en")).toBe("Wales");
+    expect(nationLabel("科索沃", "en")).toBe("Kosovo");
+    expect(nationLabel("法属圭亚那", "en")).toBe("French Guiana");
+    expect(nationLabel("荷属圣马丁", "en")).toBe("Sint Maarten");
+    expect(nationLabel("圣巴泰勒米", "en")).toBe("St Barthélemy");
   });
 
   it("translates attributes, traits, roles and personality", () => {

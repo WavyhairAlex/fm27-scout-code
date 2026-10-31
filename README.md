@@ -37,7 +37,7 @@ The 0.2.1 runnable release is complete:
 - Quick filters: wonderkids, expiring contracts, high potential, injured / injury history / suspended / on loan / free agent / available.
 - Role scores: 29 FM-style roles weighted by key attributes and combined with position familiarity; the detail panel shows every role and the best role.
 - Growth history: each parse records a snapshot keyed by save name + game date; the detail panel shows CA / PA / value history.
-- Gender and names: parses club gender (men's / women's) and bundles names for 208 countries/regions; competition names are supplied through a user CSV.
+- Gender and names: parses club gender (men's / women's) and bundles names for 228 countries/regions; competition names are supplied through a user CSV.
 - Linked filtering: club, nationality, gender and status counts update live with the current filters.
 - Release setup: Universal Binary DMG published by CI; optional Developer ID signing/notarization for local releases.
 - In-app updates: Tauri Updater checks the GitHub Releases manifest, verifies the signed update package, and restarts after installation; signing keys are configured once through `scripts/setup-updater-signing.sh`.

@@ -215,3 +215,24 @@ pub fn nation_name(database_id: u32) -> Option<String> {
 pub fn name_count() -> usize {
     names().len()
 }
+
+#[cfg(test)]
+mod tests {
+    use super::nation_name;
+
+    #[test]
+    fn non_fifa_nations_have_names() {
+        for (database_id, expected) in [
+            (214394, "直布罗陀"),
+            (217945, "科索沃"),
+            (917496, "法属圭亚那"),
+            (917498, "瓜德罗普"),
+            (917502, "马提尼克"),
+            (917506, "荷属圣马丁"),
+            (917508, "法属圣马丁"),
+            (918740, "马约特"),
+        ] {
+            assert_eq!(nation_name(database_id).as_deref(), Some(expected));
+        }
+    }
+}
