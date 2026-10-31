@@ -11,7 +11,8 @@ use serde::{Deserialize, Serialize};
 use crate::error::{Error, Result};
 use crate::layout::{ATTRIBUTE_KEYS, POSITION_KEYS};
 use crate::model::{
-    Attributes, Club, Contract, ParseReport, Personality, Player, Positions, SaveSummary, Trait,
+    Attributes, Club, Competition, Contract, ParseReport, Personality, Player, Positions,
+    SaveSummary, Trait,
 };
 use crate::parse::ParsedSave;
 
@@ -450,6 +451,24 @@ impl Store {
             }
         }
 
+        {
+            let mut competition_stmt = transaction.prepare(
+                "INSERT INTO competitions
+                 (save_id, id, database_id, name, stage_count, stage_ids_json)
+                 VALUES (?1,?2,?3,?4,?5,?6)",
+            )?;
+            for competition in &parsed.competitions {
+                competition_stmt.execute(params![
+                    save_id,
+                    competition.id,
+                    competition.database_id,
+                    competition.name,
+                    competition.stage_ids.len() as i64,
+                    serde_json::to_string(&competition.stage_ids)?,
+                ])?;
+            }
+        }
+
         transaction.commit()?;
         // A full-career insert creates a large WAL. Fold it back into the database now
         // so the cache does not keep two copies of the same rows on disk.
@@ -480,6 +499,24 @@ impl Store {
                 players: row.get(8)?,
                 clubs: row.get(9)?,
                 contracts: row.get(10)?,
+            })
+        })?;
+        rows.collect::<std::result::Result<Vec<_>, _>>()
+            .map_err(Error::from)
+    }
+
+    pub fn competitions(&self, save_id: i64) -> Result<Vec<Competition>> {
+        let mut statement = self.conn.prepare(
+            "SELECT id, database_id, name, stage_ids_json
+             FROM competitions WHERE save_id = ?1 ORDER BY id",
+        )?;
+        let rows = statement.query_map(params![save_id], |row| {
+            let stage_ids_json: String = row.get(3)?;
+            Ok(Competition {
+                id: row.get(0)?,
+                database_id: row.get(1)?,
+                name: row.get(2)?,
+                stage_ids: serde_json::from_str(&stage_ids_json).unwrap_or_default(),
             })
         })?;
         rows.collect::<std::result::Result<Vec<_>, _>>()

@@ -3,5 +3,10 @@
   "identifier": "default",
   "description": "Default FM27 Scout capability",
   "windows": ["main"],
-  "permissions": ["core:default", "dialog:default"]
+  "permissions": [
+    "core:default",
+    "dialog:default",
+    "updater:default",
+    "process:allow-restart"
+  ]
 }

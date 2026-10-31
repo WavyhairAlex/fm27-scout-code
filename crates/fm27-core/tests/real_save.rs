@@ -17,6 +17,15 @@ fn parses_the_reference_career() {
     assert_eq!(parsed.players.len(), 46_273, "player count");
     assert_eq!(parsed.clubs.len(), 26_214, "club count");
     assert_eq!(parsed.report.contracts, 44_341, "contract count");
+    assert_eq!(parsed.report.competitions, 1_724, "competition count");
+    assert_eq!(parsed.report.competition_stages, 3_459, "stage count");
+    assert_eq!(
+        parsed.report.competitions_with_database_id, 1_586,
+        "competitions with an editor database id"
+    );
+    assert_eq!(parsed.competitions[1].id, 1);
+    assert_eq!(parsed.competitions[1].database_id, Some(2));
+    assert_eq!(parsed.competitions[1].stage_ids, vec![187]);
     assert_eq!(parsed.report.players_with_person, 46_272);
     assert_eq!(parsed.report.markerless_players, 485);
 
@@ -123,6 +132,11 @@ fn caches_queries_and_exports_the_reference_career() {
             .iter()
             .all(|row| row.age.unwrap_or(99) <= 23)
     );
+
+    let competitions = store.competitions(save_id).expect("competitions");
+    assert_eq!(competitions.len(), 1_724);
+    assert_eq!(competitions[1].database_id, Some(2));
+    assert_eq!(competitions[1].stage_ids, vec![187]);
 
     let overview = store.analysis_overview(save_id).expect("overview");
     assert_eq!(overview.total_players, 46_273);

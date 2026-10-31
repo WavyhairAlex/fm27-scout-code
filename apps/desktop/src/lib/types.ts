@@ -293,11 +293,22 @@ export interface SaveSummary {
   decompressed_bytes: number;
 }
 
+export interface Competition {
+  id: number;
+  database_id: number | null;
+  name: string | null;
+  stage_ids: number[];
+}
+
 export interface ParseReport {
   save: SaveSummary;
   players: number;
   clubs: number;
   contracts: number;
+  competitions: number;
+  competition_stages: number;
+  competitions_with_database_id: number;
+  competitions_with_name: number;
   markerless_players: number;
   players_with_person: number;
   players_with_club: number;

@@ -414,6 +414,22 @@ const en = {
   "settings.competitionNames": "Competition names (user CSV)",
   "settings.nameTableNote":
     "Country names are bundled with the app. Competition names are not stored in the cache; add them from `shared/competition-names.csv` keyed by database_id to avoid shipping copyrighted game data.",
+  "settings.updates": "Updates",
+  "settings.updateVersion": "FM27 Scout {version}",
+  "settings.updateDescription":
+    "Checks GitHub Releases for a signed build. Every update is verified before installation.",
+  "settings.updateCheck": "Check for updates",
+  "settings.updateChecking": "Checking…",
+  "settings.updateCheckAgain": "Check again",
+  "settings.updateCurrent": "You're up to date",
+  "settings.updateAvailable": "Version {version} is ready",
+  "settings.updateInstall": "Install update",
+  "settings.updateDownloading": "Downloading update…",
+  "settings.updateReady": "Version {version} downloaded. Restart to finish.",
+  "settings.updateRestart": "Restart now",
+  "settings.updateError": "Update failed: {message}",
+  "settings.updateDisabled":
+    "This build has no updater public key, so in-app updates are disabled. Release builds published by CI include one.",
   "settings.about": "About",
   "settings.parserLabel": "Parser {version}",
   "settings.aboutDescription":
@@ -431,6 +447,7 @@ const en = {
   "parse.stage.names": "Name pools",
   "parse.stage.players": "Scanning records",
   "parse.stage.clubs": "Clubs",
+  "parse.stage.competitions": "Competitions",
   "parse.stage.decode": "Decoding players",
   "parse.stage.done": "Done",
   "parse.note":
@@ -856,6 +873,21 @@ const zhCN: Record<TranslationKey, string> = {
   "settings.competitionNames": "赛事名称（用户 CSV）",
   "settings.nameTableNote":
     "国家名称随应用内置；赛事名称不入库，可由 `shared/competition-names.csv` 以 database_id 为键补充，避免打包游戏受版权保护的数据。",
+  "settings.updates": "更新",
+  "settings.updateVersion": "FM27 Scout {version}",
+  "settings.updateDescription": "从 GitHub Releases 检查带签名的更新；安装前会验证签名。",
+  "settings.updateCheck": "检查更新",
+  "settings.updateChecking": "正在检查…",
+  "settings.updateCheckAgain": "重新检查",
+  "settings.updateCurrent": "已是最新版本",
+  "settings.updateAvailable": "发现新版本 {version}",
+  "settings.updateInstall": "安装更新",
+  "settings.updateDownloading": "正在下载更新…",
+  "settings.updateReady": "版本 {version} 已下载，重启后完成安装。",
+  "settings.updateRestart": "立即重启",
+  "settings.updateError": "更新失败：{message}",
+  "settings.updateDisabled":
+    "此构建未包含更新公钥，应用内更新已禁用；CI 发布的正式版本会包含公钥。",
   "settings.about": "关于",
   "settings.parserLabel": "解析器 {version}",
   "settings.aboutDescription":
@@ -872,6 +904,7 @@ const zhCN: Record<TranslationKey, string> = {
   "parse.stage.names": "姓名池",
   "parse.stage.players": "扫描记录",
   "parse.stage.clubs": "俱乐部",
+  "parse.stage.competitions": "赛事索引",
   "parse.stage.decode": "解码球员",
   "parse.stage.done": "完成",
   "parse.note":

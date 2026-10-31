@@ -8,6 +8,7 @@ use chrono::NaiveDate;
 use serde::Serialize;
 
 use crate::clubs::ClubIndex;
+use crate::competitions::CompetitionIndex;
 use crate::container::SaveFile;
 use crate::contracts::ContractDecoder;
 use crate::error::{Error, Result};
@@ -17,7 +18,8 @@ use crate::layout::{
 };
 use crate::metadata::{SaveMetadata, read_metadata};
 use crate::model::{
-    Attributes, Club, ParseReport, Player, Positions, Reputation, SaveSummary, TransferValueState,
+    Attributes, Club, Competition, ParseReport, Player, Positions, Reputation, SaveSummary,
+    TransferValueState,
 };
 use crate::names::NamePools;
 use crate::nations::NationIndex;
@@ -38,6 +40,7 @@ pub struct ParsedSave {
     pub summary: SaveSummary,
     pub players: Vec<Player>,
     pub clubs: Vec<Club>,
+    pub competitions: Vec<Competition>,
     pub report: ParseReport,
 }
 
@@ -95,6 +98,29 @@ pub fn parse_save_with_progress(
             .map(str::to_owned);
     }
 
+    progress(ParseProgress {
+        stage: "competitions".to_owned(),
+        current: 0,
+        total: 0,
+        message: "正在解析赛事索引".to_owned(),
+    });
+    let mut warnings = Vec::new();
+    let competitions = match CompetitionIndex::read(&game_db) {
+        Ok(index) => {
+            if index.stage_gaps > 0 {
+                warnings.push(format!(
+                    "{} gaps were skipped while walking the stage table",
+                    index.stage_gaps
+                ));
+            }
+            index
+        }
+        Err(error) => {
+            warnings.push(format!("competition index unavailable: {error}"));
+            CompetitionIndex::default()
+        }
+    };
+
     let reference_date = metadata
         .game_date
         .as_deref()
@@ -119,7 +145,8 @@ pub fn parse_save_with_progress(
     } else {
         HashMap::new()
     };
-    let mut suspensions = crate::suspensions::read_suspensions(&game_db, &record_index, &nations);
+    let mut suspensions =
+        crate::suspensions::read_suspensions(&game_db, &record_index, &nations, &competitions);
 
     let club_lookup = ClubLookup {
         name_by_uid: &clubs.name_by_uid,
@@ -137,7 +164,6 @@ pub fn parse_save_with_progress(
     };
 
     let mut players = Vec::with_capacity(record_index.records.len());
-    let mut warnings = Vec::new();
     let mut with_person = 0usize;
     let mut with_club = 0usize;
     let mut with_contract = 0usize;
@@ -463,6 +489,10 @@ pub fn parse_save_with_progress(
         players: players.len(),
         clubs: clubs.clubs.len(),
         contracts,
+        competitions: competitions.competitions.len(),
+        competition_stages: competitions.stage_count,
+        competitions_with_database_id: competitions.with_database_id,
+        competitions_with_name: competitions.with_name,
         markerless_players: record_index.markerless,
         players_with_person: with_person,
         players_with_club: with_club,
@@ -476,6 +506,7 @@ pub fn parse_save_with_progress(
         summary,
         players,
         clubs: clubs.clubs,
+        competitions: competitions.competitions,
         report,
     })
 }

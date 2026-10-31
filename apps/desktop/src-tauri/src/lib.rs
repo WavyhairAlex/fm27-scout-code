@@ -39,6 +39,29 @@ struct AppInfo {
     competition_names: usize,
 }
 
+#[derive(Debug, Serialize)]
+struct UpdaterInfo {
+    /// True when this build embedded an updater public key.
+    configured: bool,
+    version: String,
+}
+
+#[tauri::command]
+fn updater_info(app: AppHandle) -> UpdaterInfo {
+    let configured = app
+        .config()
+        .plugins
+        .0
+        .get("updater")
+        .and_then(|config| config.get("pubkey"))
+        .and_then(|pubkey| pubkey.as_str())
+        .is_some_and(|pubkey| !pubkey.trim().is_empty());
+    UpdaterInfo {
+        configured,
+        version: env!("CARGO_PKG_VERSION").to_owned(),
+    }
+}
+
 fn error_string(error: impl std::fmt::Display) -> String {
     error.to_string()
 }
@@ -248,6 +271,15 @@ fn squad_analysis(
 }
 
 #[tauri::command]
+fn list_competitions(
+    state: State<'_, AppState>,
+    save_id: i64,
+) -> Result<Vec<fm27_core::model::Competition>, String> {
+    let store = state.store.lock().map_err(error_string)?;
+    store.competitions(save_id).map_err(error_string)
+}
+
+#[tauri::command]
 fn get_filter_options(
     state: State<'_, AppState>,
     save_id: i64,
@@ -389,8 +421,13 @@ fn build_menu<R: tauri::Runtime>(
     let open = MenuItem::with_id(handle, "open", labels.open, true, Some("CmdOrCtrl+O"))?;
     let export = MenuItem::with_id(handle, "export", labels.export, true, Some("CmdOrCtrl+E"))?;
     let close = PredefinedMenuItem::close_window(handle, Some(labels.close_window))?;
-    let settings =
-        MenuItem::with_id(handle, "settings", labels.settings, true, Some("CmdOrCtrl+,"))?;
+    let settings = MenuItem::with_id(
+        handle,
+        "settings",
+        labels.settings,
+        true,
+        Some("CmdOrCtrl+,"),
+    )?;
     let sidebar = MenuItem::with_id(
         handle,
         "sidebar",
@@ -434,13 +471,7 @@ fn build_menu<R: tauri::Runtime>(
     let select_all = PredefinedMenuItem::select_all(handle, Some(labels.select_all))?;
     let about = PredefinedMenuItem::about(handle, Some(labels.about), None)?;
     let quit = PredefinedMenuItem::quit(handle, Some(labels.quit))?;
-    let helper = MenuItem::with_id(
-        handle,
-        "help",
-        labels.help,
-        true,
-        Some("CmdOrCtrl+Shift+/"),
-    )?;
+    let helper = MenuItem::with_id(handle, "help", labels.help, true, Some("CmdOrCtrl+Shift+/"))?;
     let sep1 = PredefinedMenuItem::separator(handle)?;
     let sep2 = PredefinedMenuItem::separator(handle)?;
     let sep3 = PredefinedMenuItem::separator(handle)?;
@@ -502,6 +533,8 @@ fn set_app_language(app: AppHandle, locale: String) -> Result<(), String> {
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_process::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .setup(|app| {
             install_menu(app)?;
             let data_dir = app.path().app_data_dir()?;
@@ -529,10 +562,12 @@ pub fn run() {
             growth_history,
             analysis_overview,
             squad_analysis,
+            list_competitions,
             get_filter_options,
             delete_save,
             export_players,
             app_info,
+            updater_info,
             set_app_language,
             take_pending_open,
             log_message

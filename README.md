@@ -26,9 +26,10 @@ The 0.2.1 runnable release is complete:
 - Supports Finder double-click / drag-and-drop for `.fm` files; a read-only snapshot is copied before parsing so a save in progress cannot be read half-written.
 - Players: 46,273 records with attributes, hidden attributes, CA/PA, positions, personality, traits, contracts, value and status.
 - Clubs: 26,214 records with team mapping, reputation and last season's league position.
+- Competitions: 1,724 competitions and 3,459 stage rows from the save's stage table; 1,586 carry an editor database id, which is linked to the optional user name CSV.
 - Contracts: 44,341 records with wages, start/end dates, loans and clauses.
 - Full field-by-field comparison against the Python `fmsave` oracle for shared fields: **0 differences**; derived fields such as names, roles and injuries are covered by regression tests.
-- Parsing takes about **0.57 seconds** (release build, M-series Mac).
+- Parsing takes about **1.3 seconds** (release build, M-series Mac), including the competition index.
 - SQLite cache + server-side pagination; the CLI and desktop app share `fm27-core`.
 - React UI: filters, multi-column sorting, player details, 2–4 player comparison, CSV/JSON export, hidden-attribute toggle, light/dark themes.
 - Multilingual UI: English / Simplified Chinese, follows the system language by default and falls back to English for unsupported languages; can be switched in Settings, and the native menu follows the selection.
@@ -39,6 +40,7 @@ The 0.2.1 runnable release is complete:
 - Gender and names: parses club gender (men's / women's) and bundles names for 208 countries/regions; competition names are supplied through a user CSV.
 - Linked filtering: club, nationality, gender and status counts update live with the current filters.
 - Release setup: Universal Binary DMG published by CI; optional Developer ID signing/notarization for local releases.
+- In-app updates: Tauri Updater checks the GitHub Releases manifest, verifies the signed update package, and restarts after installation; signing keys are configured once through `scripts/setup-updater-signing.sh`.
 
 Real saves are not committed to the repository; specify one with an environment variable during development.
 
@@ -65,7 +67,9 @@ target/universal-apple-darwin/release/bundle/macos/FM27 Scout.app
 Local development builds can also produce a `target/release/bundle` for the current architecture only.
 
 Universal Binary / signing / notarization use `scripts/release-macos.sh`; see
-[docs/release.md](docs/release.md). CI publishes a GitHub Release with an unsigned Universal DMG and SHA-256 checksums on `v*` tags. The CI DMG is not notarized; on first launch, use **System Settings → Privacy & Security → Open Anyway**.
+[docs/release.md](docs/release.md). CI publishes a GitHub Release with an unsigned Universal DMG,
+signed updater artifacts and SHA-256 checksums on `v*` tags once the updater secrets are configured.
+The CI DMG is not notarized; on first launch, use **System Settings → Privacy & Security → Open Anyway**.
 
 ## Development environment
 
@@ -105,6 +109,9 @@ cargo build --release -p fm27-cli
 
 # Parse and write the SQLite cache
 ./target/release/fm27scout index "/path/to/save.fm" --db fm27scout.db
+
+# Competition index and editor database ids
+./target/release/fm27scout competitions "/path/to/save.fm" --output competitions.json
 ```
 
 ## Validation
@@ -122,6 +129,11 @@ python3 -m venv .venv
 .venv/bin/pip install -e .ref-fmsave    # local clone for development
 .venv/bin/python scripts/oracle_export.py --output /tmp/oracle.json
 .venv/bin/python scripts/compare_outputs.py /tmp/oracle.json /tmp/rust.json
+
+# Competition index comparison
+.venv/bin/python scripts/oracle_competitions.py --output /tmp/oracle_competitions.json
+./target/release/fm27scout competitions "/path/to/save.fm" --output /tmp/rust_competitions.json
+.venv/bin/python scripts/compare_competitions.py /tmp/oracle_competitions.json /tmp/rust_competitions.json
 ```
 
 Reference results are in [docs/validation.md](docs/validation.md). The name-table format is
@@ -132,23 +144,23 @@ described in [docs/name-tables.md](docs/name-tables.md), and the release process
 
 - Never modifies `.fm` saves, reads game memory, or injects into game processes.
 - Does not enable Tauri `shell` / arbitrary filesystem plugins; only files selected by the user are used.
-- Makes no network requests; CSP restricts local resources.
+- Apart from a user-triggered update check, makes no network requests; the updater only contacts the configured GitHub Releases endpoint and downloads a signed package, and no save or player data is uploaded.
 - Hidden attributes are off by default; enabling them shows a single-player-only warning.
 - Databases, logs and snapshots are written only to `~/Library/Application Support/com.fm27scout.desktop/`; snapshots are deleted after parsing.
 
 ## Known limitations
 
 - Only build `27.0.0+2486695` has been fully verified; other FM27 builds are read in degraded mode with a warning, and missing fields are never guessed.
-- Country names are bundled; competition names are not stored in the cache and must be supplied through `shared/competition-names.csv` keyed by `database_id`.
+- Country names are bundled; competition names are not stored in the save, so `shared/competition-names.csv` must supply them keyed by the editor `database_id` (the competition/stage index itself is parsed and cached).
 - Injury data currently comes from the `injury_manager` history. If a save has no FM "expected return" typed rows, "injured" is empty while "injury history" still works.
 - Contract clauses, loans and contract chains are parsed; a few unobserved fallback structures are explicitly left blank.
 - Windows/Linux builds are not available yet.
 - CI publishes an unsigned DMG; on first launch, use **System Settings → Privacy & Security → Open Anyway**. Developer ID signing/notarization is optional, not used by CI, and requires a paid Apple Developer account.
+- CI publishes signed updater artifacts and `latest.json` only after the updater keypair has been configured as GitHub Actions secrets; without them, the in-app update check is disabled.
 
 ## Roadmap
 
-1. Competition index and competition-name linkage, Tauri Updater.
-2. Accessibility polish, Intel hardware regression, and more real-save edge-case tests.
+1. Accessibility polish, Intel hardware regression, and more real-save edge-case tests.
 
 ## License and attribution
 

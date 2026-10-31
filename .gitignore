@@ -6,6 +6,8 @@
 /apps/desktop/src-tauri/gen
 /.venv
 /.ref-fmsave
+/scripts/__pycache__
+*.pyc
 /fixtures
 *.db
 *.db-shm

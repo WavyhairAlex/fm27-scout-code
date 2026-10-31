@@ -10,11 +10,21 @@ const STAGE_KEYS: Record<string, TranslationKey> = {
   names: "parse.stage.names",
   players: "parse.stage.players",
   clubs: "parse.stage.clubs",
+  competitions: "parse.stage.competitions",
   decode: "parse.stage.decode",
   done: "parse.stage.done",
 };
 
-const STAGE_ORDER = ["snapshot", "opening", "game_db", "names", "players", "clubs", "decode"];
+const STAGE_ORDER = [
+  "snapshot",
+  "opening",
+  "game_db",
+  "names",
+  "players",
+  "clubs",
+  "competitions",
+  "decode",
+];
 
 export function ParseOverlay() {
   const parsing = useAppStore((state) => state.parsing);

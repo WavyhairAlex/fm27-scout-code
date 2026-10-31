@@ -27,7 +27,9 @@ database_id,name
 ```
 
 它默认只有表头。赛事名称属于游戏安装数据库内容，不随应用打包；在源码中按
-`database_id` 填表后重新构建即可。赛事数据库 ID 与存档内 stage/competition ID 不同，应用会
-在赛事索引接入后按 database_id 关联。
+`database_id` 填表后重新构建即可。赛事数据库 ID 与存档内 stage/competition ID 不同：
+应用从 stage 表建立赛事索引，再读取存档中成对的编辑器 ID 记录，把 competition ID
+关联到 `database_id`，最后用 CSV 取名称。
 
-当前版本在停赛视图中展示赛事 ID；国家范围停赛会直接显示国家名称。
+停赛视图中的赛事范围停赛会显示关联后的赛事名称（未填表时回退 `Competition #id`）；
+国家范围停赛会直接显示国家名称。

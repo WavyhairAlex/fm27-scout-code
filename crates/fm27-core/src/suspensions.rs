@@ -8,6 +8,7 @@ use std::collections::HashMap;
 
 use chrono::Datelike;
 
+use crate::competitions::CompetitionIndex;
 use crate::layout::decode_date;
 use crate::model::Suspension;
 use crate::nations::NationIndex;
@@ -23,6 +24,7 @@ pub fn read_suspensions(
     game_db: &[u8],
     players: &PlayerRecords,
     nations: &NationIndex,
+    competitions: &CompetitionIndex,
 ) -> HashMap<usize, Vec<Suspension>> {
     let mut result: HashMap<usize, Vec<Suspension>> = HashMap::new();
     if players.records.is_empty() {
@@ -76,7 +78,9 @@ pub fn read_suspensions(
             scope: scope.to_owned(),
             scope_code,
             competition_id,
-            competition_name: None,
+            competition_name: competition_id
+                .and_then(|id| competitions.name_for(u32::from(id)))
+                .map(str::to_owned),
             nation_id,
             nation_name: nation_id
                 .and_then(|id| nations.name_for(id))
@@ -85,4 +89,48 @@ pub fn read_suspensions(
         });
     }
     result
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::model::Competition;
+    use crate::player_scan::PlayerRecord;
+
+    #[test]
+    fn a_competition_scope_uses_the_indexed_name() {
+        let entry = 70usize;
+        let mut game_db = vec![0u8; 128];
+        for (offset, value) in SIGNATURE_OFFSETS {
+            game_db[entry + offset] = value;
+        }
+        game_db[entry + 14] = 1;
+        game_db[entry + 16..entry + 18].copy_from_slice(&1u16.to_le_bytes());
+        game_db[entry + 9..entry + 11].copy_from_slice(&1u16.to_le_bytes());
+        game_db[entry + 11..entry + 13].copy_from_slice(&2026u16.to_le_bytes());
+
+        let players = PlayerRecords {
+            records: vec![PlayerRecord {
+                offset: 100,
+                pindex: 1,
+                uid: 10,
+            }],
+            ..PlayerRecords::default()
+        };
+        let mut competitions = CompetitionIndex::default();
+        competitions.competitions.push(Competition {
+            id: 1,
+            database_id: Some(2),
+            name: Some("Alpha League".to_owned()),
+            stage_ids: vec![1],
+        });
+        competitions.by_id.insert(1, 0);
+
+        let suspensions =
+            read_suspensions(&game_db, &players, &NationIndex::default(), &competitions);
+        let suspension = &suspensions.get(&0).expect("player suspension")[0];
+        assert_eq!(suspension.competition_id, Some(1));
+        assert_eq!(suspension.competition_name.as_deref(), Some("Alpha League"));
+        assert_eq!(suspension.issued_date.as_deref(), Some("2026-01-01"));
+    }
 }

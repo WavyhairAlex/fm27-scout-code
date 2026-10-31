@@ -70,9 +70,26 @@ jobs:
         working-directory: apps/desktop
         run: pnpm test
 
-      - name: Build unsigned Universal DMG
+      - name: Build Universal bundles
         working-directory: apps/desktop
-        run: pnpm tauri build --target universal-apple-darwin --bundles app,dmg
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          FM27_UPDATER_PUBKEY: ${{ secrets.FM27_UPDATER_PUBKEY }}
+        run: |
+          if [[ -n "$TAURI_SIGNING_PRIVATE_KEY" && -n "$FM27_UPDATER_PUBKEY" ]]; then
+            echo "Updater signing configured; building signed updater artifacts."
+            UPDATER_CONFIG="$RUNNER_TEMP/tauri.updater.json"
+            jq -n --arg pubkey "$FM27_UPDATER_PUBKEY" \
+              '{bundle:{createUpdaterArtifacts:true},plugins:{updater:{pubkey:$pubkey}}}' \
+              > "$UPDATER_CONFIG"
+            pnpm tauri build --target universal-apple-darwin --bundles app,dmg \
+              --config "$UPDATER_CONFIG"
+            echo "UPDATER=1" >> "$GITHUB_ENV"
+          else
+            echo "::warning::Updater secrets are not configured; building without signed updater artifacts."
+            pnpm tauri build --target universal-apple-darwin --bundles app,dmg
+          fi
 
       - name: Verify universal binary and DMG
         run: |
@@ -102,9 +119,42 @@ jobs:
           test -n "$DMG"
           cp "$DMG" "release-assets/$DMG_NAME"
 
+          if [[ "$UPDATER" == "1" ]]; then
+            ARCHIVE="$(find target/universal-apple-darwin/release/bundle/macos -maxdepth 1 -name '*.app.tar.gz' -print -quit)"
+            test -n "$ARCHIVE"
+            test -f "${ARCHIVE}.sig"
+            if [[ -n "$TAG" ]]; then
+              ARCHIVE_NAME="fm27-scout-${VERSION}-universal.app.tar.gz"
+              cp "$ARCHIVE" "release-assets/$ARCHIVE_NAME"
+              cp "${ARCHIVE}.sig" "release-assets/${ARCHIVE_NAME}.sig"
+
+              DOWNLOAD_URL="https://github.com/${GITHUB_REPOSITORY}/releases/download/${TAG}/${ARCHIVE_NAME}"
+              SIGNATURE="$(cat "${ARCHIVE}.sig")"
+              PUB_DATE="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+              jq -n \
+                --arg version "$VERSION" \
+                --arg notes "See the release notes on GitHub." \
+                --arg pub_date "$PUB_DATE" \
+                --arg signature "$SIGNATURE" \
+                --arg url "$DOWNLOAD_URL" \
+                '{
+                  version: $version,
+                  notes: $notes,
+                  pub_date: $pub_date,
+                  platforms: {
+                    "darwin-aarch64": { signature: $signature, url: $url },
+                    "darwin-x86_64": { signature: $signature, url: $url }
+                  }
+                }' > release-assets/latest.json
+            fi
+          fi
+
           cd release-assets
           shopt -s nullglob
           files=( *.dmg )
+          if [[ "$UPDATER" == "1" && -n "$TAG" ]]; then
+            files+=( ./*.app.tar.gz ./*.app.tar.gz.sig latest.json )
+          fi
           shasum -a 256 "${files[@]}" > SHA256SUMS.txt
 
       - name: Upload release assets

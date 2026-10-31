@@ -295,6 +295,19 @@ pub struct Club {
     pub teams: Vec<u32>,
 }
 
+/// One competition named by the save's stage table.
+///
+/// A save stores no competition name: `database_id` is the game's editor
+/// database id and the key for the optional user-supplied name table.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Competition {
+    /// Competition id in the save's stage id space; suspension scope ids use this space.
+    pub id: u32,
+    pub database_id: Option<u32>,
+    pub name: Option<String>,
+    pub stage_ids: Vec<u32>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SaveSummary {
     pub path: String,
@@ -317,6 +330,10 @@ pub struct ParseReport {
     pub players: usize,
     pub clubs: usize,
     pub contracts: usize,
+    pub competitions: usize,
+    pub competition_stages: usize,
+    pub competitions_with_database_id: usize,
+    pub competitions_with_name: usize,
     pub markerless_players: usize,
     pub players_with_person: usize,
     pub players_with_club: usize,

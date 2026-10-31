@@ -6,7 +6,7 @@ Each project remains under its own license.
 | Project | Use | License |
 |---|---|---|
 | [fmsave](https://github.com/rhiever/fmsave) | FM26/FM27 layout reference, development oracle; portions of the parser design are ported | MIT |
-| [Tauri](https://tauri.app/) | macOS desktop shell | Apache-2.0 / MIT |
+| [Tauri](https://tauri.app/) | macOS desktop shell, updater and process plugins | Apache-2.0 / MIT |
 | [React](https://react.dev/) | UI | MIT |
 | [TanStack Query / Table / Virtual](https://tanstack.com/) | data fetching, table and virtualization | MIT |
 | [Tailwind CSS](https://tailwindcss.com/) | styling | MIT |

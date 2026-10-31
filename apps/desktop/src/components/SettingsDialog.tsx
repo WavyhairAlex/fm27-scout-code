@@ -1,17 +1,23 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import {
+  CheckCircle2,
   Database,
+  Download,
   Eye,
   Info,
   Languages,
   LockKeyhole,
   Monitor,
   Moon,
+  RefreshCw,
+  RotateCw,
   Sun,
   Trash2,
 } from "lucide-react";
-import { appInfo, deleteSave } from "@/lib/api";
+import { check, type DownloadEvent, type Update } from "@tauri-apps/plugin-updater";
+import { relaunch } from "@tauri-apps/plugin-process";
+import { appInfo, deleteSave, updaterInfo, type UpdaterInfo } from "@/lib/api";
 import { useSaves } from "@/lib/query";
 import { formatNumber } from "@/lib/i18n";
 import { LANGUAGE_OPTIONS, type Language } from "@/lib/i18n";
@@ -19,6 +25,19 @@ import { useI18n } from "@/lib/useI18n";
 import { relativeTime } from "@/lib/utils";
 import { useAppStore, type DisplayMode, type Theme } from "@/store/app";
 import { Badge, Button, Modal, Select, Switch } from "./ui";
+
+type UpdateStatus =
+  | { kind: "idle" }
+  | { kind: "checking" }
+  | { kind: "current" }
+  | { kind: "available"; version: string; notes: string }
+  | { kind: "downloading"; version: string; downloaded: number; total: number }
+  | { kind: "ready"; version: string }
+  | { kind: "error"; message: string };
+
+function updateErrorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
 
 export function SettingsDialog() {
   const { t, locale } = useI18n();
@@ -37,6 +56,9 @@ export function SettingsDialog() {
   const clearSession = useAppStore((state) => state.clearSession);
   const [dataDir, setDataDir] = useState("");
   const [info, setInfo] = useState<Awaited<ReturnType<typeof appInfo>> | null>(null);
+  const [updater, setUpdater] = useState<UpdaterInfo | null>(null);
+  const [updateStatus, setUpdateStatus] = useState<UpdateStatus>({ kind: "idle" });
+  const pendingUpdate = useRef<Update | null>(null);
   const { data: saves = [] } = useSaves();
   const queryClient = useQueryClient();
 
@@ -46,7 +68,65 @@ export function SettingsDialog() {
       setInfo(value);
       setDataDir(value.data_dir);
     });
+    void updaterInfo().then(setUpdater);
   }, [open]);
+
+  async function checkForUpdates() {
+    if (!updater?.configured) return;
+    await pendingUpdate.current?.close();
+    pendingUpdate.current = null;
+    setUpdateStatus({ kind: "checking" });
+    try {
+      const update = await check();
+      if (!update) {
+        setUpdateStatus({ kind: "current" });
+        return;
+      }
+      pendingUpdate.current = update;
+      setUpdateStatus({
+        kind: "available",
+        version: update.version,
+        notes: update.body?.trim() ?? "",
+      });
+    } catch (error) {
+      setUpdateStatus({ kind: "error", message: updateErrorMessage(error) });
+    }
+  }
+
+  async function installUpdate() {
+    const update = pendingUpdate.current;
+    if (!update) return;
+    setUpdateStatus({
+      kind: "downloading",
+      version: update.version,
+      downloaded: 0,
+      total: 0,
+    });
+    try {
+      await update.downloadAndInstall((event: DownloadEvent) => {
+        if (event.event === "Started") {
+          setUpdateStatus({
+            kind: "downloading",
+            version: update.version,
+            downloaded: 0,
+            total: event.data.contentLength ?? 0,
+          });
+        } else if (event.event === "Progress") {
+          setUpdateStatus((current) =>
+            current.kind === "downloading"
+              ? {
+                  ...current,
+                  downloaded: current.downloaded + event.data.chunkLength,
+                }
+              : current,
+          );
+        }
+      });
+      setUpdateStatus({ kind: "ready", version: update.version });
+    } catch (error) {
+      setUpdateStatus({ kind: "error", message: updateErrorMessage(error) });
+    }
+  }
 
   return (
     <Modal
@@ -239,12 +319,134 @@ export function SettingsDialog() {
 
         <section className="space-y-2">
           <h3 className="text-[11px] font-semibold uppercase tracking-wider text-[var(--muted)]">
+            {t("settings.updates")}
+          </h3>
+          <div className="rounded-xl border border-[var(--line)] bg-[var(--surface-2)] p-3 text-[10px] text-[var(--muted)]">
+            <div className="flex items-start justify-between gap-4">
+              <div className="min-w-0">
+                <div className="text-[11px] font-semibold text-[var(--ink)]">
+                  {t("settings.updateVersion", {
+                    version: updater?.version ?? info?.version ?? "0.2.1",
+                  })}
+                </div>
+                <p className="mt-1 max-w-sm leading-relaxed">
+                  {t("settings.updateDescription")}
+                </p>
+              </div>
+              {(!updater?.configured || updateStatus.kind === "idle") && (
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  disabled={!updater?.configured}
+                  onClick={() => void checkForUpdates()}
+                >
+                  <RefreshCw size={12} />
+                  {t("settings.updateCheck")}
+                </Button>
+              )}
+              {updateStatus.kind === "checking" && (
+                <Button variant="secondary" size="sm" disabled>
+                  <RefreshCw size={12} className="animate-spin" />
+                  {t("settings.updateChecking")}
+                </Button>
+              )}
+              {updateStatus.kind === "current" && (
+                <div className="flex shrink-0 items-center gap-2">
+                  <span className="flex items-center gap-1 text-[var(--success)]">
+                    <CheckCircle2 size={13} />
+                    {t("settings.updateCurrent")}
+                  </span>
+                  <Button variant="ghost" size="sm" onClick={() => void checkForUpdates()}>
+                    <RefreshCw size={12} />
+                    {t("settings.updateCheckAgain")}
+                  </Button>
+                </div>
+              )}
+            </div>
+
+            {!updater?.configured && (
+              <p className="mt-2 border-t border-[var(--line)] pt-2 leading-relaxed">
+                {t("settings.updateDisabled")}
+              </p>
+            )}
+
+            {updateStatus.kind === "available" && (
+              <div className="mt-2 space-y-2 border-t border-[var(--line)] pt-2">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <div className="font-semibold text-[var(--ink)]">
+                      {t("settings.updateAvailable", { version: updateStatus.version })}
+                    </div>
+                    {updateStatus.notes && (
+                      <p className="mt-1 whitespace-pre-line leading-relaxed">
+                        {updateStatus.notes}
+                      </p>
+                    )}
+                  </div>
+                  <Button variant="primary" size="sm" onClick={() => void installUpdate()}>
+                    <Download size={12} />
+                    {t("settings.updateInstall")}
+                  </Button>
+                </div>
+              </div>
+            )}
+
+            {updateStatus.kind === "downloading" && (
+              <div className="mt-2 space-y-1.5 border-t border-[var(--line)] pt-2">
+                <div className="flex items-center justify-between">
+                  <span>{t("settings.updateDownloading")}</span>
+                  <span className="font-mono text-[var(--ink)]">
+                    {updateStatus.total > 0
+                      ? `${Math.min(100, Math.round((updateStatus.downloaded / updateStatus.total) * 100))}%`
+                      : formatNumber(updateStatus.downloaded, locale)}
+                  </span>
+                </div>
+                <div className="h-1.5 overflow-hidden rounded-full bg-[var(--surface-3)]">
+                  <div
+                    className="h-full rounded-full bg-[var(--accent)] transition-all"
+                    style={{
+                      width:
+                        updateStatus.total > 0
+                          ? `${Math.min(100, (updateStatus.downloaded / updateStatus.total) * 100)}%`
+                          : "10%",
+                    }}
+                  />
+                </div>
+              </div>
+            )}
+
+            {updateStatus.kind === "ready" && (
+              <div className="mt-2 flex items-center justify-between gap-3 border-t border-[var(--line)] pt-2">
+                <span>{t("settings.updateReady", { version: updateStatus.version })}</span>
+                <Button variant="primary" size="sm" onClick={() => void relaunch()}>
+                  <RotateCw size={12} />
+                  {t("settings.updateRestart")}
+                </Button>
+              </div>
+            )}
+
+            {updateStatus.kind === "error" && (
+              <div className="mt-2 space-y-1.5 border-t border-[var(--line)] pt-2">
+                <p className="text-[var(--danger)]">
+                  {t("settings.updateError", { message: updateStatus.message })}
+                </p>
+                <Button variant="ghost" size="sm" onClick={() => void checkForUpdates()}>
+                  <RefreshCw size={12} />
+                  {t("settings.updateCheckAgain")}
+                </Button>
+              </div>
+            )}
+          </div>
+        </section>
+
+        <section className="space-y-2">
+          <h3 className="text-[11px] font-semibold uppercase tracking-wider text-[var(--muted)]">
             {t("settings.about")}
           </h3>
           <div className="rounded-xl border border-[var(--line)] bg-[var(--surface-2)] p-3 text-[10px] leading-relaxed text-[var(--muted)]">
             <div className="flex items-center gap-2 text-[11px] font-semibold text-[var(--ink)]">
               <Info size={13} />
-              FM27 Scout 0.2.1
+              FM27 Scout {info?.version ?? "0.2.1"}
             </div>
             <div className="mt-1">{t("settings.aboutDescription")}</div>
             <div className="mt-2 flex flex-wrap items-center gap-1.5">

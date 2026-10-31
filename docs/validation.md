@@ -53,18 +53,34 @@ clubs oracle=26214 rust=26214 missing=0 extra=0
 club mismatches: 0
 ```
 
+Competition comparison:
+
+```bash
+.venv/bin/python scripts/oracle_competitions.py --output /tmp/oracle_competitions.json
+./target/release/fm27scout competitions "/path/to/save.fm" --output /tmp/rust_competitions.json
+.venv/bin/python scripts/compare_competitions.py /tmp/oracle_competitions.json /tmp/rust_competitions.json
+```
+
+```text
+oracle=1724 rust=1724 missing=0 extra=0
+competitions with differences: 0
+```
+
 ## Counts
 
 | Metric | Value |
 |---|---:|
 | Players | 46,273 |
 | Clubs | 26,214 |
+| Competitions | 1,724 |
+| Competition stages | 3,459 |
+| Competitions with editor database id | 1,586 |
 | Contracts | 44,341 |
 | Markerless player records | 485 |
 | Players with a person block | 46,272 |
 | Players with a resolved club | 39,333 |
-| Parse time (release) | ~1.2 s |
-| Parse + SQLite insert | ~4.4 s |
+| Parse time (release) | ~1.3 s |
+| Parse + SQLite insert | ~4.5 s |
 | Men / women / unknown gender | 27,544 / 11,789 / 6,940 |
 | Unserved suspensions | 17 |
 | Injury history rows | 783 |

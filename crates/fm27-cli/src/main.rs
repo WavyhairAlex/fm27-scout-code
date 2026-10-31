@@ -57,6 +57,12 @@ enum Command {
         #[arg(long)]
         output: Option<PathBuf>,
     },
+    /// Parse a save and print the competition index as JSON.
+    Competitions {
+        save: PathBuf,
+        #[arg(long)]
+        output: Option<PathBuf>,
+    },
     /// Parse a save and print the parse report.
     Validate { save: PathBuf },
 }
@@ -113,6 +119,8 @@ fn main() -> Result<()> {
                     "players": parsed.players.len(),
                     "clubs": parsed.clubs.len(),
                     "contracts": parsed.report.contracts,
+                    "competitions": parsed.report.competitions,
+                    "competition_stages": parsed.report.competition_stages,
                     "elapsed_ms": started.elapsed().as_millis(),
                 }))?
             );
@@ -149,6 +157,18 @@ fn main() -> Result<()> {
                 None => Box::new(BufWriter::new(io::stdout().lock())),
             };
             serde_json::to_writer(&mut writer, &parsed.clubs)?;
+            writer.flush()?;
+            if output.is_some() {
+                println!();
+            }
+        }
+        Command::Competitions { save, output } => {
+            let parsed = parse_save(&save)?;
+            let mut writer: Box<dyn Write> = match &output {
+                Some(path) => Box::new(BufWriter::new(std::fs::File::create(path)?)),
+                None => Box::new(BufWriter::new(io::stdout().lock())),
+            };
+            serde_json::to_writer(&mut writer, &parsed.competitions)?;
             writer.flush()?;
             if output.is_some() {
                 println!();

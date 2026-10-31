@@ -2,8 +2,8 @@
 //!
 //! A save stores competition database ids but no competition names; the game renders those
 //! from its installed database. `shared/competition-names.csv` is the editable two-column table
-//! (`database_id,name`) used for future competition joins and for exports. It ships empty, so
-//! no SI/SEGA database text is bundled.
+//! (`database_id,name`) that names the competition index and suspension scopes. It ships empty,
+//! so no SI/SEGA database text is bundled.
 
 use std::collections::HashMap;
 use std::sync::OnceLock;

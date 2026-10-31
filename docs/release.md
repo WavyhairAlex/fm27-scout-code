@@ -17,7 +17,10 @@ Release，从分支触发则只构建并上传 CI artifact。
 Release 附件包括：
 
 - `fm27-scout-<version>-universal.dmg`：未签名的 Universal DMG。
-- `SHA256SUMS.txt`：DMG 的 SHA-256。
+- `fm27-scout-<version>-universal.app.tar.gz`：应用内更新包（配置了更新签名时）。
+- `fm27-scout-<version>-universal.app.tar.gz.sig`：更新包签名。
+- `latest.json`：Tauri Updater 清单，`darwin-aarch64` / `darwin-x86_64` 均指向 Universal 包。
+- `SHA256SUMS.txt`：所有发布附件的 SHA-256。
 
 GitHub 平台还会自动附带 `Source code (zip)` / `Source code (tar.gz)`；这是平台行为，
 workflow 不额外生成源码压缩包。
@@ -39,6 +42,53 @@ open "/Applications/FM27 Scout.app"
 ```
 
 未签名版本没有经过 Apple 公证，只应从本仓库的 Release 页面下载。
+
+## 应用内更新（Tauri Updater）
+
+应用从 GitHub Releases 的 `latest.json` 检查更新。更新包使用 Tauri 的 minisign
+签名验证；公钥在构建时通过 `FM27_UPDATER_PUBKEY` 编译进应用，私钥只存在于 CI Secrets。
+
+首次配置：
+
+```bash
+scripts/setup-updater-signing.sh
+```
+
+脚本会生成私钥到 `~/.tauri/fm27-scout-updater.key`（不会写入仓库），把启用签名所需的
+Tauri 配置写到 `~/.tauri/fm27-scout-updater.tauri.json`，并通过 `gh` 设置 GitHub Actions
+Secrets：
+
+- `FM27_UPDATER_PUBKEY`：公钥内容，CI 构建时合并进 Tauri 配置。
+- `TAURI_SIGNING_PRIVATE_KEY`：私钥内容，CI 签名更新包时使用。
+- `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`：私钥密码（生成时未设置密码则不存在）。
+
+也可以手动配置：
+
+```bash
+pnpm --dir apps/desktop tauri signer generate -w ~/.tauri/fm27-scout-updater.key
+gh secret set FM27_UPDATER_PUBKEY --body "$(cat ~/.tauri/fm27-scout-updater.key.pub)"
+gh secret set TAURI_SIGNING_PRIVATE_KEY --body "$(cat ~/.tauri/fm27-scout-updater.key)"
+
+jq -n --arg pubkey "$(cat ~/.tauri/fm27-scout-updater.key.pub)" \
+  '{bundle:{createUpdaterArtifacts:true},plugins:{updater:{pubkey:$pubkey}}}' \
+  > ~/.tauri/fm27-scout-updater.tauri.json
+```
+
+未配置 secrets 时，release workflow 会记录一条 warning 并继续构建普通 DMG，但不会生成
+`latest.json`，应用内更新也不会通过签名校验。配置 secrets 后，workflow 会把公钥合并进
+Tauri 配置、启用 `createUpdaterArtifacts`，签名更新包并上传清单。
+
+本地验证签名构建（`setup-updater-signing.sh` 已生成配置文件）：
+
+```bash
+export TAURI_SIGNING_PRIVATE_KEY="$HOME/.tauri/fm27-scout-updater.key"
+cd apps/desktop
+pnpm tauri build --target universal-apple-darwin --bundles app,dmg \
+  --config "$HOME/.tauri/fm27-scout-updater.tauri.json"
+```
+
+应用内更新与 Apple 公证相互独立：更新包仍会替换为未公证的 `.app`。如果将来恢复
+Developer ID 签名与公证，更新包也会沿用同一签名流程。
 
 ## 可选：本地签名与公证
 

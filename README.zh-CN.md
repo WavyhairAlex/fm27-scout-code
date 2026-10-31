@@ -26,9 +26,10 @@ macOS 上的 Football Manager 27 只读球探工具：Tauri 2 + Rust 解析核�
 - 支持 Finder 双击 / 拖入 `.fm` 文件；解析前先复制只读快照，避免游戏保存中读到半截文件。
 - 球员：46,273 条记录，含属性、隐藏属性、CA/PA、位置、性格、习惯、合同、身价、状态。
 - 俱乐部：26,214 个，球队映射、声望、上赛季排名。
+- 赛事：从存档阶段表解析 1,724 项赛事和 3,459 条阶段记录，其中 1,586 项带编辑器 database_id，可与用户赛事名称表联动。
 - 合同：44,341 份，含工资、起止日期、租借、条款。
 - 与 Python `fmsave` oracle 的共有字段全量逐字段对比：**0 差异**；名称、角色、伤病等派生字段由回归测试覆盖。
-- 解析耗时约 **0.57 秒**（release，M 系列 Mac）。
+- 解析耗时约 **1.3 秒**（release，M 系列 Mac），含赛事索引。
 - SQLite 缓存 + 服务端分页查询；CLI 与桌面 App 共用 `fm27-core`。
 - React UI：筛选、多列排序、球员详情、2–4 人对比、CSV/JSON 导出、隐藏属性开关、浅色/深色主题。
 - 多语言界面：英语 / 简体中文，默认跟随系统语言，不支持的语言回退英语；可在设置中切换，原生菜单同步切换。
@@ -39,6 +40,7 @@ macOS 上的 Football Manager 27 只读球探工具：Tauri 2 + Rust 解析核�
 - 性别与名称：解析俱乐部性别（男子 / 女子），内置 208 个国家/地区中文名称表；赛事名称表支持用户 CSV。
 - 筛选联动：俱乐部、国籍、性别、状态计数随当前筛选实时更新。
 - 发布配置：CI 发布 Universal Binary DMG；可选本地 Developer ID 签名/公证。
+- 应用内更新：Tauri Updater 从 GitHub Releases 清单检查更新，验证更新包签名后安装并重启；签名密钥通过 `scripts/setup-updater-signing.sh` 一次配置。
 
 真实存档未提交到仓库；开发时通过环境变量指定。
 
@@ -65,7 +67,7 @@ target/universal-apple-darwin/release/bundle/macos/FM27 Scout.app
 本地开发构建也可以只生成当前架构的 `target/release/bundle`。
 
 Universal Binary / 签名 / 公证使用 `scripts/release-macos.sh`，详见
-[docs/release.md](docs/release.md)。CI 在 `v*` tag 上发布 GitHub Release，包含未签名 Universal DMG 和 SHA-256 校验和。CI 构建未经公证，首次打开需前往「系统设置 → 隐私与安全性 → 仍要打开」。
+[docs/release.md](docs/release.md)。配置更新签名 secrets 后，CI 在 `v*` tag 上发布 GitHub Release，包含未签名 Universal DMG、带签名的更新包和 SHA-256 校验和。CI 构建未经公证，首次打开需前往「系统设置 → 隐私与安全性 → 仍要打开」。
 
 ## 开发环境
 
@@ -105,6 +107,9 @@ cargo build --release -p fm27-cli
 
 # 解析并写入 SQLite 缓存
 ./target/release/fm27scout index "/path/to/save.fm" --db fm27scout.db
+
+# 赛事索引与编辑器 database_id
+./target/release/fm27scout competitions "/path/to/save.fm" --output competitions.json
 ```
 
 ## 验证
@@ -122,6 +127,11 @@ python3 -m venv .venv
 .venv/bin/pip install -e .ref-fmsave    # 开发期本地克隆
 .venv/bin/python scripts/oracle_export.py --output /tmp/oracle.json
 .venv/bin/python scripts/compare_outputs.py /tmp/oracle.json /tmp/rust.json
+
+# 赛事索引对比
+.venv/bin/python scripts/oracle_competitions.py --output /tmp/oracle_competitions.json
+./target/release/fm27scout competitions "/path/to/save.fm" --output /tmp/rust_competitions.json
+.venv/bin/python scripts/compare_competitions.py /tmp/oracle_competitions.json /tmp/rust_competitions.json
 ```
 
 参考结果见 [docs/validation.md](docs/validation.md)。名称表格式见
@@ -131,23 +141,23 @@ python3 -m venv .venv
 
 - 不修改 `.fm` 存档，不读取游戏内存，不注入进程。
 - 不启用 Tauri `shell` / 任意文件系统插件；只使用用户主动选择的文件。
-- 不发起网络请求；CSP 限制本地资源。
+- 除用户主动触发的更新检查外不发起网络请求；更新只访问配置的 GitHub Releases 地址并下载签名更新包，不上传存档或球员数据。
 - 隐藏属性默认关闭；开启时提示仅限单机使用。
 - 数据库、日志、快照只写入 `~/Library/Application Support/com.fm27scout.desktop/`；快照解析后删除。
 
 ## 已知限制
 
 - 当前只针对 build `27.0.0+2486695` 做了完整验证；其他 FM27 build 会降级并提示，不猜测字段。
-- 国家名称已内置；赛事名称不入库，需按 `database_id` 提供 `shared/competition-names.csv`。
+- 国家名称已内置；赛事名称不存于存档，需按编辑器 `database_id` 提供 `shared/competition-names.csv`（赛事/阶段索引本身已解析并缓存）。
 - 当前伤病数据来自 `injury_manager` 的伤病史；该存档没有 FM 的“预计复出”typed 行时，“伤病中”为空，但“伤病史”可用。
 - 合同条款、租借和合同链已解析；少数未观测的 fallback 结构会显式留空。
 - Windows/Linux 暂不构建。
 - CI 发布的是未签名 DMG；首次打开需前往「系统设置 → 隐私与安全性 → 仍要打开」。Developer ID 签名/公证为可选项，CI 不使用，且需要付费 Apple Developer 账号。
+- 只有把更新密钥对配置为 GitHub Actions Secrets 后，CI 才会发布签名更新包和 `latest.json`；未配置时应用内更新检查不可用。
 
 ## 后续
 
-1. 赛事索引与赛事名称联动、Tauri Updater。
-2. 无障碍细节、Intel 实机回归、更多真实存档边界测试。
+1. 无障碍细节、Intel 实机回归、更多真实存档边界测试。
 
 ## 许可证与归属
 

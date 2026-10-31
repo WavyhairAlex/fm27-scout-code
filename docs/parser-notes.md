@@ -139,6 +139,25 @@ A club's team list stores its gender byte immediately before the team count. `0`
 `1` is women, and other values are kept raw. Players inherit their club gender; free agents
 stay unknown.
 
+## Competitions
+
+The save has no competition table. Competitions exist because the stage table names them: one
+record per distinct competition id, in ascending id. Stages are 33-byte rows in the tail of
+`game_db`; each stores the previous stage id at +0, the stage id twice at +4/+8, a zero byte at
++12 and the competition id at +13. The table is found by a chain of 200 decodable rows and is
+walked forward with byte-level resynchronisation over gaps.
+
+The editor database id comes from separate `FF × 16 + 01` records. A record starts 30 bytes
+after the marker, stores the stage-space entity id at +0 and the editor database id twice at
++4/+8, and must match 15 constant bytes. An entity whose accepted records disagree is left
+without a database id. The resulting map covers about three times as many entities as the
+stage table calls competitions, so it is restricted to competition ids before joining.
+
+The reference save has 3,459 stage rows, 1,724 competitions and 1,586 competitions with a
+database id. A database id claimed by two competitions names neither. Names are not stored in
+the save; `shared/competition-names.csv` maps the editor database id to a name, and suspension
+scope ids (code 1) are named through the same index.
+
 ## Injuries and suspensions
 
 `injury_manager` is a four-array, three-list section ending in

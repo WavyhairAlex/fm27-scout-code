@@ -3,6 +3,7 @@ import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { open, save } from "@tauri-apps/plugin-dialog";
 import type {
   AnalysisOverview,
+  Competition,
   ExportReport,
   FilterOptions,
   OpenSaveResult,
@@ -148,6 +149,11 @@ export interface AppInfo {
   competition_names: number;
 }
 
+export interface UpdaterInfo {
+  configured: boolean;
+  version: string;
+}
+
 export async function setAppLanguage(locale: "en" | "zh-CN"): Promise<void> {
   if (!isTauri) return;
   try {
@@ -167,6 +173,11 @@ export async function appInfo(): Promise<AppInfo> {
     };
   }
   return invoke<AppInfo>("app_info");
+}
+
+export async function updaterInfo(): Promise<UpdaterInfo> {
+  if (!isTauri) return { configured: false, version: "0.2.1" };
+  return invoke<UpdaterInfo>("updater_info");
 }
 
 export async function appDataDir(): Promise<string> {
@@ -204,6 +215,11 @@ export async function logMessage(message: string): Promise<void> {
 export async function getAnalysisOverview(saveId: number): Promise<AnalysisOverview> {
   if (!isTauri) return mockAnalysisOverview();
   return invoke<AnalysisOverview>("analysis_overview", { saveId });
+}
+
+export async function listCompetitions(saveId: number): Promise<Competition[]> {
+  if (!isTauri) return [];
+  return invoke<Competition[]>("list_competitions", { saveId });
 }
 
 export async function getSquadAnalysis(

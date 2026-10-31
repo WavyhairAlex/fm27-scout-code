@@ -126,6 +126,22 @@ CREATE TABLE IF NOT EXISTS clubs (
 CREATE INDEX IF NOT EXISTS clubs_name ON clubs(save_id, name);
 CREATE INDEX IF NOT EXISTS clubs_nation ON clubs(save_id, nation_id);
 
+-- Competitions are collected from the stage table. `database_id` is the key for
+-- the optional shared/competition-names.csv table; the save itself stores no name.
+CREATE TABLE IF NOT EXISTS competitions (
+  save_id         INTEGER NOT NULL,
+  id              INTEGER NOT NULL,
+  database_id     INTEGER,
+  name            TEXT,
+  stage_count     INTEGER NOT NULL DEFAULT 0,
+  stage_ids_json  TEXT NOT NULL DEFAULT '[]',
+  PRIMARY KEY (save_id, id),
+  FOREIGN KEY (save_id) REFERENCES saves(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS competitions_database_id
+  ON competitions(save_id, database_id);
+
 -- Career-wide growth history. `career_key` is the save name, so opening the same career at a
 -- later game date adds a point instead of creating an unrelated timeline.
 CREATE TABLE IF NOT EXISTS player_snapshots (

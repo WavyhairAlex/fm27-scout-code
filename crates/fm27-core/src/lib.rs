@@ -3,6 +3,7 @@
 //! The core is platform independent and shared by the CLI and the Tauri app.
 
 pub mod clubs;
+pub mod competitions;
 pub mod container;
 pub mod contracts;
 pub mod error;

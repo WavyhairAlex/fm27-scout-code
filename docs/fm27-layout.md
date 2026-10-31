@@ -96,6 +96,35 @@ head type            base - 33
 Loans: tail-shaped block before a no-terms chain record, marker `FFFFFFFF` at +24,
 end date at +28.
 
+## Competitions
+
+The stage table sits in the tail of `game_db`. Rows are 33 bytes:
+
+```text
+previous stage id   +0   u32
+stage id            +4   u32
+stage id copy       +8   u32
+zero byte           +12  u8
+competition id      +13  u32
+```
+
+A row decodes when the copy equals the stage id, the zero byte is zero, the previous id is
+`id - 1` or `FFFFFFFF`, and the id is strictly between 0 and 200000. The table is found by a 200-row chain
+and walked with byte-level resynchronisation.
+
+Editor database ids come from `FF × 16 + 01` markers. The record starts 30 bytes after the
+marker:
+
+```text
+entity id           +0   u32 (1..199999)
+database id         +4   u32
+database id copy    +8   u32 (must equal +4)
+constants           -8 7, -6 0, -4 7, -1 FF, +12 0, +15 1,
+                    +22..+25 0, +26 1, +32 2, +40 3, +55 6, +60 7
+```
+
+The database id is the key for `shared/competition-names.csv`; the save stores no names.
+
 ## Section schemas observed on the reference save
 
 `game_db` 4000, `game_info` 47, `save_game_summary` 31, `contract_man` 14,
