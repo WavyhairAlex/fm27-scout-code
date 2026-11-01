@@ -4,23 +4,27 @@ import { open, save } from "@tauri-apps/plugin-dialog";
 import type {
   AnalysisOverview,
   Competition,
+  EditPlayerResult,
   ExportReport,
   FilterOptions,
   OpenSaveResult,
   ParseProgress,
   Player,
+  PlayerEditRequest,
   PlayerPage,
   PlayerQuery,
   RoleScore,
   SaveRecord,
   SnapshotPoint,
   SquadAnalysis,
+  TraitOption,
 } from "./types";
 import {
   MOCK_PLAYERS,
   MOCK_SAVE,
   MOCK_SAVE_ID,
   MOCK_SUMMARY,
+  MOCK_TRAIT_OPTIONS,
   mockAnalysisOverview,
   mockFilterOptions,
   mockGrowthHistory,
@@ -56,6 +60,28 @@ export async function getPlayer(
 ): Promise<Player | null> {
   if (!isTauri) return MOCK_PLAYERS.find((player) => player.uid === uid) ?? null;
   return invoke<Player | null>("get_player", { saveId, uid, includeHidden });
+}
+
+export async function getTraitOptions(): Promise<TraitOption[]> {
+  if (!isTauri) return MOCK_TRAIT_OPTIONS;
+  return invoke<TraitOption[]>("trait_options");
+}
+
+export async function editPlayer(
+  saveId: number,
+  uid: number,
+  outputPath: string,
+  request: PlayerEditRequest,
+): Promise<EditPlayerResult> {
+  if (!isTauri) {
+    return {
+      output: outputPath,
+      file_size: 0,
+      changes: [],
+      warnings: [],
+    };
+  }
+  return invoke<EditPlayerResult>("edit_player", { saveId, uid, outputPath, request });
 }
 
 export async function getFilterOptions(
@@ -114,6 +140,15 @@ export async function pickSaveFile(filterName = "Football Manager saves"): Promi
     filters: [{ name: filterName, extensions: ["fm"] }],
   });
   return typeof selected === "string" ? selected : null;
+}
+
+export async function pickEditOutputFile(defaultPath: string): Promise<string | null> {
+  if (!isTauri) return defaultPath;
+  const selected = await save({
+    defaultPath,
+    filters: [{ name: "Football Manager saves", extensions: ["fm"] }],
+  });
+  return selected ?? null;
 }
 
 export async function pickExportFile(

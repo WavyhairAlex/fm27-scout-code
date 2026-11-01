@@ -45,8 +45,8 @@
       "dmg"
     ],
     "category": "DeveloperTool",
-    "shortDescription": "Read-only Football Manager 27 scout",
-    "longDescription": "A local, read-only scout for Football Manager 27 saves. No network access, no save modification.",
+    "shortDescription": "Football Manager 27 scout and save editor",
+    "longDescription": "A local Football Manager 27 scout with an optional save editor. Read commands never modify saves; editing writes a new save file. No network access.",
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",

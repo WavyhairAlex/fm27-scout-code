@@ -10,6 +10,7 @@ import {
   GitCompareArrows,
   HeartPulse,
   LockKeyhole,
+  Pencil,
   Ruler,
   Shield,
   ShieldAlert,
@@ -54,6 +55,7 @@ export function Inspector() {
   const setSelectedUid = useAppStore((state) => state.setSelectedUid);
   const hiddenEnabled = useAppStore((state) => state.hiddenEnabled);
   const setHiddenEnabled = useAppStore((state) => state.setHiddenEnabled);
+  const setEditOpen = useAppStore((state) => state.setEditOpen);
   const gameDate = useAppStore((state) => state.summary?.game_date ?? null);
   const displayMode = useAppStore((state) => state.displayMode);
   const setDisplayMode = useAppStore((state) => state.setDisplayMode);
@@ -105,6 +107,15 @@ export function Inspector() {
           {t("inspector.profile")}
         </div>
         <div className="flex items-center gap-1">
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-6 px-1.5 text-[10px]"
+            onClick={() => setEditOpen(true)}
+          >
+            <Pencil size={11} />
+            {t("inspector.edit")}
+          </Button>
           <Button
             variant={compareUids.includes(player.uid) ? "gold" : "ghost"}
             size="sm"

@@ -98,6 +98,16 @@ export function usePlayerDetail(uid: number | null) {
   });
 }
 
+export function usePlayerEditDetail(uid: number | null) {
+  const saveId = useAppStore((state) => state.saveId);
+  return useQuery({
+    queryKey: ["player-edit", saveId, uid],
+    queryFn: () => getPlayer(saveId!, uid!, true),
+    enabled: saveId != null && uid != null,
+    staleTime: 60_000,
+  });
+}
+
 export function usePlayerRoles(uid: number | null) {
   const saveId = useAppStore((state) => state.saveId);
   return useQuery({

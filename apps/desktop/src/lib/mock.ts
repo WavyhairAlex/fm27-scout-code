@@ -15,6 +15,7 @@ import type {
   SaveSummary,
   SquadAnalysis,
   Trait,
+  TraitOption,
 } from "./types";
 
 export const MOCK_SAVE_ID = 1;
@@ -76,6 +77,11 @@ const TRAITS: Trait[] = [
   { bit: 34, name: "Avoids Using Weaker Foot" },
   { bit: 51, name: "Runs With Ball Often" },
 ];
+export const MOCK_TRAIT_OPTIONS: TraitOption[] = TRAITS.map((trait) => ({
+  bit: trait.bit,
+  name: trait.name ?? `Trait ${trait.bit}`,
+}));
+
 const ATTR_KEYS = Object.keys({
   crossing: 1, dribbling: 1, finishing: 1, heading: 1, long_shots: 1, marking: 1,
   off_the_ball: 1, passing: 1, penalty_taking: 1, tackling: 1, vision: 1, handling: 1,

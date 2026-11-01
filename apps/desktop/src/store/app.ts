@@ -113,6 +113,7 @@ interface AppState {
   compareOpen: boolean;
   analysisOpen: boolean;
   exportOpen: boolean;
+  editOpen: boolean;
   helpOpen: boolean;
   toasts: Toast[];
   parsing: boolean;
@@ -145,6 +146,7 @@ interface AppState {
   setCompareOpen: (open: boolean) => void;
   setAnalysisOpen: (open: boolean) => void;
   setExportOpen: (open: boolean) => void;
+  setEditOpen: (open: boolean) => void;
   setHelpOpen: (open: boolean) => void;
   setParsing: (parsing: boolean) => void;
   setParseProgress: (progress: ParseProgress | null) => void;
@@ -175,6 +177,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   compareOpen: false,
   analysisOpen: false,
   exportOpen: false,
+  editOpen: false,
   helpOpen: false,
   toasts: [],
   parsing: false,
@@ -200,6 +203,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       compareOpen: false,
       analysisOpen: false,
       exportOpen: false,
+      editOpen: false,
     }),
   setFilterOptions: (filterOptions) => set({ filterOptions }),
   patchFilters: (patch) =>
@@ -376,6 +380,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   setCompareOpen: (compareOpen) => set({ compareOpen }),
   setAnalysisOpen: (analysisOpen) => set({ analysisOpen }),
   setExportOpen: (exportOpen) => set({ exportOpen }),
+  setEditOpen: (editOpen) => set({ editOpen }),
   setHelpOpen: (helpOpen) => set({ helpOpen }),
   setParsing: (parsing) => set({ parsing, parseProgress: parsing ? get().parseProgress : null }),
   setParseProgress: (parseProgress) => set({ parseProgress }),

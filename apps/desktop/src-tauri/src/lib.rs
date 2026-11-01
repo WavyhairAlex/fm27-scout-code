@@ -1,7 +1,10 @@
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 
+use fm27_core::container::SaveFile;
+use fm27_core::editor::{EditChange, PlayerEditRequest, PlayerEditor};
 use fm27_core::export::write_export;
+use fm27_core::metadata::read_metadata;
 use fm27_core::store::{
     AnalysisOverview, FilterOptions, PlayerPage, PlayerQuery, SaveRecord, SnapshotPoint,
     SquadAnalysis, Store,
@@ -29,6 +32,20 @@ struct OpenSaveResult {
     cached: bool,
     summary: SaveSummary,
     report: Option<ParseReport>,
+}
+
+#[derive(Debug, Serialize)]
+struct TraitOption {
+    bit: u8,
+    name: String,
+}
+
+#[derive(Debug, Serialize)]
+struct EditPlayerResult {
+    output: String,
+    file_size: u64,
+    changes: Vec<EditChange>,
+    warnings: Vec<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -223,6 +240,80 @@ fn get_player(
     store
         .get_player(save_id, uid, include_hidden)
         .map_err(error_string)
+}
+
+#[tauri::command]
+fn trait_options() -> Vec<TraitOption> {
+    fm27_core::layout::TRAIT_NAMES
+        .iter()
+        .enumerate()
+        .filter(|(_, name)| !name.is_empty())
+        .map(|(bit, name)| TraitOption {
+            bit: bit as u8,
+            name: (*name).to_owned(),
+        })
+        .collect()
+}
+
+#[tauri::command]
+async fn edit_player(
+    state: State<'_, AppState>,
+    save_id: i64,
+    uid: u32,
+    output_path: String,
+    request: PlayerEditRequest,
+) -> Result<EditPlayerResult, String> {
+    let source = {
+        let store = state.store.lock().map_err(error_string)?;
+        store
+            .save_path(save_id)
+            .map_err(error_string)?
+            .ok_or_else(|| "save not found".to_owned())?
+    };
+    let warnings = request.warnings();
+    tauri::async_runtime::spawn_blocking(move || -> Result<EditPlayerResult, String> {
+        if request.is_empty() {
+            return Err("no edits requested".to_owned());
+        }
+        let save = SaveFile::open(&source).map_err(error_string)?;
+        let metadata = read_metadata(&save).map_err(error_string)?;
+        let mut editor = PlayerEditor::open(&save, &metadata).map_err(error_string)?;
+        request.apply(&mut editor, uid).map_err(error_string)?;
+        editor.validate().map_err(error_string)?;
+
+        let output = PathBuf::from(&output_path);
+        let save_name = output
+            .file_stem()
+            .map(|value| value.to_string_lossy().into_owned())
+            .filter(|value| !value.is_empty());
+        let report = editor
+            .write_as(&save, &output, 3, save_name.as_deref())
+            .map_err(error_string)?;
+
+        let verify = fm27_core::parse_save(&output)
+            .map_err(error_string)
+            .and_then(|parsed| {
+                parsed
+                    .players
+                    .iter()
+                    .find(|player| player.uid == uid)
+                    .ok_or_else(|| format!("edited save no longer contains player uid {uid}"))
+                    .and_then(|player| request.verify(player).map_err(error_string))
+            });
+        if let Err(error) = verify {
+            let _ = std::fs::remove_file(&output);
+            return Err(error);
+        }
+
+        Ok(EditPlayerResult {
+            output: report.output,
+            file_size: report.file_size,
+            changes: editor.changes().to_vec(),
+            warnings,
+        })
+    })
+    .await
+    .map_err(error_string)?
 }
 
 #[tauri::command]
@@ -558,6 +649,8 @@ pub fn run() {
             open_save,
             query_players,
             get_player,
+            edit_player,
+            trait_options,
             player_roles,
             growth_history,
             analysis_overview,

@@ -2,9 +2,9 @@ English | [中文](README.zh-CN.md)
 
 # FM27 Scout
 
-A Football Manager 27 scouting tool for macOS with a read-only desktop app: Tauri 2 + Rust parsing core + React/TypeScript UI. The CLI also has an experimental save editor that writes a separate output file.
+A Football Manager 27 scouting tool for macOS with an optional save editor: Tauri 2 + Rust parsing core + React/TypeScript UI. Read commands are read-only; editing writes a separate output file.
 
-> Unofficial tool, not affiliated with Sports Interactive / SEGA. The desktop app and read commands never modify saves. The experimental `edit` CLI writes a new file and never touches its source. No data is sent over the network or uploaded anywhere.
+> Unofficial tool, not affiliated with Sports Interactive / SEGA. Read commands never modify saves. The desktop edit dialog and the `edit` CLI write a new file and never touch their source. No data is sent over the network or uploaded anywhere.
 
 ## Screenshots
 
@@ -32,6 +32,7 @@ The 0.2.1 runnable release is complete:
 - Parsing takes about **1.3 seconds** (release build, M-series Mac), including the competition index.
 - SQLite cache + server-side pagination; the CLI and desktop app share `fm27-core`.
 - React UI: filters, multi-column sorting, player details, 2–4 player comparison, CSV/JSON export, hidden-attribute toggle, light/dark themes.
+- Player editor: CA/PA, attributes, hidden attributes, determination, personality and traits, written to a new save file with CA-rebalancing warnings; the source save is never modified.
 - Multilingual UI: English / Simplified Chinese, follows the system language by default and falls back to English for unsupported languages; can be switched in Settings, and the native menu follows the selection.
 - Analysis centre: age/CA distributions, club strength ranking, squad depth and wonderkid radar (age + PA + CA gap).
 - Quick filters: wonderkids, expiring contracts, high potential, injured / injury history / suspended / on loan / free agent / available.
@@ -154,7 +155,7 @@ described in [docs/name-tables.md](docs/name-tables.md), and the release process
 
 ## Security boundaries
 
-- The desktop app and every read command are read-only. The optional `edit` CLI subcommand writes a **new** save file, refuses to overwrite its source, and verifies the result by re-parsing it.
+- Read commands and default browsing are read-only. The desktop edit dialog and the optional `edit` CLI subcommand write a **new** save file, refuse to overwrite their source, and verify the result by re-parsing it.
 - Never reads game memory or injects into game processes.
 - Does not enable Tauri `shell` / arbitrary filesystem plugins; only files selected by the user are used.
 - Apart from a user-triggered update check, makes no network requests; the updater only contacts the configured GitHub Releases endpoint and downloads a signed package, and no save or player data is uploaded.

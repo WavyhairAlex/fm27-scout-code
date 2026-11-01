@@ -51,6 +51,38 @@ export interface Trait {
   name: string | null;
 }
 
+export interface TraitOption {
+  bit: number;
+  name: string;
+}
+
+export interface AttributeEdit {
+  key: string;
+  value: number;
+}
+
+export interface PlayerEditRequest {
+  ca: number | null;
+  pa: number | null;
+  attributes: AttributeEdit[];
+  personality: AttributeEdit[];
+  traits: number[];
+  untraits: number[];
+}
+
+export interface EditChange {
+  field: string;
+  before: number;
+  after: number;
+}
+
+export interface EditPlayerResult {
+  output: string;
+  file_size: number;
+  changes: EditChange[];
+  warnings: string[];
+}
+
 export interface RoleScore {
   id: string;
   name: string;
@@ -558,6 +590,10 @@ export const ATTRIBUTE_GROUPS: Record<string, { labelKey: AttributeGroupKey; key
 };
 
 export const HIDDEN_ATTRIBUTE_KEYS = ATTRIBUTE_GROUPS.hidden[0].keys;
+export const CA_EXEMPT_ATTRIBUTE_KEYS: ReadonlySet<string> = new Set([
+  ...HIDDEN_ATTRIBUTE_KEYS,
+  "determination",
+]);
 export const HIDDEN_FILTER_KEYS = [...HIDDEN_ATTRIBUTE_KEYS, ...PERSONALITY_KEYS];
 export const HIDDEN_FILTERS: ReadonlySet<string> = new Set(HIDDEN_FILTER_KEYS);
 

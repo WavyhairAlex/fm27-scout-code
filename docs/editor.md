@@ -1,7 +1,8 @@
 # Experimental save editor
 
-The desktop app remains read-only. The `edit` CLI subcommand edits a **copy** of a
-save and writes a new `.fm` file; it refuses to overwrite the source file.
+The desktop app's scout view is read-only. The player **Edit** dialog and the
+`edit` CLI subcommand edit a **copy** of a save and write a new `.fm` file; they
+refuse to overwrite the source file.
 
 > Use this only on your own single-player saves. Keep a backup, close Football
 > Manager before replacing a save, and do not use edited saves in online games.
@@ -13,7 +14,21 @@ save and writes a new `.fm` file; it refuses to overwrite the source file.
 
 The editor refuses other builds and schemas instead of guessing field offsets.
 
-## Usage
+## Desktop UI
+
+Open a save, select a player, and click **Edit** in the player profile header.
+The dialog groups:
+
+- ability (CA/PA),
+- CA-weighted attributes plus a separate CA-exempt Determination group,
+- hidden attributes and personality,
+- traits.
+
+The footer writes a new save file through a native Save dialog. The dialog shows
+the CA rebalancing warnings before writing and verifies the result by re-parsing
+it. The source save is never overwritten.
+
+## CLI usage
 
 ```bash
 # Preview the changes without writing a file
