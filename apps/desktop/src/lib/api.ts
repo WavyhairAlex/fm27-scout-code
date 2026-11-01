@@ -167,7 +167,7 @@ export async function appInfo(): Promise<AppInfo> {
   if (!isTauri) {
     return {
       data_dir: "~/Library/Application Support/com.fm27scout.desktop",
-      version: "0.3.0",
+      version: "0.3.1",
       nation_names: 228,
       competition_names: 0,
     };
@@ -176,7 +176,7 @@ export async function appInfo(): Promise<AppInfo> {
 }
 
 export async function updaterInfo(): Promise<UpdaterInfo> {
-  if (!isTauri) return { configured: false, version: "0.3.0" };
+  if (!isTauri) return { configured: false, version: "0.3.1" };
   return invoke<UpdaterInfo>("updater_info");
 }
 

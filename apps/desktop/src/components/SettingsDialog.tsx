@@ -326,7 +326,7 @@ export function SettingsDialog() {
               <div className="min-w-0">
                 <div className="text-[11px] font-semibold text-[var(--ink)]">
                   {t("settings.updateVersion", {
-                    version: updater?.version ?? info?.version ?? "0.3.0",
+                    version: updater?.version ?? info?.version ?? "0.3.1",
                   })}
                 </div>
                 <p className="mt-1 max-w-sm leading-relaxed">
@@ -446,7 +446,7 @@ export function SettingsDialog() {
           <div className="rounded-xl border border-[var(--line)] bg-[var(--surface-2)] p-3 text-[10px] leading-relaxed text-[var(--muted)]">
             <div className="flex items-center gap-2 text-[11px] font-semibold text-[var(--ink)]">
               <Info size={13} />
-              FM27 Scout {info?.version ?? "0.3.0"}
+              FM27 Scout {info?.version ?? "0.3.1"}
             </div>
             <div className="mt-1">{t("settings.aboutDescription")}</div>
             <div className="mt-2 flex flex-wrap items-center gap-1.5">

@@ -367,7 +367,7 @@ const en = {
 
   // Help dialog
   "help.title": "About & help",
-  "help.description": "FM27 Scout 0.3.0 · Read-only scouting workbench",
+  "help.description": "FM27 Scout 0.3.1 · Read-only scouting workbench",
   "help.privacyTitle": "Read-only & privacy",
   "help.privacy.1": "Never modifies the save, reads game memory, or injects into the game.",
   "help.privacy.2": "Fully offline; never uploads saves, players, or usage data.",
@@ -838,7 +838,7 @@ const zhCN: Record<TranslationKey, string> = {
     "CSV 包含表格字段与 52 项属性。导出文件写入你选择的位置；不会上传到任何服务器。",
 
   "help.title": "关于与帮助",
-  "help.description": "FM27 Scout 0.3.0 · 只读球探工作台",
+  "help.description": "FM27 Scout 0.3.1 · 只读球探工作台",
   "help.privacyTitle": "只读与隐私",
   "help.privacy.1": "不修改存档，不读取游戏内存，不注入进程。",
   "help.privacy.2": "完全离线，不上传存档、球员或使用数据。",
