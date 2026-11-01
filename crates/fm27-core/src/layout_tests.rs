@@ -2,7 +2,7 @@
 mod tests {
     use chrono::{Datelike, NaiveDate};
 
-    use crate::layout::{decode_date, scale_attribute, trait_name};
+    use crate::layout::{decode_date, scale_attribute, stored_attribute_index, trait_name};
 
     #[test]
     fn date_round_trips_day_of_year() {
@@ -33,6 +33,17 @@ mod tests {
         assert_eq!(scale_attribute(50), 10);
         assert_eq!(scale_attribute(75), 15);
         assert_eq!(scale_attribute(100), 20);
+    }
+
+    #[test]
+    fn attribute_indices_skip_the_two_foot_bytes() {
+        assert_eq!(stored_attribute_index("crossing"), Some(0));
+        assert_eq!(stored_attribute_index("technique"), Some(23));
+        assert_eq!(stored_attribute_index("flair"), Some(26));
+        assert_eq!(stored_attribute_index("consistency"), Some(44));
+        assert_eq!(stored_attribute_index("important_matches"), Some(47));
+        assert_eq!(stored_attribute_index("concentration"), Some(53));
+        assert_eq!(stored_attribute_index("not_an_attribute"), None);
     }
 
     #[test]

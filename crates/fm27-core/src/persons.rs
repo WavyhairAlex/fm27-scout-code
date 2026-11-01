@@ -29,6 +29,13 @@ pub struct PersonData {
     pub traits: Vec<Trait>,
 }
 
+/// Where a decoded person block lives in `game_db`.
+#[derive(Debug, Clone, Copy)]
+pub struct PersonLocation {
+    pub birth_offset: usize,
+    pub block_start: usize,
+}
+
 #[derive(Debug, Clone, Copy)]
 pub struct ClubLookup<'a> {
     pub name_by_uid: &'a std::collections::HashMap<u32, String>,
@@ -60,12 +67,23 @@ impl PersonDecoder<'_> {
         window_start: usize,
         window_end: usize,
     ) -> Option<PersonData> {
+        self.locate(game_db, window_start, window_end)
+            .map(|(_, person)| person)
+    }
+
+    /// Decode a person block and also return where its fields live.
+    pub fn locate(
+        &self,
+        game_db: &[u8],
+        window_start: usize,
+        window_end: usize,
+    ) -> Option<(PersonLocation, PersonData)> {
         let search_start =
             window_start.checked_add(PersonLayout::PERSONALITY_OFFSET_FROM_BIRTH - 1)?;
         if search_start >= window_end {
             return None;
         }
-        let mut selected: Option<PersonData> = None;
+        let mut selected: Option<(PersonLocation, PersonData)> = None;
         let end = window_end.min(game_db.len());
         let mut zero_position = search_start;
         while zero_position + 1 + PersonLayout::PERSONALITY_COUNT <= end {
@@ -80,12 +98,12 @@ impl PersonDecoder<'_> {
                 continue;
             }
             let birth_offset = zero_position - (PersonLayout::PERSONALITY_OFFSET_FROM_BIRTH - 1);
-            if let Some(person) = self.try_candidate(game_db, birth_offset, end) {
+            if let Some((location, person)) = self.try_candidate(game_db, birth_offset, end) {
                 if selected.is_some() {
                     // FM27 requires a unique candidate in the window.
                     return None;
                 }
-                selected = Some(person);
+                selected = Some((location, person));
             }
             zero_position += 1;
         }
@@ -97,7 +115,7 @@ impl PersonDecoder<'_> {
         game_db: &[u8],
         birth_offset: usize,
         window_end: usize,
-    ) -> Option<PersonData> {
+    ) -> Option<(PersonLocation, PersonData)> {
         let birth_word = read_u32(game_db, birth_offset)?;
         let packed = (birth_word & 0xFFFF) as u16;
         let year = (birth_word >> 16) as i32;
@@ -253,24 +271,30 @@ impl PersonDecoder<'_> {
             remaining &= remaining - 1;
         }
 
-        Some(PersonData {
-            name,
-            first_name,
-            last_name,
-            common_name,
-            full_name,
-            legal_name,
-            birth_date,
-            age,
-            nation_id,
-            second_nation_ids,
-            home_grown_nation_ids,
-            home_grown_club_uids,
-            home_grown_club_names,
-            personality,
-            trait_bits,
-            traits,
-        })
+        Some((
+            PersonLocation {
+                birth_offset,
+                block_start,
+            },
+            PersonData {
+                name,
+                first_name,
+                last_name,
+                common_name,
+                full_name,
+                legal_name,
+                birth_date,
+                age,
+                nation_id,
+                second_nation_ids,
+                home_grown_nation_ids,
+                home_grown_club_uids,
+                home_grown_club_names,
+                personality,
+                trait_bits,
+                traits,
+            },
+        ))
     }
 
     fn legal_name_length(&self, game_db: &[u8], birth_offset: usize) -> Option<usize> {

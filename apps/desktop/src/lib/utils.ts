@@ -38,6 +38,11 @@ export function caTone(ca: number): string {
   return "text-[var(--muted)] bg-[var(--surface-2)] border-[var(--line)]";
 }
 
+/** Convert a stored raw attribute (1-100) to the game's displayed 1-20 value. */
+export function displayAttributeValue(raw: number): number {
+  return Math.max(1, Math.floor((raw + 2) / 5));
+}
+
 export function attributeTone(value: number): string {
   if (value >= 16) return "bg-[var(--gold)] text-[var(--gold-contrast)]";
   if (value >= 13) return "bg-[var(--success-emphasis)] text-white";
@@ -53,6 +58,18 @@ export function attributeBar(value: number, max = 20): string {
 
 export function relativeTime(iso: string, locale: Locale = "en"): string {
   return formatRelativeTime(iso, locale);
+}
+
+export function suggestedEditedSavePath(
+  source: string | undefined,
+  saveName: string | undefined,
+): string {
+  const cleanName = (saveName || "fm27-save")
+    .replace(/[\\/:*?"<>|]/g, "_")
+    .replace(/\.fm$/i, "");
+  const separator = source ? Math.max(source.lastIndexOf("/"), source.lastIndexOf("\\")) : -1;
+  const directory = separator >= 0 ? source!.slice(0, separator + 1) : "";
+  return `${directory}${cleanName} - edited.fm`;
 }
 
 export function formatBytes(bytes: number): string {

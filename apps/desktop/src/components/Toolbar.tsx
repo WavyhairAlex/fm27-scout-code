@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import {
   BarChart3,
   ChevronDown,
+  ClipboardList,
   Database,
   Download,
   Eye,
@@ -37,6 +38,8 @@ export function Toolbar() {
   const setCompareOpen = useAppStore((state) => state.setCompareOpen);
   const setAnalysisOpen = useAppStore((state) => state.setAnalysisOpen);
   const setExportOpen = useAppStore((state) => state.setExportOpen);
+  const setPendingOpen = useAppStore((state) => state.setPendingOpen);
+  const pendingEdits = useAppStore((state) => state.pendingEdits);
   const setSettingsOpen = useAppStore((state) => state.setSettingsOpen);
   const setHelpOpen = useAppStore((state) => state.setHelpOpen);
   const pushToast = useAppStore((state) => state.pushToast);
@@ -200,6 +203,21 @@ export function Toolbar() {
       </div>
 
       <div className="no-drag flex items-center gap-1">
+        {Object.keys(pendingEdits).length > 0 && (
+          <Button
+            variant="gold"
+            size="sm"
+            className="h-8"
+            onClick={() => setPendingOpen(true)}
+            title={t("toolbar.pending")}
+          >
+            <ClipboardList size={13} />
+            <span className="hidden xl:inline">{t("toolbar.pendingShort")}</span>
+            <span className="rounded-full bg-black/10 px-1 font-mono text-[9px]">
+              {Object.keys(pendingEdits).length}
+            </span>
+          </Button>
+        )}
         <Button
           variant={hiddenEnabled ? "gold" : "ghost"}
           size="sm"

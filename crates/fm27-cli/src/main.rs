@@ -1,15 +1,23 @@
 use std::io::{self, BufWriter, Write};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
-use anyhow::{Context, Result};
+use anyhow::{Context, Result, anyhow, bail};
 use clap::{Parser, Subcommand};
-use fm27_core::{inspect_save, parse_save, store::Store};
+use fm27_core::{
+    container::SaveFile,
+    editor::{AttributeEdit, PlayerEditRequest, PlayerEditor},
+    inspect_save,
+    layout::BUILD,
+    metadata::read_metadata,
+    parse_save,
+    store::Store,
+};
 
 #[derive(Parser)]
 #[command(
     name = "fm27scout",
     version,
-    about = "Read-only Football Manager 27 save inspector"
+    about = "Football Manager 27 save inspector and experimental editor"
 )]
 struct Cli {
     #[command(subcommand)]
@@ -65,6 +73,47 @@ enum Command {
     },
     /// Parse a save and print the parse report.
     Validate { save: PathBuf },
+    /// Edit one player in a copy of a save. The source save is never modified.
+    Edit {
+        /// Source .fm save. It is opened read-only.
+        save: PathBuf,
+        /// Player uid from `fm27scout players` or the SQLite cache.
+        #[arg(long)]
+        uid: u32,
+        /// Current ability (1-200).
+        #[arg(long)]
+        ca: Option<u16>,
+        /// Potential ability (1-200). Negative random-range codes are not supported.
+        #[arg(long)]
+        pa: Option<i16>,
+        /// Repeatable raw attribute (1-100): `crossing=100`, `consistency=100`.
+        #[arg(long = "attr", value_name = "KEY=VALUE")]
+        attributes: Vec<String>,
+        /// Repeatable personality byte (1-20): `professionalism=20`.
+        #[arg(long, value_name = "KEY=VALUE")]
+        personality: Vec<String>,
+        /// Add a known trait bit (0-63).
+        #[arg(long = "trait", value_name = "BIT")]
+        traits: Vec<u8>,
+        /// Remove a trait bit (0-63).
+        #[arg(long = "untrait", value_name = "BIT")]
+        untraits: Vec<u8>,
+        /// Output path. Defaults to `<save stem>.edited.fm` next to the source.
+        #[arg(long)]
+        output: Option<PathBuf>,
+        /// Internal save name stored in the new file, for test copies.
+        #[arg(long)]
+        save_name: Option<String>,
+        /// Overwrite the output file if it already exists.
+        #[arg(long)]
+        force: bool,
+        /// Print the planned changes without writing a save.
+        #[arg(long)]
+        dry_run: bool,
+        /// zstd compression level for the rebuilt game_db (1-22).
+        #[arg(long, default_value_t = 3)]
+        compression_level: i32,
+    },
 }
 
 fn main() -> Result<()> {
@@ -178,8 +227,145 @@ fn main() -> Result<()> {
             let parsed = parse_save(&save).context("parse save")?;
             println!("{}", serde_json::to_string_pretty(&parsed.report)?);
         }
+        Command::Edit {
+            save,
+            uid,
+            ca,
+            pa,
+            attributes,
+            personality,
+            traits,
+            untraits,
+            output,
+            save_name,
+            force,
+            dry_run,
+            compression_level,
+        } => {
+            if !(1..=22).contains(&compression_level) {
+                bail!("--compression-level must be between 1 and 22");
+            }
+            let save_file =
+                SaveFile::open(&save).with_context(|| format!("open {}", save.display()))?;
+            let metadata = read_metadata(&save_file).context("read save metadata")?;
+            if metadata.build != BUILD {
+                bail!(
+                    "editing supports build {BUILD}; this save was written by {}",
+                    metadata.build
+                );
+            }
+            let mut editor =
+                PlayerEditor::open(&save_file, &metadata).context("open player editor")?;
+
+            let request = PlayerEditRequest {
+                ca,
+                pa,
+                attributes: parse_assignments(&attributes)?,
+                personality: parse_assignments(&personality)?,
+                traits,
+                untraits,
+            };
+            if request.is_empty() {
+                bail!(
+                    "no edits requested; pass --ca, --pa, --attr, --personality, --trait or --untrait"
+                );
+            }
+            let warnings = request.warnings();
+            for warning in &warnings {
+                eprintln!("warning: {warning}");
+            }
+            request.apply(&mut editor, uid)?;
+            editor.validate()?;
+
+            let output = output.unwrap_or_else(|| default_edit_output(&save));
+            if output == save {
+                bail!("refusing to overwrite the source save; choose a different --output");
+            }
+            if output.exists() && !force {
+                bail!(
+                    "output {} already exists; pass --force to overwrite it",
+                    output.display()
+                );
+            }
+            if dry_run {
+                println!(
+                    "{}",
+                    serde_json::to_string_pretty(&serde_json::json!({
+                        "uid": uid,
+                        "source": save.display().to_string(),
+                        "output": output.display().to_string(),
+                        "save_name": save_name,
+                        "written": false,
+                        "warnings": warnings,
+                        "changes": editor.changes(),
+                    }))?
+                );
+                return Ok(());
+            }
+
+            let report = editor
+                .write_as(&save_file, &output, compression_level, save_name.as_deref())
+                .context("write edited save")?;
+            let verify = verify_edited_save(&output, uid, &request);
+            if let Err(error) = verify {
+                let _ = std::fs::remove_file(&output);
+                return Err(error).context("verify edited save");
+            }
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&serde_json::json!({
+                    "uid": uid,
+                    "source": save.display().to_string(),
+                    "output": report.output,
+                    "save_name": save_name,
+                    "written": true,
+                    "verified": true,
+                    "warnings": warnings,
+                    "file_size": report.file_size,
+                    "compressed_delta": report.compressed_delta,
+                    "changes": editor.changes(),
+                }))?
+            );
+        }
     }
     Ok(())
+}
+
+fn parse_assignments(values: &[String]) -> Result<Vec<AttributeEdit>> {
+    values
+        .iter()
+        .map(|value| {
+            let (key, raw) = value
+                .split_once('=')
+                .ok_or_else(|| anyhow!("expected KEY=VALUE, got {value:?}"))?;
+            let value = raw
+                .parse::<u8>()
+                .with_context(|| format!("parse value for {key:?} in {value:?}"))?;
+            Ok(AttributeEdit {
+                key: key.to_owned(),
+                value,
+            })
+        })
+        .collect()
+}
+
+fn default_edit_output(source: &Path) -> PathBuf {
+    let stem = source
+        .file_stem()
+        .map(|value| value.to_string_lossy().into_owned())
+        .unwrap_or_else(|| "edited".to_owned());
+    let parent = source.parent().unwrap_or_else(|| Path::new("."));
+    parent.join(format!("{stem}.edited.fm"))
+}
+
+fn verify_edited_save(path: &Path, uid: u32, request: &PlayerEditRequest) -> Result<()> {
+    let parsed = parse_save(path).context("re-parse edited save")?;
+    let player = parsed
+        .players
+        .iter()
+        .find(|player| player.uid == uid)
+        .ok_or_else(|| anyhow!("edited save no longer contains player uid {uid}"))?;
+    request.verify(player).map_err(Into::into)
 }
 
 fn write_csv(writer: &mut dyn Write, players: &[&fm27_core::Player]) -> Result<()> {
@@ -239,4 +425,122 @@ fn write_csv(writer: &mut dyn Write, players: &[&fm27_core::Player]) -> Result<(
     }
     csv.flush()?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parses_repeated_key_value_edits() {
+        let values = vec!["crossing=100".to_owned(), "consistency=85".to_owned()];
+        assert_eq!(
+            parse_assignments(&values).unwrap(),
+            vec![
+                AttributeEdit {
+                    key: "crossing".to_owned(),
+                    value: 100
+                },
+                AttributeEdit {
+                    key: "consistency".to_owned(),
+                    value: 85
+                }
+            ]
+        );
+    }
+
+    #[test]
+    fn rejects_a_missing_equals_sign() {
+        let error = parse_assignments(&["crossing".to_owned()]).unwrap_err();
+        assert!(error.to_string().contains("KEY=VALUE"));
+    }
+
+    #[test]
+    fn default_output_keeps_the_source_directory() {
+        assert_eq!(
+            default_edit_output(Path::new("/tmp/save.fm")),
+            PathBuf::from("/tmp/save.edited.fm")
+        );
+    }
+
+    #[test]
+    fn warns_about_ca_rebalancing() {
+        let request = PlayerEditRequest {
+            ca: Some(150),
+            ..PlayerEditRequest::default()
+        };
+        assert!(
+            request
+                .warnings()
+                .iter()
+                .any(|warning| warning.contains("recalculates visible attributes"))
+        );
+    }
+
+    #[test]
+    fn warns_about_visible_attributes_without_ca() {
+        let request = PlayerEditRequest {
+            attributes: vec![AttributeEdit {
+                key: "crossing".to_owned(),
+                value: 100,
+            }],
+            ..PlayerEditRequest::default()
+        };
+        assert!(
+            request
+                .warnings()
+                .iter()
+                .any(|warning| warning.contains("without --ca"))
+        );
+    }
+
+    #[test]
+    fn hidden_attribute_edits_do_not_warn() {
+        let request = PlayerEditRequest {
+            attributes: vec![AttributeEdit {
+                key: "consistency".to_owned(),
+                value: 100,
+            }],
+            ..PlayerEditRequest::default()
+        };
+        assert!(request.warnings().is_empty());
+    }
+
+    #[test]
+    fn determination_edits_do_not_warn() {
+        let request = PlayerEditRequest {
+            attributes: vec![AttributeEdit {
+                key: "determination".to_owned(),
+                value: 100,
+            }],
+            ..PlayerEditRequest::default()
+        };
+        assert!(request.warnings().is_empty());
+    }
+
+    #[test]
+    fn natural_fitness_edits_do_not_warn() {
+        let request = PlayerEditRequest {
+            attributes: vec![AttributeEdit {
+                key: "natural_fitness".to_owned(),
+                value: 100,
+            }],
+            ..PlayerEditRequest::default()
+        };
+        assert!(request.warnings().is_empty());
+    }
+
+    #[test]
+    fn flair_and_aggression_edits_do_not_warn() {
+        for key in ["flair", "aggression"] {
+            let request = PlayerEditRequest {
+                attributes: vec![AttributeEdit {
+                    key: key.to_owned(),
+                    value: 100,
+                }],
+                ..PlayerEditRequest::default()
+            };
+            assert!(request.warnings().is_empty(), "{key} should be exempt");
+        }
+    }
 }

@@ -70,18 +70,20 @@ const en = {
   "toolbar.analysis": "Analysis centre",
   "toolbar.analysisShort": "Analysis",
   "toolbar.export": "Export",
+  "toolbar.pending": "Pending edits",
+  "toolbar.pendingShort": "Pending",
   "toolbar.settings": "Settings",
   "toolbar.help": "About & help",
 
   // Onboarding
   "onboarding.subtitle": "Football Manager 27 · macOS scouting workbench",
-  "onboarding.readOnly": "Read-only",
+  "onboarding.readOnly": "Read-only scout",
   "onboarding.offline": "Offline",
   "onboarding.localCache": "Local cache",
   "onboarding.dropToOpen": "Drop to open save",
   "onboarding.openSave": "Open a .fm save",
   "onboarding.description":
-    "Choose or drop a Football Manager 27 save. The file is only read and copied into the local cache; the save is never modified and no data is uploaded.",
+    "Choose or drop a Football Manager 27 save. Opening and parsing are read-only; the optional editor writes a new save file and never modifies the source. No data is uploaded.",
   "onboarding.choose": "Choose save…",
   "onboarding.openLast": "Open last save",
   "onboarding.autoDetect": "Auto-detects 27.0.0+",
@@ -200,6 +202,7 @@ const en = {
   "inspector.profile": "Player profile",
   "inspector.compare": "Compare",
   "inspector.closeProfile": "Close profile",
+  "inspector.copyName": "Copy name",
   "inspector.womenBadge": "Women",
   "inspector.contractUntil": "Contract {date}",
   "inspector.value": "Value",
@@ -375,9 +378,10 @@ const en = {
 
   // Help dialog
   "help.title": "About & help",
-  "help.description": "FM27 Scout 0.3.1 · Read-only scouting workbench",
-  "help.privacyTitle": "Read-only & privacy",
-  "help.privacy.1": "Never modifies the save, reads game memory, or injects into the game.",
+  "help.description": "FM27 Scout 1.0.0 · Scouting workbench with an optional save editor",
+  "help.privacyTitle": "Privacy & local writes",
+  "help.privacy.1":
+    "Read commands never modify the save. The edit dialog writes a new save file; the source is never overwritten.",
   "help.privacy.2": "Fully offline; never uploads saves, players, or usage data.",
   "help.privacy.3": "The SQLite cache stays in the local application data directory.",
   "help.privacy.4": "No SI / SEGA databases, images, or logos are bundled.",
@@ -451,9 +455,9 @@ const en = {
   "settings.about": "About",
   "settings.parserLabel": "Parser {version}",
   "settings.aboutDescription":
-    "A read-only, local, offline scouting tool for Football Manager 27. It never modifies saves, reads game memory, or uploads any data.",
+    "A local, offline scouting tool for Football Manager 27. Read commands never modify saves; the editor writes only a new save file, never reads game memory, and never uploads data.",
   "settings.disclaimer":
-    "Unofficial tool, not affiliated with Sports Interactive / SEGA. Using hidden attributes in online leagues may violate their rules.",
+    "Unofficial tool, not affiliated with Sports Interactive / SEGA. Using hidden attributes or edited saves in online leagues may violate their rules.",
 
   // Parse overlay
   "parse.title": "Parsing save",
@@ -469,7 +473,7 @@ const en = {
   "parse.stage.decode": "Decoding players",
   "parse.stage.done": "Done",
   "parse.note":
-    "Only a read-only copy is read; the game directory is never written. The first parse takes about 1–3 seconds, then the local cache is used.",
+    "Parsing reads a read-only copy and never writes to the game directory. The first parse takes about 1–3 seconds, then the local cache is used. Editing writes a separate file you choose.",
 
   // Toasts
   "toast.close": "Dismiss notification",
@@ -486,6 +490,112 @@ const en = {
   "toast.exportDone": "Export complete",
   "toast.exportDoneDescription": "{count} rows written to {path}",
   "toast.exportFailed": "Export failed",
+  "toast.editDone": "Edited save written",
+  "toast.editDoneDescription": "{path}",
+  "toast.editFailed": "Could not write edited save",
+  "toast.staged": "Changes staged",
+  "toast.stagedDescription": "{name} · {count} changes staged",
+  "toast.nameCopied": "Name copied",
+  "toast.copyFailed": "Could not copy to clipboard",
+
+  // Pending edits
+  "pending.title": "Pending edits",
+  "pending.badge": "Pending",
+  "pending.description": "Review staged player edits and write them all into one new save file.",
+  "pending.empty": "No pending edits.",
+  "pending.summary": "{players} players · {changes} changes",
+  "pending.hint": "One new save file for all players",
+  "pending.changeCount": "{count} changes",
+  "pending.remove": "Remove",
+  "pending.removeAll": "Discard all",
+  "pending.save": "Save all to a copy…",
+  "pending.saving": "Writing save…",
+  "pending.successTitle": "Pending edits written",
+  "pending.successDescription": "{path}",
+  "pending.open": "Open edited save",
+  "pending.note":
+    "All staged players are written together in one pass. Existing output files are not overwritten; the source save is never modified. Pending edits live only in this session, so save them before quitting.",
+  "pending.riskWarning":
+    "This step writes a new save file. If the output is corrupted or the game cannot read it, the source save remains untouched. Keep a backup and verify the output in game before relying on it.",
+  "pending.added": "added",
+  "pending.removed": "removed",
+  "pending.discardBeforeOpen":
+    "You have {count} pending player edits. Opening another save will discard them. Continue?",
+
+  // Player editor
+  "inspector.edit": "Edit",
+  "edit.title": "Edit player",
+  "edit.description": "Changes are staged per player; save all pending edits together to a new file.",
+  "edit.tab.ability": "Ability",
+  "edit.tab.attributes": "Attributes",
+  "edit.tab.hidden": "Hidden & personality",
+  "edit.tab.traits": "Traits",
+  "edit.gameValue": "Game {value}",
+  "edit.attributeScale":
+    "Attributes are stored as raw 1–100; the game displays them as 1–20. Example: raw 100 → game 20.",
+  "edit.ca": "Current ability (CA)",
+  "edit.pa": "Potential ability (PA)",
+  "edit.original": "Original {value}",
+  "edit.attributeBudget":
+    "CA is the attribute budget. FM rebalances CA-weighted attributes over roughly a month; hidden attributes, determination, natural fitness, flair, aggression, personality and traits are stable. Editing CA-weighted attributes without CA is temporary.",
+  "edit.budget.title": "CA budget",
+  "edit.budget.estimated": "Estimated from attributes",
+  "edit.budget.estimatedShort": "Est. CA {value}",
+  "edit.budget.average": "avg {value}",
+  "edit.budget.position": "Position basis",
+  "edit.budget.auto": "Auto (natural positions)",
+  "edit.budget.basis": "Basis: {position} · weaker foot {foot}",
+  "edit.budget.currentCa": "Current CA {value}",
+  "edit.budget.over":
+    "Attributes imply about {estimate} CA, above {ca}. FM may trim attributes; raise CA to about {estimate} or reduce attributes.",
+  "edit.budget.under":
+    "CA {ca} is above the attribute estimate of about {estimate}; FM may raise attributes over time.",
+  "edit.budget.balanced": "Attributes and CA balance within about 3 points.",
+  "edit.budget.outlier":
+    "Large disagreement: attributes imply {estimate} CA, but the stored CA is {ca}. Custom or edited data can cause this; the stored CA is authoritative. Treat the estimate as a budget signal.",
+  "edit.budget.use": "Use estimate {value}",
+  "edit.budget.note":
+    "Approximate estimate using community FM weights; typical error is ~3 CA, but custom/edited players and extreme attributes can differ more.",
+  "edit.budget.loading": "Estimating…",
+  "edit.warning.ca":
+    "FM treats CA as the attribute budget and rebalances visible attributes over roughly a month.",
+  "edit.warning.caAttrs":
+    "CA and CA-weighted attributes are both edited. FM usually preserves key attributes near their values, but may trim them to fit the CA budget.",
+  "edit.warning.attrs":
+    "Editing CA-weighted visible attributes without CA is temporary; FM will trim them toward the current CA.",
+  "edit.warning.singlePlayer":
+    "Single-player use only. Keep the source save backed up and load the edited copy in-game to verify it.",
+  "edit.group.caExempt": "CA-exempt",
+  "edit.group.caWeighted": "CA-weighted",
+  "edit.group.hidden": "Hidden attributes",
+  "edit.group.personality": "Personality",
+  "edit.note.caExempt": "Does not consume CA; stable.",
+  "edit.note.hidden": "Not rebalanced by CA.",
+  "edit.note.traits": "Traits are independent of CA; existing values are kept.",
+  "edit.traits.search": "Search traits…",
+  "edit.traits.none": "No traits selected.",
+  "edit.traitsUnavailable": "Trait data is unavailable for this player.",
+  "edit.traitCount": "{count} traits",
+  "edit.noChanges": "No changes to save.",
+  "edit.noPlayer": "Player data is not loaded.",
+  "edit.personalityUnavailable": "Personality data is unavailable for this player.",
+  "edit.invalidCa": "CA must be between 1 and 200.",
+  "edit.invalidPa": "PA must be between 1 and 200.",
+  "edit.invalidCaPa": "CA cannot be higher than PA.",
+  "edit.invalidAttribute": "Attributes must be between 1 and 100.",
+  "edit.invalidPersonality": "Personality values must be between 1 and 20.",
+  "edit.outputHint":
+    "Edits are staged on this player. When you are done, use Pending edits in the toolbar to save every staged player into one new .fm file.",
+  "edit.riskWarning":
+    "Experimental save editing: a malformed or unsupported edit can corrupt the output save or make it unreadable. Back up the source save, close Football Manager before writing, and keep the edited save as a separate file. Use at your own risk.",
+  "edit.stage": "Add to pending edits",
+  "edit.saveCopy": "Save a copy…",
+  "edit.saving": "Writing save…",
+  "edit.successTitle": "Edited save written",
+  "edit.successDescription": "{path}",
+  "edit.openEdited": "Open edited save",
+  "edit.reset": "Reset changes",
+  "edit.changed": "{count} changes",
 
   // Shortcuts
   "shortcut.open": "⌘ O",
@@ -558,17 +668,19 @@ const zhCN: Record<TranslationKey, string> = {
   "toolbar.analysis": "分析中心",
   "toolbar.analysisShort": "分析",
   "toolbar.export": "导出",
+  "toolbar.pending": "待保存修改",
+  "toolbar.pendingShort": "待保存",
   "toolbar.settings": "设置",
   "toolbar.help": "关于与帮助",
 
   "onboarding.subtitle": "Football Manager 27 · macOS 球探工作台",
-  "onboarding.readOnly": "只读",
+  "onboarding.readOnly": "只读球探",
   "onboarding.offline": "无网络",
   "onboarding.localCache": "本地缓存",
   "onboarding.dropToOpen": "松开以打开存档",
   "onboarding.openSave": "打开一个 .fm 存档",
   "onboarding.description":
-    "选择或拖入 Football Manager 27 存档。文件只会被读取并复制到本地缓存，不会修改存档，也不会上传任何数据。",
+    "选择或拖入 Football Manager 27 存档。打开和解析为只读；可选的编辑器只写入新存档，不会修改源文件，也不会上传任何数据。",
   "onboarding.choose": "选择存档…",
   "onboarding.openLast": "打开上次存档",
   "onboarding.autoDetect": "自动识别 27.0.0+",
@@ -683,6 +795,7 @@ const zhCN: Record<TranslationKey, string> = {
   "inspector.profile": "球员档案",
   "inspector.compare": "对比",
   "inspector.closeProfile": "关闭档案",
+  "inspector.copyName": "复制姓名",
   "inspector.womenBadge": "女子",
   "inspector.contractUntil": "合同 {date}",
   "inspector.value": "身价",
@@ -854,9 +967,9 @@ const zhCN: Record<TranslationKey, string> = {
     "CSV 包含表格字段与 52 项属性。导出文件写入你选择的位置；不会上传到任何服务器。",
 
   "help.title": "关于与帮助",
-  "help.description": "FM27 Scout 0.3.1 · 只读球探工作台",
-  "help.privacyTitle": "只读与隐私",
-  "help.privacy.1": "不修改存档，不读取游戏内存，不注入进程。",
+  "help.description": "FM27 Scout 1.0.0 · 球探工作台，可选存档编辑器",
+  "help.privacyTitle": "隐私与本地写入",
+  "help.privacy.1": "读取命令不修改存档；编辑对话框只写入新存档，绝不覆盖源文件。",
   "help.privacy.2": "完全离线，不上传存档、球员或使用数据。",
   "help.privacy.3": "SQLite 缓存保存在本机应用数据目录。",
   "help.privacy.4": "不内置 SI / SEGA 的数据库、图片或 Logo。",
@@ -927,9 +1040,9 @@ const zhCN: Record<TranslationKey, string> = {
   "settings.about": "关于",
   "settings.parserLabel": "解析器 {version}",
   "settings.aboutDescription":
-    "只读、本地、无网络的 Football Manager 27 球探工具。不会修改存档，不读取游戏内存，不上传任何数据。",
+    "本地、无网络的 Football Manager 27 球探工具。读取不修改存档；编辑器只写入新存档，不读取游戏内存，不上传任何数据。",
   "settings.disclaimer":
-    "非官方工具，与 Sports Interactive / SEGA 无关。线上联赛使用隐藏属性可能违反规则。",
+    "非官方工具，与 Sports Interactive / SEGA 无关。线上联赛使用隐藏属性或编辑存档可能违反规则。",
 
   "parse.title": "正在解析存档",
   "parse.preparing": "准备中…",
@@ -944,7 +1057,7 @@ const zhCN: Record<TranslationKey, string> = {
   "parse.stage.decode": "解码球员",
   "parse.stage.done": "完成",
   "parse.note":
-    "只读取存档副本，不写入游戏目录。首次解析约 1–3 秒，之后会直接使用本地缓存。",
+    "解析只读取存档副本，不写入游戏目录。首次解析约 1–3 秒，之后会直接使用本地缓存；编辑只会写入你选择的新文件。",
 
   "toast.close": "关闭提示",
   "toast.hiddenOn.title": "隐藏属性已开启",
@@ -959,6 +1072,108 @@ const zhCN: Record<TranslationKey, string> = {
   "toast.exportDone": "导出完成",
   "toast.exportDoneDescription": "{count} 行已写入 {path}",
   "toast.exportFailed": "导出失败",
+  "toast.editDone": "编辑后的存档已写入",
+  "toast.editDoneDescription": "{path}",
+  "toast.editFailed": "写入编辑后的存档失败",
+  "toast.staged": "修改已暂存",
+  "toast.stagedDescription": "{name} · 已暂存 {count} 项修改",
+  "toast.nameCopied": "姓名已复制",
+  "toast.copyFailed": "复制到剪贴板失败",
+
+  "pending.title": "待保存修改",
+  "pending.badge": "待保存",
+  "pending.description": "检查已暂存的球员修改，最后统一写入一个新存档。",
+  "pending.empty": "没有待保存修改。",
+  "pending.summary": "{players} 名球员 · {changes} 项修改",
+  "pending.hint": "所有球员写入同一个新存档",
+  "pending.changeCount": "{count} 项修改",
+  "pending.remove": "移除",
+  "pending.removeAll": "全部放弃",
+  "pending.save": "全部另存为新存档…",
+  "pending.saving": "正在写入存档…",
+  "pending.successTitle": "待保存修改已写入",
+  "pending.successDescription": "{path}",
+  "pending.open": "打开编辑后的存档",
+  "pending.note":
+    "所有暂存球员会在一次写入中保存到同一个新文件。已有输出文件不会被覆盖，源存档不会被修改。待保存修改只存在于当前会话，退出应用前请先保存。",
+  "pending.riskWarning":
+    "这一步会写入一个全新的存档文件。如果输出文件损坏或游戏无法读取，源存档不会被影响；请保留备份，并在游戏内验证输出文件后再使用。",
+  "pending.added": "添加",
+  "pending.removed": "移除",
+  "pending.discardBeforeOpen":
+    "还有 {count} 名球员的修改未保存。打开其他存档会丢弃这些修改，是否继续？",
+
+  "inspector.edit": "编辑",
+  "edit.title": "编辑球员",
+  "edit.description": "修改先暂存在球员上；全部编辑完成后统一保存为一个新存档。",
+  "edit.tab.ability": "能力",
+  "edit.tab.attributes": "属性",
+  "edit.tab.hidden": "隐藏与性格",
+  "edit.tab.traits": "习惯",
+  "edit.gameValue": "游戏内 {value}",
+  "edit.attributeScale":
+    "属性按 raw 1–100 存储，游戏内显示为 1–20。例如：raw 100 → 游戏内 20。",
+  "edit.ca": "当前能力（CA）",
+  "edit.pa": "潜在能力（PA）",
+  "edit.original": "原值 {value}",
+  "edit.attributeBudget":
+    "CA 是属性预算。FM 会在大约一个月内重新分配参与 CA 计算的属性；隐藏属性、Determination、Natural Fitness、Flair、Aggression、性格和习惯保持稳定。只改参与 CA 的可见属性而不改 CA，是临时的。",
+  "edit.budget.title": "CA 预算",
+  "edit.budget.estimated": "按属性估算",
+  "edit.budget.estimatedShort": "估算 CA {value}",
+  "edit.budget.average": "均值 {value}",
+  "edit.budget.position": "位置基准",
+  "edit.budget.auto": "自动（全部自然位置）",
+  "edit.budget.basis": "基准：{position} · 弱势脚 {foot}",
+  "edit.budget.currentCa": "当前 CA {value}",
+  "edit.budget.over":
+    "属性大约对应 CA {estimate}，高于 {ca}。FM 可能会压缩属性；建议把 CA 提高到约 {estimate}，或降低属性。",
+  "edit.budget.under":
+    "CA {ca} 高于属性估算值 {estimate}；FM 可能随时间提升属性。",
+  "edit.budget.balanced": "属性与 CA 大致平衡（误差约 3 点以内）。",
+  "edit.budget.outlier":
+    "偏差较大：属性估算为 {estimate} CA，但存档 CA 为 {ca}。自定义/编辑过的数据会导致这种情况；以存档 CA 为准，估算值只作为预算参考。",
+  "edit.budget.use": "使用估算 {value}",
+  "edit.budget.note":
+    "基于社区 FM 权重估算，典型误差约 3 CA；自定义/编辑球员和极端属性可能偏差更大。",
+  "edit.budget.loading": "正在估算…",
+  "edit.warning.ca": "CA 是属性预算，FM 会在大约一个月内重新分配可见属性。",
+  "edit.warning.caAttrs":
+    "同时修改 CA 和参与 CA 计算的属性；关键属性通常接近保留，但可能被压缩以匹配 CA 预算。",
+  "edit.warning.attrs": "只改参与 CA 计算的可见属性是临时的；FM 会把它们压向当前 CA。",
+  "edit.warning.singlePlayer":
+    "仅限单机使用。请备份源存档，并在游戏内加载编辑后的副本验证。",
+  "edit.group.caExempt": "CA 豁免",
+  "edit.group.caWeighted": "参与 CA",
+  "edit.group.hidden": "隐藏属性",
+  "edit.group.personality": "性格",
+  "edit.note.caExempt": "不占用 CA，稳定。",
+  "edit.note.hidden": "不会被 CA 重平衡。",
+  "edit.note.traits": "习惯不受 CA 影响，已有值会保留。",
+  "edit.traits.search": "搜索习惯…",
+  "edit.traits.none": "未选择习惯。",
+  "edit.traitsUnavailable": "该球员没有可编辑的习惯数据。",
+  "edit.traitCount": "{count} 个习惯",
+  "edit.noChanges": "没有需要保存的修改。",
+  "edit.noPlayer": "球员数据尚未加载。",
+  "edit.personalityUnavailable": "该球员没有可编辑的性格数据。",
+  "edit.invalidCa": "CA 必须在 1–200 之间。",
+  "edit.invalidPa": "PA 必须在 1–200 之间。",
+  "edit.invalidCaPa": "CA 不能高于 PA。",
+  "edit.invalidAttribute": "属性必须在 1–100 之间。",
+  "edit.invalidPersonality": "性格值必须在 1–20 之间。",
+  "edit.outputHint":
+    "修改会暂存在该球员上；全部编辑完成后，用工具栏的待保存按钮统一另存为一个新 .fm 文件。",
+  "edit.riskWarning":
+    "实验性存档编辑：错误或不兼容的修改可能导致输出存档损坏、游戏无法读取或球员数据异常。请备份源存档，写入前退出 Football Manager，并将编辑结果保存为独立的新文件。使用风险自负。",
+  "edit.stage": "加入待保存修改",
+  "edit.saveCopy": "另存为新存档…",
+  "edit.saving": "正在写入存档…",
+  "edit.successTitle": "编辑后的存档已写入",
+  "edit.successDescription": "{path}",
+  "edit.openEdited": "打开编辑后的存档",
+  "edit.reset": "重置修改",
+  "edit.changed": "{count} 项修改",
 
   "shortcut.open": "⌘ O",
   "shortcut.search": "⌘ F",

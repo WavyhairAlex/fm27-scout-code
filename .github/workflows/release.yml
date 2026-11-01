@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: "Tag to publish (e.g. v0.2.1). Leave empty to use the selected ref; running from a branch then only builds artifacts."
+        description: "Tag to publish (e.g. v1.0.0). Leave empty to use the selected ref; running from a branch then only builds artifacts."
         required: false
         type: string
   push:
@@ -32,7 +32,7 @@ jobs:
         run: |
           TAG="${INPUT_TAG:-$GITHUB_REF_NAME}"
           if [[ "$TAG" != v* ]]; then
-            echo "::error::Release tag must start with 'v' (for example v0.2.1), got '$TAG'"
+            echo "::error::Release tag must start with 'v' (for example v1.0.0), got '$TAG'"
             exit 1
           fi
           VERSION="${TAG#v}"

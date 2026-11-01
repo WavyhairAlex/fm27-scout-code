@@ -9,6 +9,7 @@ import {
   HIDDEN_FILTERS,
   type FilterOptions,
   type ParseProgress,
+  type PlayerEditRequest,
   type SaveSummary,
   type SortRule,
 } from "@/lib/types";
@@ -92,6 +93,20 @@ export interface Toast {
   tone: "default" | "success" | "error";
 }
 
+export interface PendingChange {
+  field: string;
+  before: number;
+  after: number;
+  label?: string;
+}
+
+export interface PendingEdit {
+  uid: number;
+  name: string;
+  changes: PendingChange[];
+  request: PlayerEditRequest;
+}
+
 interface AppState {
   saveId: number | null;
   savedViews: SavedView[];
@@ -113,6 +128,9 @@ interface AppState {
   compareOpen: boolean;
   analysisOpen: boolean;
   exportOpen: boolean;
+  editOpen: boolean;
+  pendingOpen: boolean;
+  pendingEdits: Record<number, PendingEdit>;
   helpOpen: boolean;
   toasts: Toast[];
   parsing: boolean;
@@ -145,6 +163,11 @@ interface AppState {
   setCompareOpen: (open: boolean) => void;
   setAnalysisOpen: (open: boolean) => void;
   setExportOpen: (open: boolean) => void;
+  setEditOpen: (open: boolean) => void;
+  setPendingOpen: (open: boolean) => void;
+  stageEdit: (edit: PendingEdit) => void;
+  removePendingEdit: (uid: number) => void;
+  clearPendingEdits: () => void;
   setHelpOpen: (open: boolean) => void;
   setParsing: (parsing: boolean) => void;
   setParseProgress: (progress: ParseProgress | null) => void;
@@ -175,6 +198,9 @@ export const useAppStore = create<AppState>((set, get) => ({
   compareOpen: false,
   analysisOpen: false,
   exportOpen: false,
+  editOpen: false,
+  pendingOpen: false,
+  pendingEdits: {},
   helpOpen: false,
   toasts: [],
   parsing: false,
@@ -188,6 +214,9 @@ export const useAppStore = create<AppState>((set, get) => ({
       page: 0,
       selectedUid: null,
       compareUids: [],
+      editOpen: false,
+      pendingOpen: false,
+      pendingEdits: {},
     }),
   clearSession: () =>
     set({
@@ -200,6 +229,9 @@ export const useAppStore = create<AppState>((set, get) => ({
       compareOpen: false,
       analysisOpen: false,
       exportOpen: false,
+      editOpen: false,
+      pendingOpen: false,
+      pendingEdits: {},
     }),
   setFilterOptions: (filterOptions) => set({ filterOptions }),
   patchFilters: (patch) =>
@@ -376,6 +408,19 @@ export const useAppStore = create<AppState>((set, get) => ({
   setCompareOpen: (compareOpen) => set({ compareOpen }),
   setAnalysisOpen: (analysisOpen) => set({ analysisOpen }),
   setExportOpen: (exportOpen) => set({ exportOpen }),
+  setEditOpen: (editOpen) => set({ editOpen }),
+  setPendingOpen: (pendingOpen) => set({ pendingOpen }),
+  stageEdit: (edit) =>
+    set((state) => ({
+      pendingEdits: { ...state.pendingEdits, [edit.uid]: edit },
+    })),
+  removePendingEdit: (uid) =>
+    set((state) => {
+      const pendingEdits = { ...state.pendingEdits };
+      delete pendingEdits[uid];
+      return { pendingEdits };
+    }),
+  clearPendingEdits: () => set({ pendingEdits: {} }),
   setHelpOpen: (helpOpen) => set({ helpOpen }),
   setParsing: (parsing) => set({ parsing, parseProgress: parsing ? get().parseProgress : null }),
   setParseProgress: (parseProgress) => set({ parseProgress }),

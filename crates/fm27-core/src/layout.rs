@@ -80,6 +80,29 @@ pub const ATTRIBUTE_KEYS: [&str; 52] = [
     "concentration",
 ];
 
+pub const HIDDEN_ATTRIBUTE_KEYS: [&str; 5] = [
+    "dirtiness",
+    "consistency",
+    "important_matches",
+    "injury_proneness",
+    "versatility",
+];
+
+pub fn is_hidden_attribute_key(key: &str) -> bool {
+    HIDDEN_ATTRIBUTE_KEYS.contains(&key)
+}
+
+/// Attributes that do not consume the CA budget. Determination, natural fitness,
+/// flair and aggression stayed unchanged in controlled CA rebalancing tests;
+/// hidden attributes are exempt too.
+pub fn is_ca_exempt_attribute(key: &str) -> bool {
+    is_hidden_attribute_key(key)
+        || matches!(
+            key,
+            "determination" | "natural_fitness" | "flair" | "aggression"
+        )
+}
+
 pub const PERSONALITY_KEYS: [&str; 8] = [
     "adaptability",
     "ambition",
@@ -438,4 +461,19 @@ fn read_slice<const N: usize>(bytes: &[u8], offset: usize) -> Option<&[u8; N]> {
 
 pub fn scale_attribute(raw: u8) -> u8 {
     std::cmp::max(1, (raw as u16 + 2) / 5) as u8
+}
+
+/// Map an attribute key to its byte index inside the stored 54-byte player slice.
+/// The two foot bytes sit at indices 24 and 25, between `technique` and `flair`.
+pub fn stored_attribute_index(key: &str) -> Option<usize> {
+    ATTRIBUTE_KEYS
+        .iter()
+        .position(|name| *name == key)
+        .map(|index| {
+            if index < PlayerLayout::LEFT_FOOT_INDEX {
+                index
+            } else {
+                index + 2
+            }
+        })
 }

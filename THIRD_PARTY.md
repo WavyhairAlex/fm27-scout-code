@@ -17,10 +17,14 @@ Each project remains under its own license.
 | [chrono](https://github.com/chronotope/chrono) | dates | MIT / Apache-2.0 |
 | [clap](https://github.com/clap-rs/clap) | CLI | MIT / Apache-2.0 |
 | [serde](https://serde.rs/) | JSON | MIT / Apache-2.0 |
+| [FM Scout CA guide / CAE attribute weights](https://www.fmscout.com/a-guide-to-current-ability-in-football-manager.html) | Community reference for the approximate CA estimator; the weight values originate from the FM pre-game editor | Factual reference data; no code copied |
 
 `shared/nation-names.csv` is a factual country/region name list keyed by the public editor
 database ids published by the FM community (FM Base, sortitoutsi). It contains no player,
 club, competition or other SI/SEGA database content.
+
+The CA estimator uses the public FM editor attribute-weight table as reference data. The
+values are factual weights published in the FM pre-game editor; no FM Scout code is bundled.
 
 The application does not bundle Sports Interactive or SEGA databases, images, logos,
 or other game assets. It reads only files selected by the user.

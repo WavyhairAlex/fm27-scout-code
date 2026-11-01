@@ -1,26 +1,35 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
+import { writeText as writeClipboardText } from "@tauri-apps/plugin-clipboard-manager";
 import { open, save } from "@tauri-apps/plugin-dialog";
 import type {
   AnalysisOverview,
+  BatchEditResult,
+  CaEstimate,
+  CaEstimateRequest,
   Competition,
+  EditPlayerResult,
   ExportReport,
   FilterOptions,
   OpenSaveResult,
   ParseProgress,
   Player,
+  PlayerEditBatch,
+  PlayerEditRequest,
   PlayerPage,
   PlayerQuery,
   RoleScore,
   SaveRecord,
   SnapshotPoint,
   SquadAnalysis,
+  TraitOption,
 } from "./types";
 import {
   MOCK_PLAYERS,
   MOCK_SAVE,
   MOCK_SAVE_ID,
   MOCK_SUMMARY,
+  MOCK_TRAIT_OPTIONS,
   mockAnalysisOverview,
   mockFilterOptions,
   mockGrowthHistory,
@@ -31,6 +40,27 @@ import {
 
 export const isTauri =
   typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
+
+/** Write plain text to the system clipboard. */
+export async function copyTextToClipboard(text: string): Promise<void> {
+  if (isTauri) {
+    await writeClipboardText(text);
+    return;
+  }
+  if (navigator.clipboard?.writeText) {
+    await navigator.clipboard.writeText(text);
+    return;
+  }
+  const area = document.createElement("textarea");
+  area.value = text;
+  area.style.position = "fixed";
+  area.style.opacity = "0";
+  document.body.appendChild(area);
+  area.select();
+  const copied = document.execCommand("copy");
+  area.remove();
+  if (!copied) throw new Error("clipboard write failed");
+}
 
 export async function listSaves(): Promise<SaveRecord[]> {
   if (!isTauri) return [MOCK_SAVE];
@@ -56,6 +86,91 @@ export async function getPlayer(
 ): Promise<Player | null> {
   if (!isTauri) return MOCK_PLAYERS.find((player) => player.uid === uid) ?? null;
   return invoke<Player | null>("get_player", { saveId, uid, includeHidden });
+}
+
+export async function savePlayerEdits(
+  saveId: number,
+  outputPath: string,
+  edits: PlayerEditBatch[],
+): Promise<BatchEditResult> {
+  if (!isTauri) {
+    const changes = edits.reduce(
+      (total, edit) =>
+        total +
+        (edit.request.ca != null ? 1 : 0) +
+        (edit.request.pa != null ? 1 : 0) +
+        edit.request.attributes.length +
+        edit.request.personality.length +
+        edit.request.traits.length +
+        edit.request.untraits.length,
+      0,
+    );
+    return { output: outputPath, file_size: 0, players: edits.length, changes };
+  }
+  return invoke<BatchEditResult>("save_player_edits", { saveId, outputPath, edits });
+}
+
+export async function getTraitOptions(): Promise<TraitOption[]> {
+  if (!isTauri) return MOCK_TRAIT_OPTIONS;
+  return invoke<TraitOption[]>("trait_options");
+}
+
+export async function estimatePlayerCa(
+  request: CaEstimateRequest,
+): Promise<CaEstimate | null> {
+  if (!isTauri) {
+    const values = Object.values(request.attributes);
+    const weighted_average = values.length
+      ? values.reduce((sum, value) => sum + value, 0) / values.length
+      : 0;
+    const excess_average = values.length
+      ? values.reduce((sum, value) => sum + Math.max(0, value - 16), 0) / values.length
+      : 0;
+    return {
+      position: request.positions.join("/"),
+      estimated_ca: Math.max(
+        1,
+        Math.min(200, Math.round(18.13 * weighted_average + 18.74 * excess_average - 97.6)),
+      ),
+      weighted_average,
+      excess_average,
+      total_weight: 0,
+    };
+  }
+  return invoke<CaEstimate>("estimate_player_ca", { request });
+}
+
+export async function editPlayer(
+  saveId: number,
+  uid: number,
+  outputPath: string,
+  request: PlayerEditRequest,
+): Promise<EditPlayerResult> {
+  if (!isTauri) {
+    const changes = [
+      ...(request.ca != null ? [{ field: "ca", before: 0, after: request.ca }] : []),
+      ...(request.pa != null ? [{ field: "pa", before: 0, after: request.pa }] : []),
+      ...request.attributes.map((edit) => ({
+        field: `attribute.${edit.key}`,
+        before: 0,
+        after: edit.value,
+      })),
+      ...request.personality.map((edit) => ({
+        field: `personality.${edit.key}`,
+        before: 0,
+        after: edit.value,
+      })),
+      ...request.traits.map((bit) => ({ field: `trait.${bit}`, before: 0, after: 1 })),
+      ...request.untraits.map((bit) => ({ field: `trait.${bit}`, before: 1, after: 0 })),
+    ];
+    return {
+      output: outputPath,
+      file_size: 0,
+      changes,
+      warnings: [],
+    };
+  }
+  return invoke<EditPlayerResult>("edit_player", { saveId, uid, outputPath, request });
 }
 
 export async function getFilterOptions(
@@ -116,6 +231,15 @@ export async function pickSaveFile(filterName = "Football Manager saves"): Promi
   return typeof selected === "string" ? selected : null;
 }
 
+export async function pickEditOutputFile(defaultPath: string): Promise<string | null> {
+  if (!isTauri) return defaultPath;
+  const selected = await save({
+    defaultPath,
+    filters: [{ name: "Football Manager saves", extensions: ["fm"] }],
+  });
+  return selected ?? null;
+}
+
 export async function pickExportFile(
   defaultName: string,
   format: "csv" | "json",
@@ -167,7 +291,7 @@ export async function appInfo(): Promise<AppInfo> {
   if (!isTauri) {
     return {
       data_dir: "~/Library/Application Support/com.fm27scout.desktop",
-      version: "0.3.1",
+      version: "1.0.0",
       nation_names: 228,
       competition_names: 0,
     };
@@ -176,7 +300,7 @@ export async function appInfo(): Promise<AppInfo> {
 }
 
 export async function updaterInfo(): Promise<UpdaterInfo> {
-  if (!isTauri) return { configured: false, version: "0.3.1" };
+  if (!isTauri) return { configured: false, version: "1.0.0" };
   return invoke<UpdaterInfo>("updater_info");
 }
 
