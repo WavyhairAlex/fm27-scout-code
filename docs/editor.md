@@ -101,6 +101,9 @@ For a specific visible-attribute boost, set `--ca` high enough for the desired
 attribute budget and set the key attributes too, then verify over at least a month.
 Editing only visible attributes while leaving CA low is likely to be reverted.
 
+See [editor-test-plan.md](editor-test-plan.md) for the controlled A/B/C comparison
+of CA-only, attributes-only and CA-plus-attributes edits.
+
 ## Safety
 
 1. Close Football Manager before relying on an edited save. FM rotates/autosaves
