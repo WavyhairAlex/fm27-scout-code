@@ -1,6 +1,13 @@
 import { useCallback } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { listenParseProgress, logMessage, openSave, pickSaveFile } from "./api";
+import { confirm as confirmDialog } from "@tauri-apps/plugin-dialog";
+import {
+  isTauri,
+  listenParseProgress,
+  logMessage,
+  openSave,
+  pickSaveFile,
+} from "./api";
 import { formatNumber } from "./i18n";
 import { useI18n } from "./useI18n";
 import { useAppStore } from "@/store/app";
@@ -15,6 +22,17 @@ export function useOpenSave() {
 
   const openPath = useCallback(
     async (path: string, force = false) => {
+      const pendingCount = Object.keys(useAppStore.getState().pendingEdits).length;
+      if (pendingCount > 0) {
+        const message = t("pending.discardBeforeOpen", { count: pendingCount });
+        const confirmed = isTauri
+          ? await confirmDialog(message, {
+              title: t("pending.title"),
+              kind: "warning",
+            })
+          : window.confirm(message);
+        if (!confirmed) return;
+      }
       setParsing(true);
       setParseProgress({ stage: "opening", current: 0, total: 0, message: "Opening save" });
       let unlisten: () => void = () => undefined;

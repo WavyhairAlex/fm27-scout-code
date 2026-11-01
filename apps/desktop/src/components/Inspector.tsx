@@ -56,6 +56,7 @@ export function Inspector() {
   const hiddenEnabled = useAppStore((state) => state.hiddenEnabled);
   const setHiddenEnabled = useAppStore((state) => state.setHiddenEnabled);
   const setEditOpen = useAppStore((state) => state.setEditOpen);
+  const pendingEdits = useAppStore((state) => state.pendingEdits);
   const gameDate = useAppStore((state) => state.summary?.game_date ?? null);
   const displayMode = useAppStore((state) => state.displayMode);
   const setDisplayMode = useAppStore((state) => state.setDisplayMode);
@@ -157,6 +158,9 @@ export function Inspector() {
                     </span>
                     {player.gender === 1 && (
                       <Badge tone="blue">{t("inspector.womenBadge")}</Badge>
+                    )}
+                    {pendingEdits[player.uid] && (
+                      <Badge tone="gold">{t("pending.badge")}</Badge>
                     )}
                   </div>
                 </div>

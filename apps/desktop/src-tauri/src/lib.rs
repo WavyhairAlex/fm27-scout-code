@@ -50,6 +50,20 @@ struct CaEstimateRequest {
     weaker_foot: u8,
 }
 
+#[derive(Debug, Deserialize)]
+struct PlayerEditBatch {
+    uid: u32,
+    request: PlayerEditRequest,
+}
+
+#[derive(Debug, Serialize)]
+struct BatchEditResult {
+    output: String,
+    file_size: u64,
+    players: usize,
+    changes: usize,
+}
+
 #[derive(Debug, Serialize)]
 struct EditPlayerResult {
     output: String,
@@ -265,6 +279,89 @@ fn estimate_player_ca(request: CaEstimateRequest) -> Result<CaEstimate, String> 
     }
     estimate_positions(&attributes, request.weaker_foot, &request.positions)
         .ok_or_else(|| format!("cannot estimate CA for positions {:?}", request.positions))
+}
+
+#[tauri::command]
+async fn save_player_edits(
+    state: State<'_, AppState>,
+    save_id: i64,
+    output_path: String,
+    edits: Vec<PlayerEditBatch>,
+) -> Result<BatchEditResult, String> {
+    let source = {
+        let store = state.store.lock().map_err(error_string)?;
+        store
+            .save_path(save_id)
+            .map_err(error_string)?
+            .ok_or_else(|| "save not found".to_owned())?
+    };
+    tauri::async_runtime::spawn_blocking(move || save_players_file(source, output_path, edits))
+        .await
+        .map_err(error_string)?
+}
+
+fn save_players_file(
+    source: String,
+    output_path: String,
+    edits: Vec<PlayerEditBatch>,
+) -> Result<BatchEditResult, String> {
+    if edits.is_empty() {
+        return Err("no edits requested".to_owned());
+    }
+    let save = SaveFile::open(&source).map_err(error_string)?;
+    let metadata = read_metadata(&save).map_err(error_string)?;
+    let mut editor = PlayerEditor::open(&save, &metadata).map_err(error_string)?;
+    for edit in &edits {
+        if edit.request.is_empty() {
+            return Err(format!("player uid {} has no edits", edit.uid));
+        }
+        edit.request
+            .apply(&mut editor, edit.uid)
+            .map_err(error_string)?;
+    }
+    editor.validate().map_err(error_string)?;
+
+    let output = PathBuf::from(&output_path);
+    if output.exists() {
+        return Err(format!(
+            "output already exists: {}; choose a new .fm file",
+            output.display()
+        ));
+    }
+    let save_name = output
+        .file_stem()
+        .map(|value| value.to_string_lossy().into_owned())
+        .filter(|value| !value.is_empty());
+    let report = editor
+        .write_as(&save, &output, 3, save_name.as_deref())
+        .map_err(error_string)?;
+
+    let verify = fm27_core::parse_save(&output)
+        .map_err(error_string)
+        .and_then(|parsed| {
+            for edit in &edits {
+                let player = parsed
+                    .players
+                    .iter()
+                    .find(|player| player.uid == edit.uid)
+                    .ok_or_else(|| {
+                        format!("edited save no longer contains player uid {}", edit.uid)
+                    })?;
+                edit.request.verify(player).map_err(error_string)?;
+            }
+            Ok(())
+        });
+    if let Err(error) = verify {
+        let _ = std::fs::remove_file(&output);
+        return Err(error);
+    }
+
+    Ok(BatchEditResult {
+        output: report.output,
+        file_size: report.file_size,
+        players: edits.len(),
+        changes: editor.changes().len(),
+    })
 }
 
 #[tauri::command]
@@ -690,6 +787,7 @@ pub fn run() {
             query_players,
             get_player,
             edit_player,
+            save_player_edits,
             estimate_player_ca,
             trait_options,
             player_roles,
@@ -741,6 +839,45 @@ mod tests {
         let estimate = estimate_player_ca(request).expect("estimate");
         assert_eq!(estimate.position, "SC");
         assert_eq!(estimate.estimated_ca, 120);
+    }
+
+    #[test]
+    #[ignore = "requires a real FM27 save and FM27_TEST_SAVE"]
+    fn saves_several_player_edits_in_one_file() {
+        let source = std::env::var("FM27_TEST_SAVE").expect("set FM27_TEST_SAVE");
+        let parsed = fm27_core::parse_save(&source).expect("parse source save");
+        let players: Vec<_> = parsed
+            .players
+            .iter()
+            .filter(|player| player.pa.is_some() && player.ca < 200)
+            .take(2)
+            .collect();
+        assert_eq!(players.len(), 2);
+        let directory = tempfile::tempdir().expect("tempdir");
+        let output = directory.path().join("batch-edited.fm");
+        let edits = players
+            .iter()
+            .map(|player| PlayerEditBatch {
+                uid: player.uid,
+                request: PlayerEditRequest {
+                    pa: Some(200),
+                    ..PlayerEditRequest::default()
+                },
+            })
+            .collect();
+        let result =
+            save_players_file(source, output.display().to_string(), edits).expect("save batch");
+        assert_eq!(result.players, 2);
+
+        let edited = fm27_core::parse_save(&result.output).expect("parse edited save");
+        for player in &players {
+            let changed = edited
+                .players
+                .iter()
+                .find(|candidate| candidate.uid == player.uid)
+                .expect("edited player");
+            assert_eq!(changed.pa, Some(200));
+        }
     }
 
     #[test]

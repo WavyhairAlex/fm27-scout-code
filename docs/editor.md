@@ -20,13 +20,16 @@ Open a save, select a player, and click **Edit** in the player profile header.
 The dialog groups:
 
 - ability (CA/PA),
-- CA-weighted attributes plus a separate CA-exempt Determination group,
+- CA-weighted attributes plus a separate CA-exempt group
+  (Determination, Natural Fitness, Flair, Aggression),
 - hidden attributes and personality,
 - traits.
 
-The footer writes a new save file through a native Save dialog. The dialog shows
-the CA rebalancing warnings before writing and verifies the result by re-parsing
-it. The source save is never overwritten.
+**Add to pending edits** stages the changes instead of writing a save. Repeat for
+as many players as needed; pending players show a count in the toolbar. Open
+**Pending edits** to review/remove staged players, then **Save all to a copy…**
+writes every staged player in one batch through a native Save dialog. The batch is
+verified by re-parsing the new save, and the source save is never overwritten.
 
 ## CLI usage
 

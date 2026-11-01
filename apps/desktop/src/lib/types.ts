@@ -83,6 +83,18 @@ export interface EditPlayerResult {
   warnings: string[];
 }
 
+export interface PlayerEditBatch {
+  uid: number;
+  request: PlayerEditRequest;
+}
+
+export interface BatchEditResult {
+  output: string;
+  file_size: number;
+  players: number;
+  changes: number;
+}
+
 export interface CaEstimateRequest {
   positions: string[];
   attributes: Record<string, number>;

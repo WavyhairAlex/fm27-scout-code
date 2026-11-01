@@ -2,21 +2,13 @@ import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
   AlertTriangle,
-  Check,
-  Loader2,
+  ClipboardPlus,
   RotateCcw,
-  Save,
   Search,
   Sparkles,
 } from "lucide-react";
-import {
-  editPlayer,
-  estimatePlayerCa,
-  getTraitOptions,
-  pickEditOutputFile,
-} from "@/lib/api";
+import { estimatePlayerCa, getTraitOptions } from "@/lib/api";
 import { attributeLabel, personalityLabel, traitLabel } from "@/lib/labels";
-import { useOpenSave } from "@/lib/openSave";
 import { usePlayerEditDetail } from "@/lib/query";
 import {
   ATTRIBUTE_GROUPS,
@@ -25,13 +17,12 @@ import {
   POSITION_LABELS,
   type AttributeEdit,
   type CaEstimate,
-  type EditPlayerResult,
   type Player,
   type PlayerEditRequest,
 } from "@/lib/types";
 import { cn, displayAttributeValue } from "@/lib/utils";
 import { useI18n } from "@/lib/useI18n";
-import { useAppStore } from "@/store/app";
+import { useAppStore, type PendingChange } from "@/store/app";
 import { Button, Checkbox, Input, Modal } from "./ui";
 
 type Tab = "ability" | "attributes" | "hidden" | "traits";
@@ -40,12 +31,12 @@ export function EditPlayerDialog() {
   const { t, locale } = useI18n();
   const open = useAppStore((state) => state.editOpen);
   const setOpen = useAppStore((state) => state.setEditOpen);
-  const saveId = useAppStore((state) => state.saveId);
-  const summary = useAppStore((state) => state.summary);
   const selectedUid = useAppStore((state) => state.selectedUid);
+  const pendingEdits = useAppStore((state) => state.pendingEdits);
+  const stageEdit = useAppStore((state) => state.stageEdit);
+  const removePendingEdit = useAppStore((state) => state.removePendingEdit);
   const pushToast = useAppStore((state) => state.pushToast);
   const { data: player } = usePlayerEditDetail(open ? selectedUid : null);
-  const { openPath } = useOpenSave();
   const { data: traitOptions = [] } = useQuery({
     queryKey: ["trait-options"],
     queryFn: getTraitOptions,
@@ -62,17 +53,30 @@ export function EditPlayerDialog() {
   const [traitSearch, setTraitSearch] = useState("");
   const [estimate, setEstimate] = useState<CaEstimate | null>(null);
   const [estimatePosition, setEstimatePosition] = useState("");
-  const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [result, setResult] = useState<EditPlayerResult | null>(null);
 
   useEffect(() => {
     if (!open || !player) return;
-    setCa(player.ca);
-    setPa(player.pa ?? null);
-    setAttributes({ ...player.raw_attributes });
-    setPersonality(player.personality ? { ...player.personality } : {});
-    setTraits(new Set(player.traits.map((trait) => trait.bit)));
+    const staged = pendingEdits[player.uid];
+    const nextAttributes = { ...player.raw_attributes };
+    for (const edit of staged?.request.attributes ?? []) {
+      nextAttributes[edit.key] = edit.value;
+    }
+    const nextPersonality: Record<string, number> = player.personality
+      ? { ...player.personality }
+      : {};
+    for (const edit of staged?.request.personality ?? []) {
+      nextPersonality[edit.key] = edit.value;
+    }
+    const nextTraits = new Set(player.traits.map((trait) => trait.bit));
+    for (const bit of staged?.request.traits ?? []) nextTraits.add(bit);
+    for (const bit of staged?.request.untraits ?? []) nextTraits.delete(bit);
+
+    setCa(staged?.request.ca ?? player.ca);
+    setPa(staged ? (staged.request.pa ?? player.pa ?? null) : (player.pa ?? null));
+    setAttributes(nextAttributes);
+    setPersonality(nextPersonality);
+    setTraits(nextTraits);
     setTraitSearch("");
     setEstimatePosition(
       player.natural_positions.length > 1
@@ -82,7 +86,6 @@ export function EditPlayerDialog() {
     setEstimate(null);
     setTab("ability");
     setError(null);
-    setResult(null);
   }, [open, player?.uid]);
 
   const positionOptions = useMemo(() => {
@@ -208,6 +211,7 @@ export function EditPlayerDialog() {
 
   const reset = () => {
     if (!player) return;
+    removePendingEdit(player.uid);
     setCa(player.ca);
     setPa(player.pa ?? null);
     setAttributes({ ...player.raw_attributes });
@@ -215,7 +219,6 @@ export function EditPlayerDialog() {
     setTraits(new Set(player.traits.map((trait) => trait.bit)));
     setTraitSearch("");
     setError(null);
-    setResult(null);
   };
 
   const validate = (): string | null => {
@@ -245,15 +248,13 @@ export function EditPlayerDialog() {
     return null;
   };
 
-  const save = async () => {
+  const stage = () => {
     const validation = validate();
     if (validation) {
       setError(validation);
       return;
     }
-    if (!player || saveId == null || ca == null) return;
-    const output = await pickEditOutputFile(suggestedPath(summary?.path, summary?.save_name));
-    if (!output) return;
+    if (!player || ca == null) return;
 
     const attributeEdits: AttributeEdit[] = Object.entries(attributes)
       .filter(([key, value]) => value !== player.raw_attributes[key])
@@ -275,33 +276,69 @@ export function EditPlayerDialog() {
       untraits: traitsToRemove,
     };
 
-    setBusy(true);
-    setError(null);
-    try {
-      const written = await editPlayer(saveId, player.uid, output, request);
-      setResult(written);
-      pushToast({
-        title: t("toast.editDone"),
-        description: written.output,
-        tone: "success",
-      });
-    } catch (writeError) {
-      const message = String(writeError);
-      setError(message);
-      pushToast({ title: t("toast.editFailed"), description: message, tone: "error" });
-    } finally {
-      setBusy(false);
+    const changes: PendingChange[] = [];
+    if (caChanged) {
+      changes.push({ field: "ca", before: player.ca, after: ca });
     }
+    if (paChanged) {
+      changes.push({ field: "pa", before: player.pa ?? 0, after: pa ?? 0 });
+    }
+    for (const edit of attributeEdits) {
+      changes.push({
+        field: `attribute.${edit.key}`,
+        before: player.raw_attributes[edit.key] ?? 0,
+        after: edit.value,
+      });
+    }
+    for (const edit of personalityEdits) {
+      changes.push({
+        field: `personality.${edit.key}`,
+        before:
+          player.personality?.[edit.key as keyof typeof player.personality] ?? 0,
+        after: edit.value,
+      });
+    }
+    for (const bit of traitsToAdd) {
+      changes.push({
+        field: `trait.${bit}`,
+        before: 0,
+        after: 1,
+        label: traitOptions.find((option) => option.bit === bit)?.name,
+      });
+    }
+    for (const bit of traitsToRemove) {
+      changes.push({
+        field: `trait.${bit}`,
+        before: 1,
+        after: 0,
+        label: traitOptions.find((option) => option.bit === bit)?.name,
+      });
+    }
+
+    const displayName = player.name ?? t("common.unnamedPlayer");
+    stageEdit({
+      uid: player.uid,
+      name: displayName,
+      changes,
+      request,
+    });
+    setOpen(false);
+    pushToast({
+      title: t("toast.staged"),
+      description: t("toast.stagedDescription", {
+        name: displayName,
+        count: changes.length,
+      }),
+      tone: "success",
+    });
   };
 
-  const currentTab = result ? "ability" : tab;
+  const currentTab = tab;
 
   return (
     <Modal
       open={open}
-      onClose={() => {
-        if (!busy) setOpen(false);
-      }}
+      onClose={() => setOpen(false)}
       title={t("edit.title")}
       description={
         player
@@ -310,59 +347,28 @@ export function EditPlayerDialog() {
       }
       width="max-w-[900px]"
       footer={
-        result ? (
-          <>
-            <Button variant="ghost" size="sm" onClick={() => setOpen(false)}>
-              {t("common.close")}
-            </Button>
-            <Button
-              variant="primary"
-              size="sm"
-              onClick={() => {
-                setOpen(false);
-                void openPath(result.output, true);
-              }}
-            >
-              {t("edit.openEdited")}
-            </Button>
-          </>
-        ) : (
-          <>
-            <Button variant="ghost" size="sm" onClick={reset} disabled={busy || !player}>
-              <RotateCcw size={13} />
-              {t("edit.reset")}
-            </Button>
-            <Button variant="ghost" size="sm" onClick={() => setOpen(false)} disabled={busy}>
-              {t("common.cancel")}
-            </Button>
-            <Button
-              variant="primary"
-              size="sm"
-              onClick={() => void save()}
-              disabled={busy || !player || changedCount === 0}
-            >
-              {busy ? <Loader2 size={13} className="animate-spin" /> : <Save size={13} />}
-              {busy ? t("edit.saving") : t("edit.saveCopy")}
-            </Button>
-          </>
-        )
+        <>
+          <Button variant="ghost" size="sm" onClick={reset} disabled={!player}>
+            <RotateCcw size={13} />
+            {t("edit.reset")}
+          </Button>
+          <Button variant="ghost" size="sm" onClick={() => setOpen(false)}>
+            {t("common.cancel")}
+          </Button>
+          <Button
+            variant="primary"
+            size="sm"
+            onClick={stage}
+            disabled={!player || changedCount === 0}
+          >
+            <ClipboardPlus size={13} />
+            {t("edit.stage")}
+          </Button>
+        </>
       }
     >
       {!player ? (
         <div className="p-6 text-xs text-[var(--muted)]">{t("edit.noPlayer")}</div>
-      ) : result ? (
-        <div className="flex flex-col items-center gap-3 px-6 py-12 text-center">
-          <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-[var(--accent-line)] bg-[var(--accent-soft)] text-[var(--accent-strong)]">
-            <Check size={22} />
-          </div>
-          <div className="text-sm font-semibold text-[var(--ink)]">{t("edit.successTitle")}</div>
-          <div className="max-w-full break-all text-[11px] text-[var(--muted)]">
-            {t("edit.successDescription", { path: result.output })}
-          </div>
-          <div className="text-[10px] text-[var(--muted)]">
-            {t("edit.changed", { count: result.changes.length })}
-          </div>
-        </div>
       ) : (
         <div className="space-y-3 p-5">
           <div className="flex flex-wrap gap-1 border-b border-[var(--line)] pb-2">
@@ -911,11 +917,4 @@ function TraitsTab({
   );
 }
 
-function suggestedPath(source: string | undefined, saveName: string | undefined): string {
-  const cleanName = (saveName || "fm27-save")
-    .replace(/[\\/:*?"<>|]/g, "_")
-    .replace(/\.fm$/i, "");
-  const separator = source ? Math.max(source.lastIndexOf("/"), source.lastIndexOf("\\")) : -1;
-  const directory = separator >= 0 ? source!.slice(0, separator + 1) : "";
-  return `${directory}${cleanName} - edited.fm`;
-}
+

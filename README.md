@@ -32,7 +32,7 @@ The 0.2.1 runnable release is complete:
 - Parsing takes about **1.3 seconds** (release build, M-series Mac), including the competition index.
 - SQLite cache + server-side pagination; the CLI and desktop app share `fm27-core`.
 - React UI: filters, multi-column sorting, player details, 2–4 player comparison, CSV/JSON export, hidden-attribute toggle, light/dark themes.
-- Player editor: CA/PA, attributes, hidden attributes, determination, personality and traits, written to a new save file with CA-rebalancing warnings; the source save is never modified.
+- Player editor: CA/PA, attributes, hidden attributes, determination, personality and traits, staged across multiple players and written together to one new save file with CA-rebalancing warnings; the source save is never modified.
 - CA budget estimator: live estimate from the edited attributes using the community FM position weights, with over/under-budget guidance and position selection.
 - Multilingual UI: English / Simplified Chinese, follows the system language by default and falls back to English for unsupported languages; can be switched in Settings, and the native menu follows the selection.
 - Analysis centre: age/CA distributions, club strength ranking, squad depth and wonderkid radar (age + PA + CA gap).

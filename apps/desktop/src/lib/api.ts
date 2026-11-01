@@ -3,6 +3,7 @@ import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { open, save } from "@tauri-apps/plugin-dialog";
 import type {
   AnalysisOverview,
+  BatchEditResult,
   CaEstimate,
   CaEstimateRequest,
   Competition,
@@ -12,6 +13,7 @@ import type {
   OpenSaveResult,
   ParseProgress,
   Player,
+  PlayerEditBatch,
   PlayerEditRequest,
   PlayerPage,
   PlayerQuery,
@@ -62,6 +64,28 @@ export async function getPlayer(
 ): Promise<Player | null> {
   if (!isTauri) return MOCK_PLAYERS.find((player) => player.uid === uid) ?? null;
   return invoke<Player | null>("get_player", { saveId, uid, includeHidden });
+}
+
+export async function savePlayerEdits(
+  saveId: number,
+  outputPath: string,
+  edits: PlayerEditBatch[],
+): Promise<BatchEditResult> {
+  if (!isTauri) {
+    const changes = edits.reduce(
+      (total, edit) =>
+        total +
+        (edit.request.ca != null ? 1 : 0) +
+        (edit.request.pa != null ? 1 : 0) +
+        edit.request.attributes.length +
+        edit.request.personality.length +
+        edit.request.traits.length +
+        edit.request.untraits.length,
+      0,
+    );
+    return { output: outputPath, file_size: 0, players: edits.length, changes };
+  }
+  return invoke<BatchEditResult>("save_player_edits", { saveId, outputPath, edits });
 }
 
 export async function getTraitOptions(): Promise<TraitOption[]> {

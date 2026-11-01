@@ -60,6 +60,18 @@ export function relativeTime(iso: string, locale: Locale = "en"): string {
   return formatRelativeTime(iso, locale);
 }
 
+export function suggestedEditedSavePath(
+  source: string | undefined,
+  saveName: string | undefined,
+): string {
+  const cleanName = (saveName || "fm27-save")
+    .replace(/[\\/:*?"<>|]/g, "_")
+    .replace(/\.fm$/i, "");
+  const separator = source ? Math.max(source.lastIndexOf("/"), source.lastIndexOf("\\")) : -1;
+  const directory = separator >= 0 ? source!.slice(0, separator + 1) : "";
+  return `${directory}${cleanName} - edited.fm`;
+}
+
 export function formatBytes(bytes: number): string {
   if (bytes >= 1024 ** 3) return `${(bytes / 1024 ** 3).toFixed(1)} GB`;
   if (bytes >= 1024 ** 2) return `${(bytes / 1024 ** 2).toFixed(1)} MB`;

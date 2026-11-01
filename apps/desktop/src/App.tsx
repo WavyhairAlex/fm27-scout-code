@@ -11,6 +11,7 @@ import { SettingsDialog } from "./components/SettingsDialog";
 import { ExportDialog } from "./components/ExportDialog";
 import { HelpDialog } from "./components/HelpDialog";
 import { EditPlayerDialog } from "./components/EditPlayerDialog";
+import { PendingEditsDialog } from "./components/PendingEditsDialog";
 import { ParseOverlay } from "./components/ParseOverlay";
 import { Toasts } from "./components/Toasts";
 import { useOpenSave } from "./lib/openSave";
@@ -32,6 +33,7 @@ export default function App() {
   const setSelectedUid = useAppStore((state) => state.setSelectedUid);
   const setExportOpen = useAppStore((state) => state.setExportOpen);
   const setEditOpen = useAppStore((state) => state.setEditOpen);
+  const setPendingOpen = useAppStore((state) => state.setPendingOpen);
   const setSettingsOpen = useAppStore((state) => state.setSettingsOpen);
   const setCompareOpen = useAppStore((state) => state.setCompareOpen);
   const setAnalysisOpen = useAppStore((state) => state.setAnalysisOpen);
@@ -40,6 +42,7 @@ export default function App() {
   const settingsOpen = useAppStore((state) => state.settingsOpen);
   const exportOpen = useAppStore((state) => state.exportOpen);
   const editOpen = useAppStore((state) => state.editOpen);
+  const pendingOpen = useAppStore((state) => state.pendingOpen);
   const helpOpen = useAppStore((state) => state.helpOpen);
   const theme = useAppStore((state) => state.theme);
   const setSidebarOpen = useAppStore((state) => state.setSidebarOpen);
@@ -96,6 +99,7 @@ export default function App() {
         else if (settingsOpen) setSettingsOpen(false);
         else if (exportOpen) setExportOpen(false);
         else if (editOpen) setEditOpen(false);
+        else if (pendingOpen) setPendingOpen(false);
         else if (helpOpen) setHelpOpen(false);
         else if (selectedUid != null) setSelectedUid(null);
       }
@@ -108,10 +112,12 @@ export default function App() {
     editOpen,
     exportOpen,
     helpOpen,
+    pendingOpen,
     selectedUid,
     setCompareOpen,
     setEditOpen,
     setExportOpen,
+    setPendingOpen,
     setHelpOpen,
     setSelectedUid,
     setSettingsOpen,
@@ -234,6 +240,7 @@ export default function App() {
       <SettingsDialog />
       <ExportDialog />
       <EditPlayerDialog />
+      <PendingEditsDialog />
       <HelpDialog />
       <ParseOverlay />
       <Toasts />
