@@ -7,7 +7,7 @@ use fm27_core::{
     container::SaveFile,
     editor::PlayerEditor,
     inspect_save,
-    layout::{BUILD, is_hidden_attribute_key},
+    layout::{BUILD, is_ca_exempt_attribute},
     metadata::read_metadata,
     parse_save,
     store::Store,
@@ -370,7 +370,7 @@ impl EditRequest {
         let visible_attribute_edit = self
             .attributes
             .iter()
-            .any(|(key, _)| !is_hidden_attribute_key(key));
+            .any(|(key, _)| !is_ca_exempt_attribute(key));
         let mut warnings = Vec::new();
         if self.ca.is_some() {
             warnings.push(
@@ -617,6 +617,15 @@ mod tests {
     fn hidden_attribute_edits_do_not_warn() {
         let request = EditRequest {
             attributes: vec![("consistency".to_owned(), 100)],
+            ..EditRequest::default()
+        };
+        assert!(request.warnings().is_empty());
+    }
+
+    #[test]
+    fn determination_edits_do_not_warn() {
+        let request = EditRequest {
+            attributes: vec![("determination".to_owned(), 100)],
             ..EditRequest::default()
         };
         assert!(request.warnings().is_empty());

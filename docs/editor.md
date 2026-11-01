@@ -58,6 +58,17 @@ consistency, important_matches, injury_proneness, versatility, dirtiness
 The eight personality bytes are stored in a separate person block and use
 `--personality`.
 
+### CA-exempt attributes
+
+**Determination** is visible but does not consume the CA budget. In the A/B/C
+tests it stayed at its original value in every run while the other visible
+attributes moved. It can be edited with `--attr determination=...` without
+changing CA.
+
+Other position-irrelevant attributes (for example, goalkeeper attributes on an
+outfield player) also stayed unchanged in the test, but the editor does not yet
+model position-specific CA weights. Its warnings therefore remain conservative.
+
 ### Raw values and display values
 
 The game stores attributes as raw bytes from 1 to 100. The UI display value is:
@@ -96,11 +107,13 @@ Practical workflow:
   trimmed.
 - **Visible attributes alone** at a low CA are unstable; FM pulls them back
   toward the CA budget.
-- Hidden attributes, personality, and traits are independent of CA and are the
-  most stable edits.
+- Hidden attributes, determination, personality, and traits are independent of CA
+  and are the most stable edits.
 
-The CLI prints a warning when `--ca` is changed, when a visible attribute is
-changed without `--ca`, or when both CA and visible attributes are changed.
+The CLI prints a warning when `--ca` is changed, when a CA-weighted visible
+attribute is changed without `--ca`, or when both CA and CA-weighted attributes
+are changed. Determination and hidden attributes do not trigger the attribute
+warning.
 
 See [editor-test-plan.md](editor-test-plan.md) for the controlled A/B/C comparison
 of CA-only, attributes-only and CA-plus-attributes edits.

@@ -97,6 +97,17 @@ lower raw sum than A while both are around CA 150: C's six high-weight attribute
 consume more of the budget. Compare the direction of movement and key-attribute
 retention, not the raw sum.
 
+### CA-exempt attributes
+
+**Determination stayed at 65 in all three runs**, even though other visible
+attributes moved by 3–15 points. This confirms the reported behavior:
+determination does not consume the CA budget and can be edited independently.
+
+The test player was a striker, and his goalkeeper attributes and `aggression`
+also stayed unchanged. That is consistent with position-specific CA weights, but
+this test only proves the determination case; the editor does not yet model a
+full position-weight table.
+
 ## Conclusion
 
 **Use CA as the primary control.**
@@ -107,7 +118,8 @@ retention, not the raw sum.
   key attributes are largely preserved, while marginal attributes are trimmed.
 - Avoid editing visible attributes alone at a low CA; FM will pull them back
   toward the CA budget.
-- Hidden attributes, personality and traits are independent and stay stable.
+- Hidden attributes, **determination**, personality and traits are independent
+  and stay stable.
 
 The earlier warning is confirmed: **CA is the budget; visible attributes are the
 allocation.**

@@ -121,9 +121,10 @@ cargo build --release -p fm27-cli
 
 The `edit` subcommand is documented in [docs/editor.md](docs/editor.md). It only
 supports build `27.0.0+2486695` and always writes a separate output file. CA is the
-attribute budget: FM rebalances visible attributes over roughly a month, while
-hidden attributes, personality, and traits stay stable. Visible attributes alone
-are unstable; CA plus a few key attributes is the controlled workflow.
+attribute budget: FM rebalances CA-weighted visible attributes over roughly a
+month, while hidden attributes, determination, personality, and traits stay
+stable. Visible attributes alone are unstable; CA plus a few key attributes is
+the controlled workflow.
 
 ## Validation
 
