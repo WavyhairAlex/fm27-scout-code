@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 
-use fm27_core::ability::{CaEstimate, estimate_ca};
+use fm27_core::ability::{CaEstimate, estimate_positions};
 use fm27_core::container::SaveFile;
 use fm27_core::editor::{EditChange, PlayerEditRequest, PlayerEditor};
 use fm27_core::export::write_export;
@@ -45,7 +45,7 @@ struct TraitOption {
 
 #[derive(Debug, Deserialize)]
 struct CaEstimateRequest {
-    position: String,
+    positions: Vec<String>,
     attributes: BTreeMap<String, u8>,
     weaker_foot: u8,
 }
@@ -263,8 +263,8 @@ fn estimate_player_ca(request: CaEstimateRequest) -> Result<CaEstimate, String> 
     for value in &mut attributes.values {
         *value = (*value).max(1);
     }
-    estimate_ca(&attributes, request.weaker_foot, &request.position)
-        .ok_or_else(|| format!("cannot estimate CA for position {:?}", request.position))
+    estimate_positions(&attributes, request.weaker_foot, &request.positions)
+        .ok_or_else(|| format!("cannot estimate CA for positions {:?}", request.positions))
 }
 
 #[tauri::command]
@@ -731,7 +731,7 @@ mod tests {
     #[test]
     fn estimates_ca_from_a_display_attribute_map() {
         let request = CaEstimateRequest {
-            position: "SC".to_owned(),
+            positions: vec!["SC".to_owned()],
             attributes: fm27_core::layout::ATTRIBUTE_KEYS
                 .iter()
                 .map(|key| ((*key).to_owned(), 12))

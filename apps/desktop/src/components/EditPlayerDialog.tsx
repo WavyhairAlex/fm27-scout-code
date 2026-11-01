@@ -75,7 +75,9 @@ export function EditPlayerDialog() {
     setTraits(new Set(player.traits.map((trait) => trait.bit)));
     setTraitSearch("");
     setEstimatePosition(
-      player.natural_positions[0] ?? player.best_role?.position ?? "STC",
+      player.natural_positions.length > 1
+        ? "AUTO"
+        : (player.natural_positions[0] ?? player.best_role?.position ?? "AUTO"),
     );
     setEstimate(null);
     setTab("ability");
@@ -88,7 +90,7 @@ export function EditPlayerDialog() {
       ...(player?.natural_positions ?? []),
       ...(player?.accomplished_positions ?? []),
     ];
-    return values.length > 0 ? [...new Set(values)] : ["STC"];
+    return ["AUTO", ...(values.length > 0 ? [...new Set(values)] : ["STC"])];
   }, [player]);
 
   useEffect(() => {
@@ -101,8 +103,14 @@ export function EditPlayerDialog() {
       for (const [key, value] of Object.entries(attributes)) {
         displayAttributes[key] = Math.max(1, Math.floor((value + 2) / 5));
       }
+      const positions =
+        estimatePosition === "AUTO"
+          ? player.natural_positions.length > 0
+            ? player.natural_positions
+            : [player.best_role?.position ?? "STC"]
+          : [estimatePosition];
       void estimatePlayerCa({
-        position: estimatePosition,
+        positions,
         attributes: displayAttributes,
         weaker_foot: Math.min(player.left_foot, player.right_foot),
       })
@@ -412,6 +420,7 @@ export function EditPlayerDialog() {
               estimate={estimate}
               estimatePosition={estimatePosition}
               positionOptions={positionOptions}
+              weakerFoot={Math.min(player.left_foot, player.right_foot)}
               onCa={setCa}
               onPa={setPa}
               onEstimatePosition={setEstimatePosition}
@@ -540,6 +549,7 @@ function AbilityTab({
   estimate,
   estimatePosition,
   positionOptions,
+  weakerFoot,
   onCa,
   onPa,
   onEstimatePosition,
@@ -551,6 +561,7 @@ function AbilityTab({
   estimate: CaEstimate | null;
   estimatePosition: string;
   positionOptions: string[];
+  weakerFoot: number;
   onCa: (value: number | null) => void;
   onPa: (value: number | null) => void;
   onEstimatePosition: (position: string) => void;
@@ -604,6 +615,7 @@ function AbilityTab({
         targetCa={ca ?? player.ca}
         position={estimatePosition}
         options={positionOptions}
+        weakerFoot={weakerFoot}
         onPosition={onEstimatePosition}
         onUseEstimate={onUseEstimate}
       />
@@ -619,6 +631,7 @@ function CaBudget({
   targetCa,
   position,
   options,
+  weakerFoot,
   onPosition,
   onUseEstimate,
 }: {
@@ -626,6 +639,7 @@ function CaBudget({
   targetCa: number;
   position: string;
   options: string[];
+  weakerFoot: number;
   onPosition: (position: string) => void;
   onUseEstimate: (value: number) => void;
 }) {
@@ -688,6 +702,12 @@ function CaBudget({
                 })}`
               : ""}
           </div>
+          <div className="mt-0.5 text-[9px] text-[var(--muted)]">
+            {t("edit.budget.basis", {
+              position: estimate?.position ?? "—",
+              foot: weakerFoot,
+            })}
+          </div>
         </div>
         <label className="flex flex-col items-end gap-1 text-[9px] text-[var(--muted)]">
           {t("edit.budget.position")}
@@ -698,7 +718,9 @@ function CaBudget({
           >
             {options.map((option) => (
               <option key={option} value={option}>
-                {POSITION_LABELS[option.toLowerCase()] ?? option}
+                {option === "AUTO"
+                  ? t("edit.budget.auto")
+                  : (POSITION_LABELS[option.toLowerCase()] ?? option)}
               </option>
             ))}
           </select>

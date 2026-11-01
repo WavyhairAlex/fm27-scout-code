@@ -6,8 +6,10 @@
 //!
 //! `CA = 18.13 * weighted_average + 18.74 * weighted_excess_above_16 - 97.60`
 //!
-//! The excess term captures the extra CA cost of high attributes. This is an
-//! estimate, not a replacement for the stored CA.
+//! The excess term captures the extra CA cost of high attributes. For a
+//! multi-position player, each attribute uses the highest weight across the
+//! natural positions; the weaker foot is included with its position weight.
+//! This is an estimate, not a replacement for the stored CA.
 
 use serde::{Deserialize, Serialize};
 
@@ -20,6 +22,9 @@ const CA_INTERCEPT: f32 = -97.597_76;
 const CA_AVERAGE_SLOPE: f32 = 18.130_968;
 const CA_EXCESS_SLOPE: f32 = 18.737_27;
 const HIGH_ATTRIBUTE_THRESHOLD: f32 = 16.0;
+const POSITION_KEYS: [&str; 10] = [
+    "GK", "DRL", "DC", "WBRL", "DM", "MRL", "MC", "AMRL", "AMC", "SC",
+];
 
 /// Attribute weights in the same column order as [`POSITION_KEYS`].
 ///
@@ -198,11 +203,52 @@ pub struct CaEstimate {
 /// Estimate CA for one position from display attributes (1..=20).
 pub fn estimate_ca(attributes: &Attributes, weaker_foot: u8, position: &str) -> Option<CaEstimate> {
     let column = position_column(position)?;
+    estimate_columns(
+        attributes,
+        weaker_foot,
+        &[column],
+        &normalize_position(position),
+    )
+}
+
+/// Estimate CA from several natural positions. FM uses the highest weight for
+/// each attribute across the player's natural positions; this mirrors that.
+pub fn estimate_positions(
+    attributes: &Attributes,
+    weaker_foot: u8,
+    positions: &[String],
+) -> Option<CaEstimate> {
+    let mut columns = Vec::new();
+    let mut labels = Vec::new();
+    for position in positions {
+        let Some(column) = position_column(position) else {
+            continue;
+        };
+        if !columns.contains(&column) {
+            columns.push(column);
+            labels.push(POSITION_KEYS[column]);
+        }
+    }
+    if columns.is_empty() {
+        return None;
+    }
+    estimate_columns(attributes, weaker_foot, &columns, &labels.join("/"))
+}
+
+fn estimate_columns(
+    attributes: &Attributes,
+    weaker_foot: u8,
+    columns: &[usize],
+    label: &str,
+) -> Option<CaEstimate> {
     let mut weighted_sum = 0.0f32;
     let mut excess_sum = 0.0f32;
     let mut total_weight = 0.0f32;
     for (key, weights) in ATTRIBUTE_WEIGHTS {
-        let weight = weights[column];
+        let weight = columns
+            .iter()
+            .map(|column| weights[*column])
+            .fold(0.0f32, f32::max);
         if weight <= 0.0 {
             continue;
         }
@@ -211,7 +257,10 @@ pub fn estimate_ca(attributes: &Attributes, weaker_foot: u8, position: &str) -> 
         excess_sum += (value - HIGH_ATTRIBUTE_THRESHOLD).max(0.0) * weight;
         total_weight += weight;
     }
-    let weaker_foot_weight = WEAKER_FOOT_WEIGHTS[column];
+    let weaker_foot_weight = columns
+        .iter()
+        .map(|column| WEAKER_FOOT_WEIGHTS[*column])
+        .fold(0.0f32, f32::max);
     if weaker_foot_weight > 0.0 {
         let weaker_foot = weaker_foot.clamp(1, 20) as f32;
         weighted_sum += weaker_foot * weaker_foot_weight;
@@ -228,7 +277,7 @@ pub fn estimate_ca(attributes: &Attributes, weaker_foot: u8, position: &str) -> 
             .round()
             .clamp(1.0, 200.0) as u16;
     Some(CaEstimate {
-        position: normalize_position(position),
+        position: label.to_owned(),
         estimated_ca: estimated,
         weighted_average,
         excess_average,
@@ -331,6 +380,14 @@ mod tests {
             estimate_ca(&low, 10, "SC").unwrap().estimated_ca,
             estimate_ca(&high, 10, "SC").unwrap().estimated_ca
         );
+    }
+
+    #[test]
+    fn multiple_positions_are_combined() {
+        let estimate = estimate_positions(&all(12), 12, &["STC".to_owned(), "AML".to_owned()])
+            .expect("combined estimate");
+        assert_eq!(estimate.position, "SC/AMRL");
+        assert!(estimate.total_weight > 0.0);
     }
 
     #[test]

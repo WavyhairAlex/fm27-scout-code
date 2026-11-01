@@ -84,7 +84,7 @@ export interface EditPlayerResult {
 }
 
 export interface CaEstimateRequest {
-  position: string;
+  positions: string[];
   attributes: Record<string, number>;
   weaker_foot: number;
 }

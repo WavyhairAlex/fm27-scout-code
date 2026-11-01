@@ -148,11 +148,17 @@ attributes:
   `CA ≈ 18.13 × weighted-average + 18.74 × weighted-excess-above-16 − 97.60`,
   clamped to 1–200.
 - The excess term captures the extra cost of high attributes (17+).
-- Attributes are the displayed 1–20 values; the weaker foot is included.
+- Attributes are the displayed 1–20 values; the **weaker foot** is included with
+  its position-specific weight (`min(left foot, right foot)`).
 - The player's natural/accomplished position can be selected as the basis.
+- **Auto** uses all natural positions and takes the highest weight for each
+  attribute across them, matching FM's multi-position behaviour. A single
+  natural or accomplished position can still be selected manually.
 - Zero-weight attributes (aggression, determination, flair, natural fitness and
   hidden attributes) do not change the estimate.
 - The estimate updates live while CA or attributes are edited.
+- The card shows the active basis, including the combined position label and the
+  weaker-foot value used.
 
 The card shows the estimate, a marker for the current/edited CA, and one of:
 

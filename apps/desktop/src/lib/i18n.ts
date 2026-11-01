@@ -509,6 +509,8 @@ const en = {
   "edit.budget.estimatedShort": "Est. CA {value}",
   "edit.budget.average": "avg {value}",
   "edit.budget.position": "Position basis",
+  "edit.budget.auto": "Auto (natural positions)",
+  "edit.budget.basis": "Basis: {position} · weaker foot {foot}",
   "edit.budget.currentCa": "Current CA {value}",
   "edit.budget.over":
     "Attributes imply about {estimate} CA, above {ca}. FM may trim attributes; raise CA to about {estimate} or reduce attributes.",
@@ -1050,6 +1052,8 @@ const zhCN: Record<TranslationKey, string> = {
   "edit.budget.estimatedShort": "估算 CA {value}",
   "edit.budget.average": "均值 {value}",
   "edit.budget.position": "位置基准",
+  "edit.budget.auto": "自动（全部自然位置）",
+  "edit.budget.basis": "基准：{position} · 弱势脚 {foot}",
   "edit.budget.currentCa": "当前 CA {value}",
   "edit.budget.over":
     "属性大约对应 CA {estimate}，高于 {ca}。FM 可能会压缩属性；建议把 CA 提高到约 {estimate}，或降低属性。",

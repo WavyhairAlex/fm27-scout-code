@@ -5,7 +5,7 @@
 //!   --test ability_real_save -- --ignored --nocapture
 //! ```
 
-use fm27_core::ability::{estimate_best_position, estimate_ca};
+use fm27_core::ability::{estimate_ca, estimate_positions};
 use fm27_core::parse_save;
 
 #[test]
@@ -28,7 +28,7 @@ fn estimates_be_compared_with_stored_current_ability() {
                 &player.natural_positions[0],
             )
         } else {
-            estimate_best_position(&player.attributes, weaker_foot, &player.natural_positions)
+            estimate_positions(&player.attributes, weaker_foot, &player.natural_positions)
         };
         if let Some(estimate) = estimate {
             let error = estimate.estimated_ca as i32 - player.ca as i32;
