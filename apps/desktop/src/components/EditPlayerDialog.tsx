@@ -631,30 +631,44 @@ function CaBudget({
 }) {
   const { t } = useI18n();
   const delta = estimate ? estimate.estimated_ca - targetCa : 0;
+  const outlier = estimate != null && Math.abs(delta) > 8;
   const status =
     !estimate
       ? t("edit.budget.loading")
-      : delta > 3
-        ? t("edit.budget.over", {
+      : outlier
+        ? t("edit.budget.outlier", {
             estimate: estimate.estimated_ca,
             ca: targetCa,
           })
-        : delta < -3
-          ? t("edit.budget.under", {
+        : delta > 3
+          ? t("edit.budget.over", {
               estimate: estimate.estimated_ca,
               ca: targetCa,
             })
-          : t("edit.budget.balanced");
-  const dotColor =
-    !estimate || Math.abs(delta) <= 3
-      ? "bg-[var(--accent)]"
-      : delta > 0
-        ? "bg-[var(--gold)]"
-        : "bg-[var(--blue)]";
+          : delta < -3
+            ? t("edit.budget.under", {
+                estimate: estimate.estimated_ca,
+                ca: targetCa,
+              })
+            : t("edit.budget.balanced");
+  const dotColor = !estimate
+    ? "bg-[var(--accent)]"
+    : outlier
+      ? "bg-[var(--danger)]"
+      : Math.abs(delta) <= 3
+        ? "bg-[var(--accent)]"
+        : delta > 0
+          ? "bg-[var(--gold)]"
+          : "bg-[var(--blue)]";
   const estimatePercent = estimate ? Math.max(2, Math.min(100, (estimate.estimated_ca / 200) * 100)) : 0;
   const targetPercent = Math.max(0, Math.min(100, (targetCa / 200) * 100));
   return (
-    <div className="rounded-xl border border-[var(--line)] bg-[var(--surface)] p-3">
+    <div
+      className={cn(
+        "rounded-xl border bg-[var(--surface)] p-3",
+        outlier ? "border-[var(--danger-line)]" : "border-[var(--line)]",
+      )}
+    >
       <div className="flex items-start justify-between gap-3">
         <div>
           <div className="text-[10px] font-semibold uppercase tracking-wider text-[var(--muted)]">
@@ -695,7 +709,13 @@ function CaBudget({
         <div
           className={cn(
             "h-full rounded-full transition-[width]",
-            delta > 3 ? "bg-[var(--gold)]" : delta < -3 ? "bg-[var(--blue)]" : "bg-[var(--accent)]",
+            outlier
+              ? "bg-[var(--danger)]"
+              : delta > 3
+                ? "bg-[var(--gold)]"
+                : delta < -3
+                  ? "bg-[var(--blue)]"
+                  : "bg-[var(--accent)]",
           )}
           style={{ width: `${estimatePercent}%` }}
         />

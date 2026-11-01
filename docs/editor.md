@@ -168,6 +168,12 @@ of about **4.3 CA**, down from 7.6 with the simple linear fit. A second referenc
 save gave 3.26 CA mean absolute error. This remains an estimate, not an official
 formula.
 
+A disagreement above about 8 CA is flagged in the dialog. Large disagreements
+usually mean the save contains custom/edited players whose attributes and stored
+CA were set independently; in that case the stored CA is authoritative and the
+estimate should only be used as a budget signal. Typical players are within a few
+CA points.
+
 See [editor-test-plan.md](editor-test-plan.md) for the controlled A/B/C comparison
 of CA-only, attributes-only and CA-plus-attributes edits.
 

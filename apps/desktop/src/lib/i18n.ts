@@ -515,9 +515,11 @@ const en = {
   "edit.budget.under":
     "CA {ca} is above the attribute estimate of about {estimate}; FM may raise attributes over time.",
   "edit.budget.balanced": "Attributes and CA balance within about 3 points.",
-  "edit.budget.use": "Use CA {value}",
+  "edit.budget.outlier":
+    "Large disagreement: attributes imply {estimate} CA, but the stored CA is {ca}. Custom or edited data can cause this; the stored CA is authoritative. Treat the estimate as a budget signal.",
+  "edit.budget.use": "Use estimate {value}",
   "edit.budget.note":
-    "Approximate estimate using community FM weights; high attributes (17+) can cost slightly more.",
+    "Approximate estimate using community FM weights; typical error is ~3 CA, but custom/edited players and extreme attributes can differ more.",
   "edit.budget.loading": "Estimating…",
   "edit.warning.ca":
     "FM treats CA as the attribute budget and rebalances visible attributes over roughly a month.",
@@ -1054,8 +1056,11 @@ const zhCN: Record<TranslationKey, string> = {
   "edit.budget.under":
     "CA {ca} 高于属性估算值 {estimate}；FM 可能随时间提升属性。",
   "edit.budget.balanced": "属性与 CA 大致平衡（误差约 3 点以内）。",
-  "edit.budget.use": "设为 CA {value}",
-  "edit.budget.note": "基于社区 FM 权重估算；17+ 的高属性可能略贵。",
+  "edit.budget.outlier":
+    "偏差较大：属性估算为 {estimate} CA，但存档 CA 为 {ca}。自定义/编辑过的数据会导致这种情况；以存档 CA 为准，估算值只作为预算参考。",
+  "edit.budget.use": "使用估算 {value}",
+  "edit.budget.note":
+    "基于社区 FM 权重估算，典型误差约 3 CA；自定义/编辑球员和极端属性可能偏差更大。",
   "edit.budget.loading": "正在估算…",
   "edit.warning.ca": "CA 是属性预算，FM 会在大约一个月内重新分配可见属性。",
   "edit.warning.caAttrs":
