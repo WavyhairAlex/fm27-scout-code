@@ -202,6 +202,7 @@ const en = {
   "inspector.profile": "Player profile",
   "inspector.compare": "Compare",
   "inspector.closeProfile": "Close profile",
+  "inspector.copyName": "Copy name",
   "inspector.womenBadge": "Women",
   "inspector.contractUntil": "Contract {date}",
   "inspector.value": "Value",
@@ -377,7 +378,7 @@ const en = {
 
   // Help dialog
   "help.title": "About & help",
-  "help.description": "FM27 Scout 0.3.1 · Scouting workbench with an optional save editor",
+  "help.description": "FM27 Scout 1.0.0 · Scouting workbench with an optional save editor",
   "help.privacyTitle": "Privacy & local writes",
   "help.privacy.1":
     "Read commands never modify the save. The edit dialog writes a new save file; the source is never overwritten.",
@@ -494,6 +495,8 @@ const en = {
   "toast.editFailed": "Could not write edited save",
   "toast.staged": "Changes staged",
   "toast.stagedDescription": "{name} · {count} changes staged",
+  "toast.nameCopied": "Name copied",
+  "toast.copyFailed": "Could not copy to clipboard",
 
   // Pending edits
   "pending.title": "Pending edits",
@@ -512,6 +515,8 @@ const en = {
   "pending.open": "Open edited save",
   "pending.note":
     "All staged players are written together in one pass. Existing output files are not overwritten; the source save is never modified. Pending edits live only in this session, so save them before quitting.",
+  "pending.riskWarning":
+    "This step writes a new save file. If the output is corrupted or the game cannot read it, the source save remains untouched. Keep a backup and verify the output in game before relying on it.",
   "pending.added": "added",
   "pending.removed": "removed",
   "pending.discardBeforeOpen":
@@ -581,6 +586,8 @@ const en = {
   "edit.invalidPersonality": "Personality values must be between 1 and 20.",
   "edit.outputHint":
     "Edits are staged on this player. When you are done, use Pending edits in the toolbar to save every staged player into one new .fm file.",
+  "edit.riskWarning":
+    "Experimental save editing: a malformed or unsupported edit can corrupt the output save or make it unreadable. Back up the source save, close Football Manager before writing, and keep the edited save as a separate file. Use at your own risk.",
   "edit.stage": "Add to pending edits",
   "edit.saveCopy": "Save a copy…",
   "edit.saving": "Writing save…",
@@ -788,6 +795,7 @@ const zhCN: Record<TranslationKey, string> = {
   "inspector.profile": "球员档案",
   "inspector.compare": "对比",
   "inspector.closeProfile": "关闭档案",
+  "inspector.copyName": "复制姓名",
   "inspector.womenBadge": "女子",
   "inspector.contractUntil": "合同 {date}",
   "inspector.value": "身价",
@@ -959,7 +967,7 @@ const zhCN: Record<TranslationKey, string> = {
     "CSV 包含表格字段与 52 项属性。导出文件写入你选择的位置；不会上传到任何服务器。",
 
   "help.title": "关于与帮助",
-  "help.description": "FM27 Scout 0.3.1 · 球探工作台，可选存档编辑器",
+  "help.description": "FM27 Scout 1.0.0 · 球探工作台，可选存档编辑器",
   "help.privacyTitle": "隐私与本地写入",
   "help.privacy.1": "读取命令不修改存档；编辑对话框只写入新存档，绝不覆盖源文件。",
   "help.privacy.2": "完全离线，不上传存档、球员或使用数据。",
@@ -1069,6 +1077,8 @@ const zhCN: Record<TranslationKey, string> = {
   "toast.editFailed": "写入编辑后的存档失败",
   "toast.staged": "修改已暂存",
   "toast.stagedDescription": "{name} · 已暂存 {count} 项修改",
+  "toast.nameCopied": "姓名已复制",
+  "toast.copyFailed": "复制到剪贴板失败",
 
   "pending.title": "待保存修改",
   "pending.badge": "待保存",
@@ -1086,6 +1096,8 @@ const zhCN: Record<TranslationKey, string> = {
   "pending.open": "打开编辑后的存档",
   "pending.note":
     "所有暂存球员会在一次写入中保存到同一个新文件。已有输出文件不会被覆盖，源存档不会被修改。待保存修改只存在于当前会话，退出应用前请先保存。",
+  "pending.riskWarning":
+    "这一步会写入一个全新的存档文件。如果输出文件损坏或游戏无法读取，源存档不会被影响；请保留备份，并在游戏内验证输出文件后再使用。",
   "pending.added": "添加",
   "pending.removed": "移除",
   "pending.discardBeforeOpen":
@@ -1152,6 +1164,8 @@ const zhCN: Record<TranslationKey, string> = {
   "edit.invalidPersonality": "性格值必须在 1–20 之间。",
   "edit.outputHint":
     "修改会暂存在该球员上；全部编辑完成后，用工具栏的待保存按钮统一另存为一个新 .fm 文件。",
+  "edit.riskWarning":
+    "实验性存档编辑：错误或不兼容的修改可能导致输出存档损坏、游戏无法读取或球员数据异常。请备份源存档，写入前退出 Football Manager，并将编辑结果保存为独立的新文件。使用风险自负。",
   "edit.stage": "加入待保存修改",
   "edit.saveCopy": "另存为新存档…",
   "edit.saving": "正在写入存档…",

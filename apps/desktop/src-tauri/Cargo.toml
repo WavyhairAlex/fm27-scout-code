@@ -1,6 +1,6 @@
 [package]
 name = "fm27-scout-desktop"
-version = "0.3.1"
+version.workspace = true
 edition = "2024"
 license = "MIT"
 description = "FM27 Scout macOS desktop app"
@@ -17,6 +17,7 @@ fm27-core = { path = "../../../crates/fm27-core" }
 serde.workspace = true
 serde_json.workspace = true
 tauri = { version = "2", features = [] }
+tauri-plugin-clipboard-manager = "2"
 tauri-plugin-dialog = "2"
 tauri-plugin-process = "2"
 tauri-plugin-updater = "2"

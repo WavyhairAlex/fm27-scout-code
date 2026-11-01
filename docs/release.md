@@ -8,11 +8,11 @@ FM27 Scout 通过 GitHub Actions 发布**未签名、未公证**的 Universal DM
 `.github/workflows/release.yml` 不读取任何 Apple Secrets。
 
 推送 `v*` tag 会构建并发布 GitHub Release。手动触发 workflow 时，可以在 `tag` 输入框填写
-一个已存在的 tag（例如 `v0.2.1`）来发布。留空时使用当前选择的 ref：从 tag 触发会发布
+一个已存在的 tag（例如 `v1.0.0`）来发布。留空时使用当前选择的 ref：从 tag 触发会发布
 Release，从分支触发则只构建并上传 CI artifact。
 
 发布前必须保证 tag 版本与 `apps/desktop/src-tauri/tauri.conf.json` 的 `version` 一致
-（例如 tag `v0.2.1` 对应 `0.2.1`），否则 workflow 会在构建前失败。
+（例如 tag `v1.0.0` 对应 `1.0.0`），否则 workflow 会在构建前失败。
 
 Release 附件包括：
 
@@ -117,7 +117,7 @@ scripts/release-macos.sh
 
 ```text
 target/universal-apple-darwin/release/bundle/macos/FM27 Scout.app
-target/universal-apple-darwin/release/bundle/dmg/FM27 Scout_0.2.1_universal.dmg
+target/universal-apple-darwin/release/bundle/dmg/FM27 Scout_1.0.0_universal.dmg
 ```
 
 如果以后要恢复 CI 签名发布，需要在 workflow 中重新加入 Apple Secrets：
@@ -137,8 +137,8 @@ target/universal-apple-darwin/release/bundle/dmg/FM27 Scout_0.2.1_universal.dmg
 ## 本地验证
 
 ```bash
-hdiutil verify "target/universal-apple-darwin/release/bundle/dmg/FM27 Scout_0.2.1_universal.dmg"
-hdiutil attach "target/universal-apple-darwin/release/bundle/dmg/FM27 Scout_0.2.1_universal.dmg"
+hdiutil verify "target/universal-apple-darwin/release/bundle/dmg/FM27 Scout_1.0.0_universal.dmg"
+hdiutil attach "target/universal-apple-darwin/release/bundle/dmg/FM27 Scout_1.0.0_universal.dmg"
 cp -R "/Volumes/FM27 Scout/FM27 Scout.app" /tmp/
 lipo -info /tmp/"FM27 Scout.app"/Contents/MacOS/*
 ```

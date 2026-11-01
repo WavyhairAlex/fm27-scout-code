@@ -7,6 +7,7 @@ import {
   CircleDot,
   ClipboardList,
   Coins,
+  Copy,
   GitCompareArrows,
   HeartPulse,
   LockKeyhole,
@@ -20,6 +21,7 @@ import {
   X,
 } from "lucide-react";
 import { useGrowthHistory, usePlayerDetail, usePlayerRoles } from "@/lib/query";
+import { copyTextToClipboard } from "@/lib/api";
 import type { Attributes, Player, Positions, RoleScore, SnapshotPoint } from "@/lib/types";
 import { ATTRIBUTE_GROUPS, POSITION_LABELS } from "@/lib/types";
 import {
@@ -57,6 +59,7 @@ export function Inspector() {
   const setHiddenEnabled = useAppStore((state) => state.setHiddenEnabled);
   const setEditOpen = useAppStore((state) => state.setEditOpen);
   const pendingEdits = useAppStore((state) => state.pendingEdits);
+  const pushToast = useAppStore((state) => state.pushToast);
   const gameDate = useAppStore((state) => state.summary?.game_date ?? null);
   const displayMode = useAppStore((state) => state.displayMode);
   const setDisplayMode = useAppStore((state) => state.setDisplayMode);
@@ -66,10 +69,17 @@ export function Inspector() {
   const { data: roleScores } = usePlayerRoles(selectedUid);
   const { data: growth } = useGrowthHistory(selectedUid);
   const [tab, setTab] = useState<Tab>("attributes");
+  const [nameCopied, setNameCopied] = useState(false);
 
   useEffect(() => {
     if (!hiddenEnabled && tab === "hidden") setTab("attributes");
   }, [hiddenEnabled, tab]);
+
+  useEffect(() => {
+    if (!nameCopied) return;
+    const timer = window.setTimeout(() => setNameCopied(false), 1600);
+    return () => window.clearTimeout(timer);
+  }, [nameCopied]);
 
   if (selectedUid == null) {
     return (
@@ -99,6 +109,18 @@ export function Inspector() {
 
   const attributes = displayMode === "display" ? player.attributes : player.raw_attributes;
   const maxValue = displayMode === "display" ? 20 : 100;
+
+  const copyName = async () => {
+    const name = player.name;
+    if (!name) return;
+    try {
+      await copyTextToClipboard(name);
+      setNameCopied(true);
+      pushToast({ title: t("toast.nameCopied"), description: name, tone: "success" });
+    } catch (error) {
+      pushToast({ title: t("toast.copyFailed"), description: String(error), tone: "error" });
+    }
+  };
 
   return (
     <aside className="flex h-full w-[372px] shrink-0 flex-col border-l border-[var(--line)] bg-[var(--surface)]">
@@ -140,10 +162,27 @@ export function Inspector() {
             </div>
             <div className="min-w-0 flex-1">
               <div className="flex items-start justify-between gap-2">
-                <div>
-                  <h2 className="text-[17px] font-semibold leading-tight tracking-tight text-[var(--ink)]">
-                    {player.name ?? t("common.unnamedPlayer")}
-                  </h2>
+                <div className="min-w-0">
+                  <div className="flex min-w-0 items-start gap-1">
+                    <h2 className="min-w-0 text-[17px] font-semibold leading-tight tracking-tight text-[var(--ink)]">
+                      {player.name ?? t("common.unnamedPlayer")}
+                    </h2>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="mt-px h-6 w-6 shrink-0"
+                      onClick={() => void copyName()}
+                      disabled={!player.name}
+                      aria-label={t("inspector.copyName")}
+                      title={t("inspector.copyName")}
+                    >
+                      {nameCopied ? (
+                        <Check size={12} className="text-[var(--success)]" />
+                      ) : (
+                        <Copy size={12} />
+                      )}
+                    </Button>
+                  </div>
                   <div className="mt-0.5 truncate text-[11px] text-[var(--muted)]">
                     {player.club_name ?? t("common.freeAgent")}
                   </div>

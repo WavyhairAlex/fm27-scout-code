@@ -1,5 +1,6 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
+  AlertTriangle,
   Check,
   ClipboardList,
   Loader2,
@@ -33,6 +34,13 @@ export function PendingEditsDialog() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<BatchEditResult | null>(null);
+
+  // A previous successful save must not hide a newly staged batch.
+  useEffect(() => {
+    if (!open) return;
+    setResult(null);
+    setError(null);
+  }, [open]);
 
   const entries = Object.values(pendingEdits).sort((left, right) =>
     left.name.localeCompare(right.name),
@@ -150,6 +158,10 @@ export function PendingEditsDialog() {
         </div>
       ) : (
         <div className="space-y-3 p-5">
+          <div className="flex items-start gap-2 rounded-lg border border-[var(--danger-line)] bg-[var(--danger-soft)] px-3 py-2 text-[10px] leading-relaxed text-[var(--danger)]">
+            <AlertTriangle size={13} className="mt-0.5 shrink-0" />
+            <span>{t("pending.riskWarning")}</span>
+          </div>
           <div className="flex items-center justify-between rounded-lg border border-[var(--line)] bg-[var(--surface-2)] px-3 py-2">
             <div className="flex items-center gap-2 text-[11px] text-[var(--muted)]">
               <ClipboardList size={14} className="text-[var(--accent)]" />

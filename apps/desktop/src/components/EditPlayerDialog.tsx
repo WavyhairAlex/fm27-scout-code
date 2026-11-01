@@ -371,6 +371,10 @@ export function EditPlayerDialog() {
         <div className="p-6 text-xs text-[var(--muted)]">{t("edit.noPlayer")}</div>
       ) : (
         <div className="space-y-3 p-5">
+          <div className="flex items-start gap-2 rounded-lg border border-[var(--danger-line)] bg-[var(--danger-soft)] px-3 py-2 text-[10px] leading-relaxed text-[var(--danger)]">
+            <AlertTriangle size={13} className="mt-0.5 shrink-0" />
+            <span>{t("edit.riskWarning")}</span>
+          </div>
           <div className="flex flex-wrap gap-1 border-b border-[var(--line)] pb-2">
             {[
               ["ability", t("edit.tab.ability")],

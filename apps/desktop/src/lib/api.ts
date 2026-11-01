@@ -1,5 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
+import { writeText as writeClipboardText } from "@tauri-apps/plugin-clipboard-manager";
 import { open, save } from "@tauri-apps/plugin-dialog";
 import type {
   AnalysisOverview,
@@ -39,6 +40,27 @@ import {
 
 export const isTauri =
   typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
+
+/** Write plain text to the system clipboard. */
+export async function copyTextToClipboard(text: string): Promise<void> {
+  if (isTauri) {
+    await writeClipboardText(text);
+    return;
+  }
+  if (navigator.clipboard?.writeText) {
+    await navigator.clipboard.writeText(text);
+    return;
+  }
+  const area = document.createElement("textarea");
+  area.value = text;
+  area.style.position = "fixed";
+  area.style.opacity = "0";
+  document.body.appendChild(area);
+  area.select();
+  const copied = document.execCommand("copy");
+  area.remove();
+  if (!copied) throw new Error("clipboard write failed");
+}
 
 export async function listSaves(): Promise<SaveRecord[]> {
   if (!isTauri) return [MOCK_SAVE];
@@ -269,7 +291,7 @@ export async function appInfo(): Promise<AppInfo> {
   if (!isTauri) {
     return {
       data_dir: "~/Library/Application Support/com.fm27scout.desktop",
-      version: "0.3.1",
+      version: "1.0.0",
       nation_names: 228,
       competition_names: 0,
     };
@@ -278,7 +300,7 @@ export async function appInfo(): Promise<AppInfo> {
 }
 
 export async function updaterInfo(): Promise<UpdaterInfo> {
-  if (!isTauri) return { configured: false, version: "0.3.1" };
+  if (!isTauri) return { configured: false, version: "1.0.0" };
   return invoke<UpdaterInfo>("updater_info");
 }
 
