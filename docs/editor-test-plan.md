@@ -103,10 +103,15 @@ retention, not the raw sum.
 attributes moved by 3–15 points. This confirms the reported behavior:
 determination does not consume the CA budget and can be edited independently.
 
-The test player was a striker, and his goalkeeper attributes and `aggression`
-also stayed unchanged. That is consistent with position-specific CA weights, but
-this test only proves the determination case; the editor does not yet model a
-full position-weight table.
+**Natural Fitness stayed at 51 in the low-CA and CA-plus-attributes runs**; it
+rose to 52 in the CA-only run, a +1 training drift. In the same low-CA run,
+stamina and strength fell by 15 raw points. Natural Fitness therefore does not
+consume the CA budget either.
+
+The test player was a striker, and his goalkeeper attributes, `flair` and
+`aggression` also stayed unchanged. That is consistent with position-specific CA
+weights, but those cases are not classified globally yet; the editor only marks
+determination, natural fitness and the hidden attributes as CA-exempt.
 
 ## Conclusion
 
@@ -118,8 +123,34 @@ full position-weight table.
   key attributes are largely preserved, while marginal attributes are trimmed.
 - Avoid editing visible attributes alone at a low CA; FM will pull them back
   toward the CA budget.
-- Hidden attributes, **determination**, personality and traits are independent
-  and stay stable.
+- Hidden attributes, **determination**, **natural fitness**, personality and
+  traits are independent and stay stable.
 
 The earlier warning is confirmed: **CA is the budget; visible attributes are the
 allocation.**
+
+## Optional direct exemption test (D)
+
+A fourth save, `FM27 Scout Test D - CA Exempt.fm`, uses CA 110 / PA 200 and sets
+six attributes to raw 100:
+
+```text
+natural_fitness, determination, flair, aggression, stamina, strength
+```
+
+Advance it to 2026-08-27 as before. Expected result if the classification is
+correct:
+
+- `natural_fitness` and `determination` stay at 100 (CA-exempt).
+- `stamina` and `strength` fall toward the CA 110 budget (CA-weighted controls).
+- `flair` and `aggression` indicate whether they are also position-specific
+  exemptions for a striker.
+
+Compare with:
+
+```bash
+python3 scripts/compare_editor_test.py \
+  --baseline "target/editor-test/FM27 Scout Test D - CA Exempt.fm" \
+  --after "/path/to/D - month.fm" \
+  --uid 2000395878
+```

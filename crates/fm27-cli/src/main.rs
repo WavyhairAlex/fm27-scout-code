@@ -517,4 +517,16 @@ mod tests {
         };
         assert!(request.warnings().is_empty());
     }
+
+    #[test]
+    fn natural_fitness_edits_do_not_warn() {
+        let request = PlayerEditRequest {
+            attributes: vec![AttributeEdit {
+                key: "natural_fitness".to_owned(),
+                value: 100,
+            }],
+            ..PlayerEditRequest::default()
+        };
+        assert!(request.warnings().is_empty());
+    }
 }

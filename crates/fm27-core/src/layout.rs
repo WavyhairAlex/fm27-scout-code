@@ -92,10 +92,11 @@ pub fn is_hidden_attribute_key(key: &str) -> bool {
     HIDDEN_ATTRIBUTE_KEYS.contains(&key)
 }
 
-/// Visible attributes that do not consume the CA budget. Determination stayed
-/// unchanged in controlled CA rebalancing tests; hidden attributes are exempt too.
+/// Attributes that do not consume the CA budget. Determination and natural
+/// fitness stayed unchanged in controlled CA rebalancing tests; hidden attributes
+/// are exempt too.
 pub fn is_ca_exempt_attribute(key: &str) -> bool {
-    is_hidden_attribute_key(key) || key == "determination"
+    is_hidden_attribute_key(key) || matches!(key, "determination" | "natural_fitness")
 }
 
 pub const PERSONALITY_KEYS: [&str; 8] = [

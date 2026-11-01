@@ -593,6 +593,7 @@ export const HIDDEN_ATTRIBUTE_KEYS = ATTRIBUTE_GROUPS.hidden[0].keys;
 export const CA_EXEMPT_ATTRIBUTE_KEYS: ReadonlySet<string> = new Set([
   ...HIDDEN_ATTRIBUTE_KEYS,
   "determination",
+  "natural_fitness",
 ]);
 export const HIDDEN_FILTER_KEYS = [...HIDDEN_ATTRIBUTE_KEYS, ...PERSONALITY_KEYS];
 export const HIDDEN_FILTERS: ReadonlySet<string> = new Set(HIDDEN_FILTER_KEYS);

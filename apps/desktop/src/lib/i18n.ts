@@ -503,7 +503,7 @@ const en = {
   "edit.pa": "Potential ability (PA)",
   "edit.original": "Original {value}",
   "edit.attributeBudget":
-    "CA is the attribute budget. FM rebalances CA-weighted attributes over roughly a month; hidden attributes, determination, personality and traits are stable. Editing CA-weighted attributes without CA is temporary.",
+    "CA is the attribute budget. FM rebalances CA-weighted attributes over roughly a month; hidden attributes, determination, natural fitness, personality and traits are stable. Editing CA-weighted attributes without CA is temporary.",
   "edit.warning.ca":
     "FM treats CA as the attribute budget and rebalances visible attributes over roughly a month.",
   "edit.warning.caAttrs":
@@ -1027,7 +1027,7 @@ const zhCN: Record<TranslationKey, string> = {
   "edit.pa": "潜在能力（PA）",
   "edit.original": "原值 {value}",
   "edit.attributeBudget":
-    "CA 是属性预算。FM 会在大约一个月内重新分配参与 CA 计算的属性；隐藏属性、Determination、性格和习惯保持稳定。只改参与 CA 的可见属性而不改 CA，是临时的。",
+    "CA 是属性预算。FM 会在大约一个月内重新分配参与 CA 计算的属性；隐藏属性、Determination、Natural Fitness、性格和习惯保持稳定。只改参与 CA 的可见属性而不改 CA，是临时的。",
   "edit.warning.ca": "CA 是属性预算，FM 会在大约一个月内重新分配可见属性。",
   "edit.warning.caAttrs":
     "同时修改 CA 和参与 CA 计算的属性；关键属性通常接近保留，但可能被压缩以匹配 CA 预算。",

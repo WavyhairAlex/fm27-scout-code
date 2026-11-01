@@ -84,14 +84,16 @@ export function EditPlayerDialog() {
         key: "ca-exempt",
         label: t("edit.group.caExempt"),
         note: t("edit.note.caExempt"),
-        keys: ["determination"],
+        keys: ["determination", "natural_fitness"],
       },
     ];
     for (const group of ATTRIBUTE_GROUPS.technical) {
       const keys =
         group.labelKey === "mental"
           ? group.keys.filter((key) => key !== "determination")
-          : group.keys;
+          : group.labelKey === "physical"
+            ? group.keys.filter((key) => key !== "natural_fitness")
+            : group.keys;
       groups.push({
         key: group.labelKey,
         label: t(`attribute.group.${group.labelKey}`),

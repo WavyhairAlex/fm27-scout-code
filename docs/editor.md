@@ -75,10 +75,17 @@ The eight personality bytes are stored in a separate person block and use
 
 ### CA-exempt attributes
 
-**Determination** is visible but does not consume the CA budget. In the A/B/C
-tests it stayed at its original value in every run while the other visible
-attributes moved. It can be edited with `--attr determination=...` without
-changing CA.
+**Determination** and **Natural Fitness** are visible but do not consume the CA
+budget. In the A/B/C tests they stayed at their original values in every run while
+CA-weighted attributes moved:
+
+- Determination: `65 → 65` in all three runs.
+- Natural Fitness: `51 → 52` in the CA-only run (+1 training drift), and
+  `51 → 51` in both the low-CA and CA-plus-attributes runs.
+- By contrast, stamina and strength fell by 15 raw points in the low-CA run.
+
+Both can be edited with `--attr determination=...` or
+`--attr natural_fitness=...` without changing CA.
 
 Other position-irrelevant attributes (for example, goalkeeper attributes on an
 outfield player) also stayed unchanged in the test, but the editor does not yet
@@ -122,8 +129,8 @@ Practical workflow:
   trimmed.
 - **Visible attributes alone** at a low CA are unstable; FM pulls them back
   toward the CA budget.
-- Hidden attributes, determination, personality, and traits are independent of CA
-  and are the most stable edits.
+- Hidden attributes, determination, natural fitness, personality, and traits are
+  independent of CA and are the most stable edits.
 
 The CLI prints a warning when `--ca` is changed, when a CA-weighted visible
 attribute is changed without `--ca`, or when both CA and CA-weighted attributes
