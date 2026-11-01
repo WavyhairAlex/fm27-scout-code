@@ -96,6 +96,9 @@ enum Command {
         /// Output path. Defaults to `<save stem>.edited.fm` next to the source.
         #[arg(long)]
         output: Option<PathBuf>,
+        /// Internal save name stored in the new file, for test copies.
+        #[arg(long)]
+        save_name: Option<String>,
         /// Overwrite the output file if it already exists.
         #[arg(long)]
         force: bool,
@@ -229,6 +232,7 @@ fn main() -> Result<()> {
             traits,
             untraits,
             output,
+            save_name,
             force,
             dry_run,
             compression_level,
@@ -281,6 +285,7 @@ fn main() -> Result<()> {
                         "uid": uid,
                         "source": save.display().to_string(),
                         "output": output.display().to_string(),
+                        "save_name": save_name,
                         "written": false,
                         "changes": editor.changes(),
                     }))?
@@ -289,7 +294,7 @@ fn main() -> Result<()> {
             }
 
             let report = editor
-                .write(&save_file, &output, compression_level)
+                .write_as(&save_file, &output, compression_level, save_name.as_deref())
                 .context("write edited save")?;
             let verify = verify_edited_save(&output, uid, &request);
             if let Err(error) = verify {
@@ -302,6 +307,7 @@ fn main() -> Result<()> {
                     "uid": uid,
                     "source": save.display().to_string(),
                     "output": report.output,
+                    "save_name": save_name,
                     "written": true,
                     "verified": true,
                     "file_size": report.file_size,

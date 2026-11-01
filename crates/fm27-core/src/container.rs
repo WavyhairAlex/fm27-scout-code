@@ -239,6 +239,19 @@ impl SaveFile {
         output: impl AsRef<Path>,
         compression_level: i32,
     ) -> Result<SaveWriteReport> {
+        self.write_with_replacements_and_name(replacements, output, compression_level, None)
+    }
+
+    /// Like [`SaveFile::write_with_replacements`], but optionally changes the
+    /// save name stored in the directory (useful for test copies that should be
+    /// distinguishable in the game's load menu).
+    pub fn write_with_replacements_and_name(
+        &self,
+        replacements: &[(&str, &[u8])],
+        output: impl AsRef<Path>,
+        compression_level: i32,
+        save_name: Option<&str>,
+    ) -> Result<SaveWriteReport> {
         let output = output.as_ref().to_path_buf();
         if same_file(&self.path, &output) {
             return Err(Error::Unsupported(
@@ -375,7 +388,7 @@ impl SaveFile {
         }
 
         let directory = SaveDirectory {
-            save_name: self.directory.save_name.clone(),
+            save_name: save_name.unwrap_or(&self.directory.save_name).to_owned(),
             reserved: self.directory.reserved,
             top_entries,
             groups,
@@ -912,6 +925,26 @@ mod tests {
         assert_eq!(copy.read_section("game_info").unwrap(), b"info");
         assert_eq!(copy.directory.groups[0].entries.len(), 1);
         assert_eq!(copy.directory.groups[0].entries[0].name, "comp_1");
+    }
+
+    #[test]
+    fn changes_the_internal_save_name() {
+        let directory = tempdir().unwrap();
+        let source = directory.path().join("source.fm");
+        let output = directory.path().join("renamed.fm");
+        std::fs::write(
+            &source,
+            build_save(&[("game_db", b"database")], &[("comp_1", b"one")]),
+        )
+        .unwrap();
+
+        let save = SaveFile::open(&source).unwrap();
+        save.write_with_replacements_and_name(&[], &output, 3, Some("renamed save"))
+            .unwrap();
+        let renamed = SaveFile::open(&output).unwrap();
+        assert_eq!(renamed.save_name, "renamed save");
+        assert_eq!(renamed.read_section("game_db").unwrap(), b"database");
+        assert_eq!(renamed.directory.groups[0].entries[0].name, "comp_1");
     }
 
     #[test]

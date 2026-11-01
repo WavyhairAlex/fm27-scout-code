@@ -27,9 +27,11 @@ The editor refuses other builds and schemas instead of guessing field offsets.
   --personality professionalism=20 --trait 11 --output edited.fm
 ```
 
-By default the output is `<save stem>.edited.fm` in the same directory. The command
-refuses an existing output unless `--force` is passed, and it verifies the result
-by parsing the new save and checking every requested field.
+By default the output is `<save stem>.edited.fm` in the same directory. Use
+`--save-name "FM27 Scout Editor Test"` to change the internal save name so a test
+copy is easy to find in the game's load menu. The command refuses an existing
+output unless `--force` is passed, and it verifies the result by parsing the new
+save and checking every requested field.
 
 ## Fields
 

@@ -241,10 +241,22 @@ impl PlayerEditor {
         output: impl AsRef<Path>,
         compression_level: i32,
     ) -> Result<SaveWriteReport> {
-        save.write_with_replacements(
+        self.write_as(save, output, compression_level, None)
+    }
+
+    /// Write a new save and optionally give it a new internal save name.
+    pub fn write_as(
+        &self,
+        save: &SaveFile,
+        output: impl AsRef<Path>,
+        compression_level: i32,
+        save_name: Option<&str>,
+    ) -> Result<SaveWriteReport> {
+        save.write_with_replacements_and_name(
             &[("game_db", self.game_db.as_slice())],
             output,
             compression_level,
+            save_name,
         )
     }
 
