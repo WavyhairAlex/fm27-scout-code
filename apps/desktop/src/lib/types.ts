@@ -93,6 +93,7 @@ export interface CaEstimate {
   position: string;
   estimated_ca: number;
   weighted_average: number;
+  excess_average: number;
   total_weight: number;
 }
 

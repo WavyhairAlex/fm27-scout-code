@@ -1,11 +1,13 @@
 //! Approximate current-ability estimation from visible attributes.
 //!
 //! The weight table is the community FM attribute-weight table (GK, DRL, DC,
-//! WBRL, DM, MRL, MC, AMRL, AMC, SC). CA is estimated from the weighted average
-//! attribute value with the published linear fit, then clamped to 1..=200.
+//! WBRL, DM, MRL, MC, AMRL, AMC, SC). The fit is calibrated against 48,026
+//! players in an FM27 reference save:
 //!
-//! This is an estimate, not a replacement for the stored CA. Very high
-//! attributes (17+) can cost slightly more CA than the linear fit accounts for.
+//! `CA = 18.13 * weighted_average + 18.74 * weighted_excess_above_16 - 97.60`
+//!
+//! The excess term captures the extra CA cost of high attributes. This is an
+//! estimate, not a replacement for the stored CA.
 
 use serde::{Deserialize, Serialize};
 
@@ -13,6 +15,11 @@ use crate::model::Attributes;
 
 /// Weight of the weaker foot for each position column.
 const WEAKER_FOOT_WEIGHTS: [f32; 10] = [3.0, 4.0, 4.5, 4.0, 5.0, 5.0, 6.0, 5.5, 7.0, 7.5];
+
+const CA_INTERCEPT: f32 = -97.597_76;
+const CA_AVERAGE_SLOPE: f32 = 18.130_968;
+const CA_EXCESS_SLOPE: f32 = 18.737_27;
+const HIGH_ATTRIBUTE_THRESHOLD: f32 = 16.0;
 
 /// Attribute weights in the same column order as [`POSITION_KEYS`].
 ///
@@ -184,6 +191,7 @@ pub struct CaEstimate {
     pub position: String,
     pub estimated_ca: u16,
     pub weighted_average: f32,
+    pub excess_average: f32,
     pub total_weight: f32,
 }
 
@@ -191,6 +199,7 @@ pub struct CaEstimate {
 pub fn estimate_ca(attributes: &Attributes, weaker_foot: u8, position: &str) -> Option<CaEstimate> {
     let column = position_column(position)?;
     let mut weighted_sum = 0.0f32;
+    let mut excess_sum = 0.0f32;
     let mut total_weight = 0.0f32;
     for (key, weights) in ATTRIBUTE_WEIGHTS {
         let weight = weights[column];
@@ -199,24 +208,30 @@ pub fn estimate_ca(attributes: &Attributes, weaker_foot: u8, position: &str) -> 
         }
         let value = attributes.get(key)? as f32;
         weighted_sum += value * weight;
+        excess_sum += (value - HIGH_ATTRIBUTE_THRESHOLD).max(0.0) * weight;
         total_weight += weight;
     }
     let weaker_foot_weight = WEAKER_FOOT_WEIGHTS[column];
     if weaker_foot_weight > 0.0 {
-        weighted_sum += weaker_foot.clamp(1, 20) as f32 * weaker_foot_weight;
+        let weaker_foot = weaker_foot.clamp(1, 20) as f32;
+        weighted_sum += weaker_foot * weaker_foot_weight;
+        excess_sum += (weaker_foot - HIGH_ATTRIBUTE_THRESHOLD).max(0.0) * weaker_foot_weight;
         total_weight += weaker_foot_weight;
     }
     if total_weight <= 0.0 {
         return None;
     }
     let weighted_average = weighted_sum / total_weight;
-    let estimated = ((weighted_average * 20.0) - 120.0)
-        .round()
-        .clamp(1.0, 200.0) as u16;
+    let excess_average = excess_sum / total_weight;
+    let estimated =
+        (CA_INTERCEPT + CA_AVERAGE_SLOPE * weighted_average + CA_EXCESS_SLOPE * excess_average)
+            .round()
+            .clamp(1.0, 200.0) as u16;
     Some(CaEstimate {
         position: normalize_position(position),
         estimated_ca: estimated,
         weighted_average,
+        excess_average,
         total_weight,
     })
 }
@@ -282,13 +297,25 @@ mod tests {
     }
 
     #[test]
-    fn uniform_attributes_match_the_published_curve() {
-        assert_eq!(estimate_ca(&all(16), 16, "SC").unwrap().estimated_ca, 200);
-        assert_eq!(estimate_ca(&all(14), 14, "SC").unwrap().estimated_ca, 160);
+    fn uniform_attributes_follow_the_calibrated_curve() {
+        assert_eq!(estimate_ca(&all(16), 16, "SC").unwrap().estimated_ca, 192);
+        assert_eq!(estimate_ca(&all(14), 14, "SC").unwrap().estimated_ca, 156);
         assert_eq!(estimate_ca(&all(12), 12, "SC").unwrap().estimated_ca, 120);
-        assert_eq!(estimate_ca(&all(10), 10, "SC").unwrap().estimated_ca, 80);
-        assert_eq!(estimate_ca(&all(8), 8, "SC").unwrap().estimated_ca, 40);
-        assert_eq!(estimate_ca(&all(6), 6, "SC").unwrap().estimated_ca, 1);
+        assert_eq!(estimate_ca(&all(10), 10, "SC").unwrap().estimated_ca, 84);
+        assert_eq!(estimate_ca(&all(8), 8, "SC").unwrap().estimated_ca, 47);
+        assert_eq!(estimate_ca(&all(6), 6, "SC").unwrap().estimated_ca, 11);
+    }
+
+    #[test]
+    fn high_attributes_add_extra_ca_cost() {
+        let mut player = all(12);
+        let finishing = ATTRIBUTE_KEYS
+            .iter()
+            .position(|name| *name == "finishing")
+            .unwrap();
+        let baseline = estimate_ca(&player, 12, "SC").unwrap().estimated_ca;
+        player.values[finishing] = 20;
+        assert!(estimate_ca(&player, 12, "SC").unwrap().estimated_ca > baseline);
     }
 
     #[test]

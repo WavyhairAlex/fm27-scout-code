@@ -144,8 +144,10 @@ warning.
 The desktop editor's **Ability** tab estimates current ability from the edited
 attributes:
 
-- It uses the community FM position-weight table and the published linear fit
-  (`CA ≈ 20 × weighted-average attribute − 120`, clamped to 1–200).
+- It uses the community FM position-weight table and an FM27-calibrated fit:
+  `CA ≈ 18.13 × weighted-average + 18.74 × weighted-excess-above-16 − 97.60`,
+  clamped to 1–200.
+- The excess term captures the extra cost of high attributes (17+).
 - Attributes are the displayed 1–20 values; the weaker foot is included.
 - The player's natural/accomplished position can be selected as the basis.
 - Zero-weight attributes (aggression, determination, flair, natural fitness and
@@ -160,10 +162,11 @@ The card shows the estimate, a marker for the current/edited CA, and one of:
   over time;
 - **balanced**: within roughly 3 CA points.
 
-Validation on the reference save (34,011 single-position players) gave a mean
-absolute error of **3.7 CA** and 94% of players within **10 CA**. This is an
-estimate, not an official formula; attributes above 17 can cost slightly more
-than the linear fit predicts.
+Calibration used 48,026 players from a reference save. On a UID-split holdout the
+mean absolute error was **3.3 CA**; players with CA 170+ had a mean absolute error
+of about **4.3 CA**, down from 7.6 with the simple linear fit. A second reference
+save gave 3.26 CA mean absolute error. This remains an estimate, not an official
+formula.
 
 See [editor-test-plan.md](editor-test-plan.md) for the controlled A/B/C comparison
 of CA-only, attributes-only and CA-plus-attributes edits.

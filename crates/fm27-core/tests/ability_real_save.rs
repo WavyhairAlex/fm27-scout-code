@@ -32,6 +32,20 @@ fn estimates_be_compared_with_stored_current_ability() {
         };
         if let Some(estimate) = estimate {
             let error = estimate.estimated_ca as i32 - player.ca as i32;
+            if player
+                .name
+                .as_deref()
+                .is_some_and(|name| name.contains("Mbappé"))
+            {
+                println!(
+                    "{}: CA {} estimate {} avg {:.3} excess {:.3}",
+                    player.name.as_deref().unwrap_or("?"),
+                    player.ca,
+                    estimate.estimated_ca,
+                    estimate.weighted_average,
+                    estimate.excess_average
+                );
+            }
             if player.natural_positions.len() == 1 {
                 single.push(error);
             } else {

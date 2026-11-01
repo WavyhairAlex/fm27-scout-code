@@ -77,10 +77,17 @@ export async function estimatePlayerCa(
     const weighted_average = values.length
       ? values.reduce((sum, value) => sum + value, 0) / values.length
       : 0;
+    const excess_average = values.length
+      ? values.reduce((sum, value) => sum + Math.max(0, value - 16), 0) / values.length
+      : 0;
     return {
       position: request.position,
-      estimated_ca: Math.max(1, Math.min(200, Math.round(weighted_average * 20 - 120))),
+      estimated_ca: Math.max(
+        1,
+        Math.min(200, Math.round(18.13 * weighted_average + 18.74 * excess_average - 97.6)),
+      ),
       weighted_average,
+      excess_average,
       total_weight: 0,
     };
   }
