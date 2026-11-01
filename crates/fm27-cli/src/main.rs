@@ -1,15 +1,18 @@
 use std::io::{self, BufWriter, Write};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
-use anyhow::{Context, Result};
+use anyhow::{Context, Result, anyhow, bail};
 use clap::{Parser, Subcommand};
-use fm27_core::{inspect_save, parse_save, store::Store};
+use fm27_core::{
+    container::SaveFile, editor::PlayerEditor, inspect_save, layout::BUILD,
+    metadata::read_metadata, parse_save, store::Store,
+};
 
 #[derive(Parser)]
 #[command(
     name = "fm27scout",
     version,
-    about = "Read-only Football Manager 27 save inspector"
+    about = "Football Manager 27 save inspector and experimental editor"
 )]
 struct Cli {
     #[command(subcommand)]
@@ -65,6 +68,44 @@ enum Command {
     },
     /// Parse a save and print the parse report.
     Validate { save: PathBuf },
+    /// Edit one player in a copy of a save. The source save is never modified.
+    Edit {
+        /// Source .fm save. It is opened read-only.
+        save: PathBuf,
+        /// Player uid from `fm27scout players` or the SQLite cache.
+        #[arg(long)]
+        uid: u32,
+        /// Current ability (1-200).
+        #[arg(long)]
+        ca: Option<u16>,
+        /// Potential ability (1-200). Negative random-range codes are not supported.
+        #[arg(long)]
+        pa: Option<i16>,
+        /// Repeatable raw attribute (1-100): `crossing=100`, `consistency=100`.
+        #[arg(long = "attr", value_name = "KEY=VALUE")]
+        attributes: Vec<String>,
+        /// Repeatable personality byte (1-20): `professionalism=20`.
+        #[arg(long, value_name = "KEY=VALUE")]
+        personality: Vec<String>,
+        /// Add a known trait bit (0-63).
+        #[arg(long = "trait", value_name = "BIT")]
+        traits: Vec<u8>,
+        /// Remove a trait bit (0-63).
+        #[arg(long = "untrait", value_name = "BIT")]
+        untraits: Vec<u8>,
+        /// Output path. Defaults to `<save stem>.edited.fm` next to the source.
+        #[arg(long)]
+        output: Option<PathBuf>,
+        /// Overwrite the output file if it already exists.
+        #[arg(long)]
+        force: bool,
+        /// Print the planned changes without writing a save.
+        #[arg(long)]
+        dry_run: bool,
+        /// zstd compression level for the rebuilt game_db (1-22).
+        #[arg(long, default_value_t = 3)]
+        compression_level: i32,
+    },
 }
 
 fn main() -> Result<()> {
@@ -178,8 +219,239 @@ fn main() -> Result<()> {
             let parsed = parse_save(&save).context("parse save")?;
             println!("{}", serde_json::to_string_pretty(&parsed.report)?);
         }
+        Command::Edit {
+            save,
+            uid,
+            ca,
+            pa,
+            attributes,
+            personality,
+            traits,
+            untraits,
+            output,
+            force,
+            dry_run,
+            compression_level,
+        } => {
+            if !(1..=22).contains(&compression_level) {
+                bail!("--compression-level must be between 1 and 22");
+            }
+            let save_file =
+                SaveFile::open(&save).with_context(|| format!("open {}", save.display()))?;
+            let metadata = read_metadata(&save_file).context("read save metadata")?;
+            if metadata.build != BUILD {
+                bail!(
+                    "editing supports build {BUILD}; this save was written by {}",
+                    metadata.build
+                );
+            }
+            let mut editor =
+                PlayerEditor::open(&save_file, &metadata).context("open player editor")?;
+
+            let request = EditRequest {
+                ca,
+                pa,
+                attributes: parse_assignments(&attributes)?,
+                personality: parse_assignments(&personality)?,
+                traits,
+                untraits,
+            };
+            if request.is_empty() {
+                bail!(
+                    "no edits requested; pass --ca, --pa, --attr, --personality, --trait or --untrait"
+                );
+            }
+            request.apply(&mut editor, uid)?;
+            editor.validate()?;
+
+            let output = output.unwrap_or_else(|| default_edit_output(&save));
+            if output == save {
+                bail!("refusing to overwrite the source save; choose a different --output");
+            }
+            if output.exists() && !force {
+                bail!(
+                    "output {} already exists; pass --force to overwrite it",
+                    output.display()
+                );
+            }
+            if dry_run {
+                println!(
+                    "{}",
+                    serde_json::to_string_pretty(&serde_json::json!({
+                        "uid": uid,
+                        "source": save.display().to_string(),
+                        "output": output.display().to_string(),
+                        "written": false,
+                        "changes": editor.changes(),
+                    }))?
+                );
+                return Ok(());
+            }
+
+            let report = editor
+                .write(&save_file, &output, compression_level)
+                .context("write edited save")?;
+            let verify = verify_edited_save(&output, uid, &request);
+            if let Err(error) = verify {
+                let _ = std::fs::remove_file(&output);
+                return Err(error).context("verify edited save");
+            }
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&serde_json::json!({
+                    "uid": uid,
+                    "source": save.display().to_string(),
+                    "output": report.output,
+                    "written": true,
+                    "verified": true,
+                    "file_size": report.file_size,
+                    "compressed_delta": report.compressed_delta,
+                    "changes": editor.changes(),
+                }))?
+            );
+        }
     }
     Ok(())
+}
+
+fn parse_assignments(values: &[String]) -> Result<Vec<(String, u8)>> {
+    values
+        .iter()
+        .map(|value| {
+            let (key, raw) = value
+                .split_once('=')
+                .ok_or_else(|| anyhow!("expected KEY=VALUE, got {value:?}"))?;
+            let parsed = raw
+                .parse::<u8>()
+                .with_context(|| format!("parse value for {key:?} in {value:?}"))?;
+            Ok((key.to_owned(), parsed))
+        })
+        .collect()
+}
+
+fn default_edit_output(source: &Path) -> PathBuf {
+    let stem = source
+        .file_stem()
+        .map(|value| value.to_string_lossy().into_owned())
+        .unwrap_or_else(|| "edited".to_owned());
+    let parent = source.parent().unwrap_or_else(|| Path::new("."));
+    parent.join(format!("{stem}.edited.fm"))
+}
+
+#[derive(Debug, Default)]
+struct EditRequest {
+    ca: Option<u16>,
+    pa: Option<i16>,
+    attributes: Vec<(String, u8)>,
+    personality: Vec<(String, u8)>,
+    traits: Vec<u8>,
+    untraits: Vec<u8>,
+}
+
+impl EditRequest {
+    fn is_empty(&self) -> bool {
+        self.ca.is_none()
+            && self.pa.is_none()
+            && self.attributes.is_empty()
+            && self.personality.is_empty()
+            && self.traits.is_empty()
+            && self.untraits.is_empty()
+    }
+
+    fn apply(&self, editor: &mut PlayerEditor, uid: u32) -> Result<()> {
+        if let Some(value) = self.ca {
+            editor.set_ca(uid, value)?;
+        }
+        if let Some(value) = self.pa {
+            editor.set_pa(uid, value)?;
+        }
+        for (key, value) in &self.attributes {
+            editor.set_attribute(uid, key, *value)?;
+        }
+        for (key, value) in &self.personality {
+            editor.set_personality(uid, key, *value)?;
+        }
+        for bit in &self.traits {
+            editor.set_trait(uid, *bit, true)?;
+        }
+        for bit in &self.untraits {
+            editor.set_trait(uid, *bit, false)?;
+        }
+        Ok(())
+    }
+
+    fn verify(&self, player: &fm27_core::Player) -> Result<()> {
+        if let Some(expected) = self.ca {
+            if player.ca != expected {
+                bail!(
+                    "CA verification failed: expected {expected}, got {}",
+                    player.ca
+                );
+            }
+        }
+        if let Some(expected) = self.pa {
+            if player.pa != Some(expected) {
+                bail!(
+                    "PA verification failed: expected {expected}, got {:?}",
+                    player.pa
+                );
+            }
+        }
+        for (key, expected) in &self.attributes {
+            let actual = player.raw_attributes.get(key);
+            if actual != Some(*expected) {
+                bail!("attribute {key} verification failed: expected {expected}, got {actual:?}");
+            }
+        }
+        for (key, expected) in &self.personality {
+            let actual = personality_value(player, key);
+            if actual != Some(*expected) {
+                bail!("personality {key} verification failed: expected {expected}, got {actual:?}");
+            }
+        }
+        for bit in &self.traits {
+            if player
+                .trait_bits
+                .is_none_or(|bits| bits & (1u64 << *bit) == 0)
+            {
+                bail!("trait {bit} verification failed: it is not set");
+            }
+        }
+        for bit in &self.untraits {
+            if player
+                .trait_bits
+                .is_some_and(|bits| bits & (1u64 << *bit) != 0)
+            {
+                bail!("trait {bit} verification failed: it is still set");
+            }
+        }
+        Ok(())
+    }
+}
+
+fn verify_edited_save(path: &Path, uid: u32, request: &EditRequest) -> Result<()> {
+    let parsed = parse_save(path).context("re-parse edited save")?;
+    let player = parsed
+        .players
+        .iter()
+        .find(|player| player.uid == uid)
+        .ok_or_else(|| anyhow!("edited save no longer contains player uid {uid}"))?;
+    request.verify(player)
+}
+
+fn personality_value(player: &fm27_core::Player, key: &str) -> Option<u8> {
+    let personality = player.personality?;
+    match key {
+        "adaptability" => Some(personality.adaptability),
+        "ambition" => Some(personality.ambition),
+        "loyalty" => Some(personality.loyalty),
+        "pressure" => Some(personality.pressure),
+        "professionalism" => Some(personality.professionalism),
+        "sportsmanship" => Some(personality.sportsmanship),
+        "temperament" => Some(personality.temperament),
+        "controversy" => Some(personality.controversy),
+        _ => None,
+    }
 }
 
 fn write_csv(writer: &mut dyn Write, players: &[&fm27_core::Player]) -> Result<()> {
@@ -239,4 +511,32 @@ fn write_csv(writer: &mut dyn Write, players: &[&fm27_core::Player]) -> Result<(
     }
     csv.flush()?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parses_repeated_key_value_edits() {
+        let values = vec!["crossing=100".to_owned(), "consistency=85".to_owned()];
+        assert_eq!(
+            parse_assignments(&values).unwrap(),
+            vec![("crossing".to_owned(), 100), ("consistency".to_owned(), 85)]
+        );
+    }
+
+    #[test]
+    fn rejects_a_missing_equals_sign() {
+        let error = parse_assignments(&["crossing".to_owned()]).unwrap_err();
+        assert!(error.to_string().contains("KEY=VALUE"));
+    }
+
+    #[test]
+    fn default_output_keeps_the_source_directory() {
+        assert_eq!(
+            default_edit_output(Path::new("/tmp/save.fm")),
+            PathBuf::from("/tmp/save.edited.fm")
+        );
+    }
 }

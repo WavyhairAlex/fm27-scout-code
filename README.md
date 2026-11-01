@@ -2,9 +2,9 @@ English | [中文](README.zh-CN.md)
 
 # FM27 Scout
 
-A read-only Football Manager 27 scouting tool for macOS: Tauri 2 + Rust parsing core + React/TypeScript UI.
+A Football Manager 27 scouting tool for macOS with a read-only desktop app: Tauri 2 + Rust parsing core + React/TypeScript UI. The CLI also has an experimental save editor that writes a separate output file.
 
-> Unofficial tool, not affiliated with Sports Interactive / SEGA. Saves are read-only; the game is never modified, and no data is sent over the network or uploaded anywhere.
+> Unofficial tool, not affiliated with Sports Interactive / SEGA. The desktop app and read commands never modify saves. The experimental `edit` CLI writes a new file and never touches its source. No data is sent over the network or uploaded anywhere.
 
 ## Screenshots
 
@@ -112,7 +112,15 @@ cargo build --release -p fm27-cli
 
 # Competition index and editor database ids
 ./target/release/fm27scout competitions "/path/to/save.fm" --output competitions.json
+
+# Experimental: edit one player into a new save file (the source is never modified)
+./target/release/fm27scout edit "/path/to/save.fm" --uid 228 \
+  --ca 150 --pa 199 --attr crossing=100 --attr consistency=100 \
+  --personality professionalism=20 --output edited.fm
 ```
+
+The `edit` subcommand is documented in [docs/editor.md](docs/editor.md). It only
+supports build `27.0.0+2486695` and always writes a separate output file.
 
 ## Validation
 
@@ -142,7 +150,8 @@ described in [docs/name-tables.md](docs/name-tables.md), and the release process
 
 ## Security boundaries
 
-- Never modifies `.fm` saves, reads game memory, or injects into game processes.
+- The desktop app and every read command are read-only. The optional `edit` CLI subcommand writes a **new** save file, refuses to overwrite its source, and verifies the result by re-parsing it.
+- Never reads game memory or injects into game processes.
 - Does not enable Tauri `shell` / arbitrary filesystem plugins; only files selected by the user are used.
 - Apart from a user-triggered update check, makes no network requests; the updater only contacts the configured GitHub Releases endpoint and downloads a signed package, and no save or player data is uploaded.
 - Hidden attributes are off by default; enabling them shows a single-player-only warning.

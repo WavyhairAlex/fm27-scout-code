@@ -14,7 +14,7 @@ use crate::contracts::ContractDecoder;
 use crate::error::{Error, Result};
 use crate::layout::{
     ATTRIBUTE_KEYS, MISSING_U32, PARSER_VERSION, POSITION_NAMES, PlayerLayout, decode_date,
-    read_i16, read_u8, read_u16, read_u32, scale_attribute,
+    read_i16, read_u8, read_u16, read_u32, scale_attribute, stored_attribute_index,
 };
 use crate::metadata::{SaveMetadata, read_metadata};
 use crate::model::{
@@ -258,13 +258,9 @@ pub fn parse_save_with_progress(
         let mut raw_attributes = Attributes::default();
         let mut attributes = Attributes::default();
         let attribute_start = offset + PlayerLayout::ATTRIBUTES_OFFSET;
-        for (index, _key) in ATTRIBUTE_KEYS.iter().enumerate() {
+        for (index, key) in ATTRIBUTE_KEYS.iter().enumerate() {
             // The stored 54-byte slice contains two foot bytes at indices 24 and 25.
-            let stored_index = if index < PlayerLayout::LEFT_FOOT_INDEX {
-                index
-            } else {
-                index + 2
-            };
+            let stored_index = stored_attribute_index(key).unwrap_or(index);
             let raw = read_u8(&game_db, attribute_start + stored_index).unwrap_or(0);
             raw_attributes.values[index] = raw;
             attributes.values[index] = scale_attribute(raw);
@@ -479,7 +475,8 @@ pub fn parse_save_with_progress(
         game_date: metadata.game_date.clone(),
         db_version: metadata.db_version.clone(),
         section_count: save
-            .entries
+            .directory
+            .top_entries
             .iter()
             .filter(|entry| entry.is_section())
             .count(),
@@ -538,7 +535,7 @@ fn derive_positions(ratings: &[u8; 15]) -> (Vec<String>, Vec<String>) {
     (natural, accomplished)
 }
 
-fn closing_person_header(
+pub(crate) fn closing_person_header(
     game_db: &[u8],
     person_id: u32,
     search_start: usize,

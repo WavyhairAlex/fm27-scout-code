@@ -6,6 +6,7 @@ pub mod clubs;
 pub mod competitions;
 pub mod container;
 pub mod contracts;
+pub mod editor;
 pub mod error;
 pub mod export;
 pub mod injuries;
@@ -23,6 +24,7 @@ pub mod roles;
 pub mod store;
 pub mod suspensions;
 
+pub use editor::{EditChange, PlayerEditor};
 pub use error::{Error, Result};
 pub use model::{Club, Contract, ParseReport, Player, SaveSummary};
 pub use parse::{ParseProgress, ParsedSave, parse_save, parse_save_with_progress, parser_version};
@@ -47,7 +49,8 @@ pub fn inspect_save(path: impl AsRef<std::path::Path>) -> Result<SaveSummary> {
         game_date: metadata.game_date,
         db_version: metadata.db_version,
         section_count: save
-            .entries
+            .directory
+            .top_entries
             .iter()
             .filter(|entry| entry.is_section())
             .count(),

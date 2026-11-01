@@ -439,3 +439,18 @@ fn read_slice<const N: usize>(bytes: &[u8], offset: usize) -> Option<&[u8; N]> {
 pub fn scale_attribute(raw: u8) -> u8 {
     std::cmp::max(1, (raw as u16 + 2) / 5) as u8
 }
+
+/// Map an attribute key to its byte index inside the stored 54-byte player slice.
+/// The two foot bytes sit at indices 24 and 25, between `technique` and `flair`.
+pub fn stored_attribute_index(key: &str) -> Option<usize> {
+    ATTRIBUTE_KEYS
+        .iter()
+        .position(|name| *name == key)
+        .map(|index| {
+            if index < PlayerLayout::LEFT_FOOT_INDEX {
+                index
+            } else {
+                index + 2
+            }
+        })
+}

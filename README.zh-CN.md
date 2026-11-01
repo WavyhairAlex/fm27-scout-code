@@ -2,9 +2,9 @@
 
 # FM27 Scout
 
-macOS 上的 Football Manager 27 只读球探工具：Tauri 2 + Rust 解析核心 + React/TypeScript UI。
+macOS 上的 Football Manager 27 球探工具，桌面 App 只读：Tauri 2 + Rust 解析核心 + React/TypeScript UI。CLI 另带一个实验性存档编辑器，只输出新存档。
 
-> 非官方工具，与 Sports Interactive / SEGA 无关。只读存档，不修改游戏，不联网，不上传任何数据。
+> 非官方工具，与 Sports Interactive / SEGA 无关。桌面 App 和读取命令不修改存档；实验性 `edit` CLI 只写新文件，不碰源存档。不联网，不上传任何数据。
 
 ## 界面截图
 
@@ -110,7 +110,15 @@ cargo build --release -p fm27-cli
 
 # 赛事索引与编辑器 database_id
 ./target/release/fm27scout competitions "/path/to/save.fm" --output competitions.json
+
+# 实验功能：把单个球员的修改写入新存档（原存档不会被修改）
+./target/release/fm27scout edit "/path/to/save.fm" --uid 228 \
+  --ca 150 --pa 199 --attr crossing=100 --attr consistency=100 \
+  --personality professionalism=20 --output edited.fm
 ```
+
+`edit` 子命令的字段和安全说明见 [docs/editor.md](docs/editor.md)。它只支持
+build `27.0.0+2486695`，并且始终输出独立的新存档。
 
 ## 验证
 
@@ -139,7 +147,8 @@ python3 -m venv .venv
 
 ## 安全边界
 
-- 不修改 `.fm` 存档，不读取游戏内存，不注入进程。
+- 桌面 App 和所有读取命令只读；可选的 `edit` CLI 子命令只写入**新存档**，拒绝覆盖源文件，并会重新解析输出文件做校验。
+- 不读取游戏内存，不注入进程。
 - 不启用 Tauri `shell` / 任意文件系统插件；只使用用户主动选择的文件。
 - 除用户主动触发的更新检查外不发起网络请求；更新只访问配置的 GitHub Releases 地址并下载签名更新包，不上传存档或球员数据。
 - 隐藏属性默认关闭；开启时提示仅限单机使用。
