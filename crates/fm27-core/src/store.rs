@@ -9,7 +9,7 @@ use rusqlite::{Connection, OptionalExtension, params, params_from_iter};
 use serde::{Deserialize, Serialize};
 
 use crate::error::{Error, Result};
-use crate::layout::{ATTRIBUTE_KEYS, PERSONALITY_KEYS, POSITION_KEYS};
+use crate::layout::{ATTRIBUTE_KEYS, HIDDEN_ATTRIBUTE_KEYS, PERSONALITY_KEYS, POSITION_KEYS};
 use crate::model::{
     Attributes, Club, Competition, Contract, ParseReport, Personality, Player, Positions,
     SaveSummary, Trait,
@@ -1448,20 +1448,12 @@ fn add_range<T: Into<i64>>(
     }
 }
 
-const HIDDEN_ATTRIBUTES: [&str; 5] = [
-    "dirtiness",
-    "consistency",
-    "important_matches",
-    "injury_proneness",
-    "versatility",
-];
-
 fn is_hidden_attribute(key: &str) -> bool {
-    HIDDEN_ATTRIBUTES.contains(&key)
+    HIDDEN_ATTRIBUTE_KEYS.contains(&key)
 }
 
 fn redact_attributes(attributes: &mut Attributes) {
-    for key in HIDDEN_ATTRIBUTES {
+    for key in HIDDEN_ATTRIBUTE_KEYS {
         if let Some(index) = ATTRIBUTE_KEYS.iter().position(|name| *name == key) {
             attributes.values[index] = 0;
         }

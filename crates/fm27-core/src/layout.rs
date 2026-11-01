@@ -80,6 +80,18 @@ pub const ATTRIBUTE_KEYS: [&str; 52] = [
     "concentration",
 ];
 
+pub const HIDDEN_ATTRIBUTE_KEYS: [&str; 5] = [
+    "dirtiness",
+    "consistency",
+    "important_matches",
+    "injury_proneness",
+    "versatility",
+];
+
+pub fn is_hidden_attribute_key(key: &str) -> bool {
+    HIDDEN_ATTRIBUTE_KEYS.contains(&key)
+}
+
 pub const PERSONALITY_KEYS: [&str; 8] = [
     "adaptability",
     "ambition",

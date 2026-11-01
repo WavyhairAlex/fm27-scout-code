@@ -74,12 +74,32 @@ The CLI takes raw values. To set a displayed value `d`, use a raw value around
 PA is a ceiling. Raising PA alone only helps players who can still develop, and it
 does not change current attributes immediately.
 
-CA and attributes are linked. FM may recalculate CA from attributes or adjust
-attributes toward the stored CA over time. Editing only visible attributes can
-therefore be temporary, and editing only CA can produce strange attribute changes.
-Hidden attributes and personality are independent of CA and are the lowest-risk
-edits. For immediate, stable attribute changes, test the edited save in game and
-consider changing CA and attributes together.
+CA and attributes are linked. In a measured FM27 test, a player was edited to
+CA 150 / PA 200 with two visible attributes at raw 100. After 27 in-game days:
+
+- CA rose from 150 to 152.
+- PA 200, personality, and the added trait stayed unchanged.
+- The two deliberately raised attributes and the hidden attributes stayed at
+  their edited values.
+- The other 29 visible attributes rose by roughly 5–6 raw points.
+
+In other words, **CA drives the visible attributes**, and FM spent about a month
+redistributing them to match the new CA. Moving CA alone is therefore a valid
+workflow: set `--ca` and `--pa`, and let the game fill in the attributes.
+
+The CLI prints a warning when:
+
+- `--ca` is changed, because visible attributes will be rebalanced; or
+- a visible attribute is changed without `--ca`, because that change may be
+  temporary.
+
+Hidden attributes (`consistency`, `important_matches`, `injury_proneness`,
+`versatility`, `dirtiness`), personality, and traits do not participate in this
+rebalancing and are the most stable edits.
+
+For a specific visible-attribute boost, set `--ca` high enough for the desired
+attribute budget and set the key attributes too, then verify over at least a month.
+Editing only visible attributes while leaving CA low is likely to be reverted.
 
 ## Safety
 

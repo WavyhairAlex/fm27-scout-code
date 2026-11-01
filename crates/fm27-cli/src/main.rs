@@ -4,8 +4,13 @@ use std::path::{Path, PathBuf};
 use anyhow::{Context, Result, anyhow, bail};
 use clap::{Parser, Subcommand};
 use fm27_core::{
-    container::SaveFile, editor::PlayerEditor, inspect_save, layout::BUILD,
-    metadata::read_metadata, parse_save, store::Store,
+    container::SaveFile,
+    editor::PlayerEditor,
+    inspect_save,
+    layout::{BUILD, is_hidden_attribute_key},
+    metadata::read_metadata,
+    parse_save,
+    store::Store,
 };
 
 #[derive(Parser)]
@@ -265,6 +270,10 @@ fn main() -> Result<()> {
                     "no edits requested; pass --ca, --pa, --attr, --personality, --trait or --untrait"
                 );
             }
+            let warnings = request.warnings();
+            for warning in &warnings {
+                eprintln!("warning: {warning}");
+            }
             request.apply(&mut editor, uid)?;
             editor.validate()?;
 
@@ -287,6 +296,7 @@ fn main() -> Result<()> {
                         "output": output.display().to_string(),
                         "save_name": save_name,
                         "written": false,
+                        "warnings": warnings,
                         "changes": editor.changes(),
                     }))?
                 );
@@ -310,6 +320,7 @@ fn main() -> Result<()> {
                     "save_name": save_name,
                     "written": true,
                     "verified": true,
+                    "warnings": warnings,
                     "file_size": report.file_size,
                     "compressed_delta": report.compressed_delta,
                     "changes": editor.changes(),
@@ -355,6 +366,34 @@ struct EditRequest {
 }
 
 impl EditRequest {
+    fn warnings(&self) -> Vec<String> {
+        let visible_attribute_edit = self
+            .attributes
+            .iter()
+            .any(|(key, _)| !is_hidden_attribute_key(key));
+        let mut warnings = Vec::new();
+        if self.ca.is_some() {
+            warnings.push(
+                "FM recalculates visible attributes toward CA over roughly a month; hidden attributes, personality and traits are stable."
+                    .to_owned(),
+            );
+        }
+        if visible_attribute_edit {
+            if self.ca.is_some() {
+                warnings.push(
+                    "CA and visible attributes were both edited; FM may still rebalance them. Verify the result in game."
+                        .to_owned(),
+                );
+            } else {
+                warnings.push(
+                    "visible attribute edits without --ca may be temporary; consider setting --ca/--pa or expect FM to rebalance them."
+                        .to_owned(),
+                );
+            }
+        }
+        warnings
+    }
+
     fn is_empty(&self) -> bool {
         self.ca.is_none()
             && self.pa.is_none()
@@ -544,5 +583,42 @@ mod tests {
             default_edit_output(Path::new("/tmp/save.fm")),
             PathBuf::from("/tmp/save.edited.fm")
         );
+    }
+
+    #[test]
+    fn warns_about_ca_rebalancing() {
+        let request = EditRequest {
+            ca: Some(150),
+            ..EditRequest::default()
+        };
+        assert!(
+            request
+                .warnings()
+                .iter()
+                .any(|warning| warning.contains("recalculates visible attributes"))
+        );
+    }
+
+    #[test]
+    fn warns_about_visible_attributes_without_ca() {
+        let request = EditRequest {
+            attributes: vec![("crossing".to_owned(), 100)],
+            ..EditRequest::default()
+        };
+        assert!(
+            request
+                .warnings()
+                .iter()
+                .any(|warning| warning.contains("without --ca"))
+        );
+    }
+
+    #[test]
+    fn hidden_attribute_edits_do_not_warn() {
+        let request = EditRequest {
+            attributes: vec![("consistency".to_owned(), 100)],
+            ..EditRequest::default()
+        };
+        assert!(request.warnings().is_empty());
     }
 }
