@@ -499,6 +499,9 @@ const en = {
   "edit.tab.attributes": "Attributes",
   "edit.tab.hidden": "Hidden & personality",
   "edit.tab.traits": "Traits",
+  "edit.gameValue": "Game {value}",
+  "edit.attributeScale":
+    "Attributes are stored as raw 1–100; the game displays them as 1–20. Example: raw 100 → game 20.",
   "edit.ca": "Current ability (CA)",
   "edit.pa": "Potential ability (PA)",
   "edit.original": "Original {value}",
@@ -1042,6 +1045,9 @@ const zhCN: Record<TranslationKey, string> = {
   "edit.tab.attributes": "属性",
   "edit.tab.hidden": "隐藏与性格",
   "edit.tab.traits": "习惯",
+  "edit.gameValue": "游戏内 {value}",
+  "edit.attributeScale":
+    "属性按 raw 1–100 存储，游戏内显示为 1–20。例如：raw 100 → 游戏内 20。",
   "edit.ca": "当前能力（CA）",
   "edit.pa": "潜在能力（PA）",
   "edit.original": "原值 {value}",

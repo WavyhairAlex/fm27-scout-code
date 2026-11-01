@@ -38,6 +38,11 @@ export function caTone(ca: number): string {
   return "text-[var(--muted)] bg-[var(--surface-2)] border-[var(--line)]";
 }
 
+/** Convert a stored raw attribute (1-100) to the game's displayed 1-20 value. */
+export function displayAttributeValue(raw: number): number {
+  return Math.max(1, Math.floor((raw + 2) / 5));
+}
+
 export function attributeTone(value: number): string {
   if (value >= 16) return "bg-[var(--gold)] text-[var(--gold-contrast)]";
   if (value >= 13) return "bg-[var(--success-emphasis)] text-white";

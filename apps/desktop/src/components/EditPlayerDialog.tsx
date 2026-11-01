@@ -29,7 +29,7 @@ import {
   type Player,
   type PlayerEditRequest,
 } from "@/lib/types";
-import { cn } from "@/lib/utils";
+import { cn, displayAttributeValue } from "@/lib/utils";
 import { useI18n } from "@/lib/useI18n";
 import { useAppStore } from "@/store/app";
 import { Button, Checkbox, Input, Modal } from "./ui";
@@ -101,7 +101,7 @@ export function EditPlayerDialog() {
     const handle = window.setTimeout(() => {
       const displayAttributes: Record<string, number> = {};
       for (const [key, value] of Object.entries(attributes)) {
-        displayAttributes[key] = Math.max(1, Math.floor((value + 2) / 5));
+        displayAttributes[key] = displayAttributeValue(value);
       }
       const positions =
         estimatePosition === "AUTO"
@@ -429,6 +429,9 @@ export function EditPlayerDialog() {
           )}
           {currentTab === "attributes" && (
             <div className="space-y-4">
+              <div className="rounded-lg border border-[var(--line)] bg-[var(--surface-2)] px-3 py-2 text-[10px] leading-relaxed text-[var(--muted)]">
+                {t("edit.attributeScale")}
+              </div>
               {attributeGroups.map((group) => (
                 <section key={group.key}>
                   <div className="mb-1.5 flex items-center justify-between">
@@ -783,7 +786,9 @@ function AttributeEditor({
   max: number;
   onChange: (value: number) => void;
 }) {
+  const { t } = useI18n();
   const changed = value !== original;
+  const showGameValue = max === 100;
   return (
     <div
       className={cn(
@@ -795,13 +800,20 @@ function AttributeEditor({
     >
       <div className="mb-1 flex items-center justify-between gap-2">
         <span className="truncate text-[10px] text-[var(--muted)]">{label}</span>
-        <span
-          className={cn(
-            "shrink-0 font-mono text-[10px]",
-            changed ? "font-semibold text-[var(--accent-strong)]" : "text-[var(--muted)]",
+        <span className="flex shrink-0 items-center gap-1">
+          <span
+            className={cn(
+              "font-mono text-[10px]",
+              changed ? "font-semibold text-[var(--accent-strong)]" : "text-[var(--muted)]",
+            )}
+          >
+            {changed ? `${original} → ${value}` : value}
+          </span>
+          {showGameValue && (
+            <span className="rounded-[3px] bg-[var(--surface-2)] px-1 py-0.5 text-[8px] text-[var(--muted)]">
+              {t("edit.gameValue", { value: displayAttributeValue(value) })}
+            </span>
           )}
-        >
-          {changed ? `${original} → ${value}` : value}
         </span>
       </div>
       <div className="flex items-center gap-2">
