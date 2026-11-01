@@ -1,5 +1,6 @@
-import type { Locale } from "./i18n";
-import { ATTRIBUTE_LABELS } from "./types";
+import { translate, type Locale } from "./i18n";
+import { ATTRIBUTE_LABELS, type Clause } from "./types";
+import { formatValue, formatWage } from "./utils";
 
 /**
  * Locale-aware labels for values that come from the parser or from the fixed
@@ -87,6 +88,119 @@ const SEVERITY_LABELS: Record<Locale, Record<number, string>> = {
   en: { 0: "Minor", 1: "Moderate", 2: "Severe", 3: "Major" },
   "zh-CN": { 0: "轻微", 1: "轻度", 2: "中度", 3: "重度" },
 };
+
+/**
+ * Contract clause kinds confirmed by the FM27 data and the in-game contract
+ * screens. Codes are the raw values stored in the save; every code seen in the
+ * current save is covered. The parser keeps any other code as a raw number, so
+ * the UI falls back to showing that number rather than guessing a meaning.
+ */
+const CLAUSE_KIND_LABELS: Record<Locale, Record<number, string>> = {
+  en: {
+    0: "Minimum Fee Release Clause",
+    1: "Relegation Release Clause",
+    2: "Non-Promotion Release Clause",
+    3: "Yearly Wage Rise",
+    4: "Promotion Wage Rise",
+    5: "Relegation Wage Drop",
+    6: "Non-Playing Job Offer Release Clause",
+    7: "Release At Any Time Clause",
+    8: "Sell-On Fee Percentage",
+    9: "Sell-On Fee Profit Percentage",
+    10: "Seasonal Landmark Goal Bonus",
+    11: "One-Year Extension After League Games (Final Season)",
+    12: "Match Highest Earner Clause",
+    13: "Wage After Reaching Club League Games",
+    14: "Top Division Promotion Wage Rise",
+    15: "Top Division Relegation Wage Drop",
+    16: "Minimum Fee Release Clause (Foreign Clubs)",
+    17: "Minimum Fee Release Clause (Domestic Clubs in Higher Division)",
+    18: "Minimum Fee Release Clause (Domestic Clubs)",
+    19: "Wage After Reaching International Appearances",
+    20: "Percentage of Wages Paid by Sponsor",
+    21: "Percentage of Gate Receipts Paid to Player",
+    22: "Optional Contract Extension by Club",
+    23: "Waive Club Compensation for Managerial Role",
+    24: "Percentage of Club Compensation Required for Managerial Role",
+    25: "One-Year Extension After League Games (Promoted Final Season)",
+    26: "One-Year Extension After League Games (Avoid Relegation Final Season)",
+    27: "Minimum Fee Release Clause (Clubs in a Major Continental Competition)",
+    28: "MLS Guaranteed Contract Clause",
+    29: "Contract Extension After Promotion",
+    30: "Injury Release Clause",
+    31: "Minimum Fee Release Clause (Clubs in a Continental Competition)",
+    32: "Appearance Fee",
+    33: "Goal Bonus",
+    34: "Clean Sheet Bonus",
+    35: "Team of the Year Bonus (Division)",
+    36: "Top Goalscorer Bonus (Division)",
+    37: "International Cap Bonus",
+    38: "Unused Substitute Fee",
+    39: "Assist Bonus",
+    40: "Seasonal Landmark Assist Bonus",
+    41: "Seasonal Landmark Combined Goal and Assist Bonus",
+    54: "Will Leave at End of Contract",
+    55: "Active Relegation Release Clause",
+    56: "Active Non-Promotion Release Clause",
+    58: "Committee Assigned Minimum Fee Release Clause",
+    63: "Will Explore Options at End of Contract",
+  },
+  "zh-CN": {
+    0: "最低解约金条款",
+    1: "降级解约金条款",
+    2: "未升级解约金条款",
+    3: "年度涨薪条款",
+    4: "升级涨薪条款",
+    5: "降级减薪条款",
+    6: "非球员岗位解约条款",
+    7: "随时解约条款",
+    8: "转会费分成条款",
+    9: "转会利润分成条款",
+    10: "赛季进球里程碑奖金",
+    11: "一年续约选项（联赛出场，合同最后一年）",
+    12: "顶薪匹配条款",
+    13: "联赛出场达标后涨薪",
+    14: "顶级联赛升级涨薪",
+    15: "顶级联赛降级减薪",
+    16: "最低解约金条款（国外俱乐部）",
+    17: "最低解约金条款（国内更高级别俱乐部）",
+    18: "最低解约金条款（国内俱乐部）",
+    19: "国家队出场达标后涨薪",
+    20: "赞助商承担工资比例",
+    21: "门票收入分成比例",
+    22: "俱乐部可选续约条款",
+    23: "放弃主教练岗位补偿金",
+    24: "主教练岗位补偿金比例",
+    25: "一年续约选项（升级，合同最后一年）",
+    26: "一年续约选项（保级，合同最后一年）",
+    27: "最低解约金条款（主要洲际赛事俱乐部）",
+    28: "MLS 保障合同条款",
+    29: "升级后自动续约",
+    30: "伤病解约条款",
+    31: "最低解约金条款（洲际赛事俱乐部）",
+    32: "出场费",
+    33: "进球奖金",
+    34: "零封奖金",
+    35: "赛季最佳阵容奖金（联赛）",
+    36: "联赛最佳射手奖金",
+    37: "国家队出场奖金",
+    38: "未上场替补费",
+    39: "助攻奖金",
+    40: "赛季助攻里程碑奖金",
+    41: "赛季进球助攻里程碑奖金",
+    54: "合同到期离队",
+    55: "已激活的降级解约金条款",
+    56: "已激活的未升级解约金条款",
+    58: "委员会设定最低解约金条款",
+    63: "合同到期后探索去向",
+  },
+};
+
+/** Clauses that only record that they are present, with no amount. */
+const FLAG_CLAUSE_KINDS = new Set([6, 7, 12, 23, 28, 30, 54, 55, 56, 63]);
+
+/** Clauses whose parameter is a percentage. */
+const PERCENT_CLAUSE_KINDS = new Set([3, 4, 5, 8, 14, 15, 20, 21, 24]);
 
 const ROLE_NAMES_EN: Record<string, string> = {
   goalkeeper: "Goalkeeper (Defend)",
@@ -447,6 +561,79 @@ export function personalityLabel(key: string, locale: Locale): string {
 
 export function severityLabel(value: number, locale: Locale): string | null {
   return SEVERITY_LABELS[locale][value] ?? null;
+}
+
+export function clauseKindLabel(kind: number, locale: Locale): string | null {
+  return CLAUSE_KIND_LABELS[locale][kind] ?? null;
+}
+
+/**
+ * A clause's value means different things by kind: money for fees and bonuses,
+ * a percentage for wage changes and sell-on clauses, years for extension
+ * options, and an amount plus a league threshold for landmark bonuses.
+ */
+export function clauseValueLabel(clause: Clause, locale: Locale): string {
+  const { kind, parameter, value } = clause;
+  if (FLAG_CLAUSE_KINDS.has(kind)) {
+    return translate(locale, "inspector.clauseIncluded");
+  }
+  if (PERCENT_CLAUSE_KINDS.has(kind)) {
+    return parameter != null ? `${parameter}%` : "—";
+  }
+  if (kind === 9) {
+    if (parameter != null && value != null) {
+      return translate(locale, "inspector.clauseProfitOver", {
+        percent: parameter,
+        amount: formatValue(value),
+      });
+    }
+    return parameter != null ? `${parameter}%` : value != null ? formatValue(value) : "—";
+  }
+  if (kind === 10 || kind === 40 || kind === 41) {
+    const reward = value != null ? formatValue(value) : null;
+    const thresholdKey =
+      kind === 10
+        ? "inspector.clauseGoals"
+        : kind === 40
+          ? "inspector.clauseAssists"
+          : "inspector.clauseGoalAssists";
+    const threshold =
+      parameter != null
+        ? translate(locale, thresholdKey, { count: parameter })
+        : null;
+    return [reward, threshold].filter(Boolean).join(" · ") || "—";
+  }
+  if (kind === 11 || kind === 25 || kind === 26) {
+    return parameter != null
+      ? translate(locale, "inspector.clauseLeagueGames", { count: parameter })
+      : "—";
+  }
+  if (kind === 13) {
+    const wage = value != null ? formatWage(value, locale) : null;
+    const games =
+      parameter != null
+        ? translate(locale, "inspector.clauseLeagueGames", { count: parameter })
+        : null;
+    return [wage, games].filter(Boolean).join(" · ") || "—";
+  }
+  if (kind === 19) {
+    const wage = value != null ? formatWage(value, locale) : null;
+    const caps =
+      parameter != null
+        ? translate(locale, "inspector.clauseCaps", { count: parameter })
+        : null;
+    return [wage, caps].filter(Boolean).join(" · ") || "—";
+  }
+  if (kind === 22 || kind === 29) {
+    return parameter != null
+      ? translate(locale, "inspector.clauseYears", { count: parameter })
+      : "—";
+  }
+  if (kind === 58 && value == null) {
+    return translate(locale, "inspector.clauseIncluded");
+  }
+  if (value != null) return formatValue(value);
+  return parameter != null ? String(parameter) : "—";
 }
 
 export function roleName(

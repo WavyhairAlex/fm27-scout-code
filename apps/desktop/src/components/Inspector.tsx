@@ -23,6 +23,8 @@ import type { Attributes, Player, Positions, RoleScore, SnapshotPoint } from "@/
 import { ATTRIBUTE_GROUPS, POSITION_LABELS } from "@/lib/types";
 import {
   attributeLabel,
+  clauseKindLabel,
+  clauseValueLabel,
   nationLabel,
   personalityLabel,
   roleGroup,
@@ -896,11 +898,12 @@ function ContractPanel({ player }: { player: Player }) {
                 key={index}
                 className="flex items-center justify-between rounded-[6px] border border-[var(--line)] bg-[var(--surface-2)] px-2 py-1.5 text-[10px]"
               >
-                <span className="text-[var(--muted)]">
-                  {t("inspector.clause", { kind: clause.kind })}
+                <span className="min-w-0 pr-2 text-[var(--muted)]">
+                  {clauseKindLabel(clause.kind, locale) ??
+                    t("inspector.clause", { kind: clause.kind })}
                 </span>
-                <span className="font-mono text-[var(--ink)]">
-                  {clause.value != null ? formatValue(clause.value) : clause.parameter ?? "—"}
+                <span className="shrink-0 text-right font-mono text-[var(--ink)]">
+                  {clauseValueLabel(clause, locale)}
                 </span>
               </div>
             ))}

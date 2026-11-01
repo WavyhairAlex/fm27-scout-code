@@ -1,6 +1,14 @@
 import { describe, expect, it } from "vitest";
 import { resolveLocale, translate } from "./i18n";
-import { attributeLabel, nationLabel, personalityLabel, roleName, traitLabel } from "./labels";
+import {
+  attributeLabel,
+  clauseKindLabel,
+  clauseValueLabel,
+  nationLabel,
+  personalityLabel,
+  roleName,
+  traitLabel,
+} from "./labels";
 import {
   ATTRIBUTE_FILTER_GROUPS,
   ATTRIBUTE_FILTER_KEYS,
@@ -103,5 +111,69 @@ describe("localized domain labels", () => {
     expect(traitLabel(53, null, "en")).toBe("Unknown trait");
     expect(roleName("poacher", "抢点前锋（进攻）", "en")).toBe("Poacher (Attack)");
     expect(personalityLabel("professionalism", "en")).toBe("Professionalism");
+  });
+});
+
+describe("contract clause labels", () => {
+  // Every clause kind that appears in the current FM27 save.
+  const OBSERVED_KINDS = [
+    0, 1, 2, 3, 4, 5, 6, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 25, 26,
+    27, 28, 29, 30, 31, 32, 33, 34, 37, 38, 39, 40, 41, 54, 58, 63,
+  ];
+
+  it("names every clause kind found in the save", () => {
+    for (const kind of OBSERVED_KINDS) {
+      expect(clauseKindLabel(kind, "en")).toBeTruthy();
+      expect(clauseKindLabel(kind, "zh-CN")).toBeTruthy();
+    }
+    expect(clauseKindLabel(57, "en")).toBeNull();
+  });
+
+  it("names the newly reported clause kinds", () => {
+    expect(clauseKindLabel(3, "en")).toBe("Yearly Wage Rise");
+    expect(clauseKindLabel(3, "zh-CN")).toBe("年度涨薪条款");
+    expect(clauseKindLabel(28, "en")).toBe("MLS Guaranteed Contract Clause");
+    expect(clauseKindLabel(33, "en")).toBe("Goal Bonus");
+    expect(clauseKindLabel(39, "en")).toBe("Assist Bonus");
+    expect(clauseKindLabel(40, "en")).toBe("Seasonal Landmark Assist Bonus");
+    expect(clauseKindLabel(41, "en")).toBe(
+      "Seasonal Landmark Combined Goal and Assist Bonus",
+    );
+  });
+
+  it("formats clause values by kind", () => {
+    expect(clauseValueLabel({ kind: 18, parameter: 365, value: 4_408_650 }, "en")).toBe(
+      "4.41M",
+    );
+    expect(clauseValueLabel({ kind: 22, parameter: 2, value: null }, "en")).toBe("2 yrs");
+    expect(clauseValueLabel({ kind: 22, parameter: 2, value: null }, "zh-CN")).toBe("2 年");
+    expect(clauseValueLabel({ kind: 15, parameter: 25, value: null }, "en")).toBe("25%");
+    expect(clauseValueLabel({ kind: 3, parameter: 10, value: null }, "en")).toBe("10%");
+    expect(clauseValueLabel({ kind: 28, parameter: null, value: null }, "en")).toBe(
+      "Included",
+    );
+    expect(clauseValueLabel({ kind: 33, parameter: null, value: 25_000 }, "en")).toBe("25K");
+    expect(clauseValueLabel({ kind: 39, parameter: null, value: 96_641 }, "en")).toBe("97K");
+    expect(clauseValueLabel({ kind: 40, parameter: 15, value: 1_692_425 }, "en")).toBe(
+      "1.69M · 15 league assists",
+    );
+    expect(clauseValueLabel({ kind: 41, parameter: 20, value: 500_000 }, "en")).toBe(
+      "500K · 20 goals + assists",
+    );
+    expect(clauseValueLabel({ kind: 41, parameter: 20, value: 500_000 }, "zh-CN")).toBe(
+      "500K · 20 进球 + 助攻",
+    );
+    expect(clauseValueLabel({ kind: 9, parameter: 20, value: 10_000_000 }, "en")).toBe(
+      "20% of profit over 10.00M",
+    );
+    expect(clauseValueLabel({ kind: 11, parameter: 20, value: null }, "en")).toBe(
+      "20 league games",
+    );
+    expect(clauseValueLabel({ kind: 13, parameter: 20, value: 5_000 }, "en")).toBe(
+      "5,000/wk · 20 league games",
+    );
+    expect(clauseValueLabel({ kind: 58, parameter: 731, value: null }, "en")).toBe(
+      "Included",
+    );
   });
 });
