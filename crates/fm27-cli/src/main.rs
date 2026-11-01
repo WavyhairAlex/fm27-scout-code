@@ -5,9 +5,9 @@ use anyhow::{Context, Result, anyhow, bail};
 use clap::{Parser, Subcommand};
 use fm27_core::{
     container::SaveFile,
-    editor::PlayerEditor,
+    editor::{AttributeEdit, PlayerEditRequest, PlayerEditor},
     inspect_save,
-    layout::{BUILD, is_ca_exempt_attribute},
+    layout::BUILD,
     metadata::read_metadata,
     parse_save,
     store::Store,
@@ -257,7 +257,7 @@ fn main() -> Result<()> {
             let mut editor =
                 PlayerEditor::open(&save_file, &metadata).context("open player editor")?;
 
-            let request = EditRequest {
+            let request = PlayerEditRequest {
                 ca,
                 pa,
                 attributes: parse_assignments(&attributes)?,
@@ -331,17 +331,20 @@ fn main() -> Result<()> {
     Ok(())
 }
 
-fn parse_assignments(values: &[String]) -> Result<Vec<(String, u8)>> {
+fn parse_assignments(values: &[String]) -> Result<Vec<AttributeEdit>> {
     values
         .iter()
         .map(|value| {
             let (key, raw) = value
                 .split_once('=')
                 .ok_or_else(|| anyhow!("expected KEY=VALUE, got {value:?}"))?;
-            let parsed = raw
+            let value = raw
                 .parse::<u8>()
                 .with_context(|| format!("parse value for {key:?} in {value:?}"))?;
-            Ok((key.to_owned(), parsed))
+            Ok(AttributeEdit {
+                key: key.to_owned(),
+                value,
+            })
         })
         .collect()
 }
@@ -355,148 +358,14 @@ fn default_edit_output(source: &Path) -> PathBuf {
     parent.join(format!("{stem}.edited.fm"))
 }
 
-#[derive(Debug, Default)]
-struct EditRequest {
-    ca: Option<u16>,
-    pa: Option<i16>,
-    attributes: Vec<(String, u8)>,
-    personality: Vec<(String, u8)>,
-    traits: Vec<u8>,
-    untraits: Vec<u8>,
-}
-
-impl EditRequest {
-    fn warnings(&self) -> Vec<String> {
-        let visible_attribute_edit = self
-            .attributes
-            .iter()
-            .any(|(key, _)| !is_ca_exempt_attribute(key));
-        let mut warnings = Vec::new();
-        if self.ca.is_some() {
-            warnings.push(
-                "FM recalculates visible attributes toward CA over roughly a month; hidden attributes, personality and traits are stable."
-                    .to_owned(),
-            );
-        }
-        if visible_attribute_edit {
-            if self.ca.is_some() {
-                warnings.push(
-                    "FM may trim visible attributes to fit CA; key attributes are usually preserved near their edited values. Raise CA or edit fewer key attributes if the trim is too large."
-                        .to_owned(),
-                );
-            } else {
-                warnings.push(
-                    "visible attribute edits without --ca will be trimmed toward the current CA; set --ca/--pa to keep them."
-                        .to_owned(),
-                );
-            }
-        }
-        warnings
-    }
-
-    fn is_empty(&self) -> bool {
-        self.ca.is_none()
-            && self.pa.is_none()
-            && self.attributes.is_empty()
-            && self.personality.is_empty()
-            && self.traits.is_empty()
-            && self.untraits.is_empty()
-    }
-
-    fn apply(&self, editor: &mut PlayerEditor, uid: u32) -> Result<()> {
-        if let Some(value) = self.ca {
-            editor.set_ca(uid, value)?;
-        }
-        if let Some(value) = self.pa {
-            editor.set_pa(uid, value)?;
-        }
-        for (key, value) in &self.attributes {
-            editor.set_attribute(uid, key, *value)?;
-        }
-        for (key, value) in &self.personality {
-            editor.set_personality(uid, key, *value)?;
-        }
-        for bit in &self.traits {
-            editor.set_trait(uid, *bit, true)?;
-        }
-        for bit in &self.untraits {
-            editor.set_trait(uid, *bit, false)?;
-        }
-        Ok(())
-    }
-
-    fn verify(&self, player: &fm27_core::Player) -> Result<()> {
-        if let Some(expected) = self.ca {
-            if player.ca != expected {
-                bail!(
-                    "CA verification failed: expected {expected}, got {}",
-                    player.ca
-                );
-            }
-        }
-        if let Some(expected) = self.pa {
-            if player.pa != Some(expected) {
-                bail!(
-                    "PA verification failed: expected {expected}, got {:?}",
-                    player.pa
-                );
-            }
-        }
-        for (key, expected) in &self.attributes {
-            let actual = player.raw_attributes.get(key);
-            if actual != Some(*expected) {
-                bail!("attribute {key} verification failed: expected {expected}, got {actual:?}");
-            }
-        }
-        for (key, expected) in &self.personality {
-            let actual = personality_value(player, key);
-            if actual != Some(*expected) {
-                bail!("personality {key} verification failed: expected {expected}, got {actual:?}");
-            }
-        }
-        for bit in &self.traits {
-            if player
-                .trait_bits
-                .is_none_or(|bits| bits & (1u64 << *bit) == 0)
-            {
-                bail!("trait {bit} verification failed: it is not set");
-            }
-        }
-        for bit in &self.untraits {
-            if player
-                .trait_bits
-                .is_some_and(|bits| bits & (1u64 << *bit) != 0)
-            {
-                bail!("trait {bit} verification failed: it is still set");
-            }
-        }
-        Ok(())
-    }
-}
-
-fn verify_edited_save(path: &Path, uid: u32, request: &EditRequest) -> Result<()> {
+fn verify_edited_save(path: &Path, uid: u32, request: &PlayerEditRequest) -> Result<()> {
     let parsed = parse_save(path).context("re-parse edited save")?;
     let player = parsed
         .players
         .iter()
         .find(|player| player.uid == uid)
         .ok_or_else(|| anyhow!("edited save no longer contains player uid {uid}"))?;
-    request.verify(player)
-}
-
-fn personality_value(player: &fm27_core::Player, key: &str) -> Option<u8> {
-    let personality = player.personality?;
-    match key {
-        "adaptability" => Some(personality.adaptability),
-        "ambition" => Some(personality.ambition),
-        "loyalty" => Some(personality.loyalty),
-        "pressure" => Some(personality.pressure),
-        "professionalism" => Some(personality.professionalism),
-        "sportsmanship" => Some(personality.sportsmanship),
-        "temperament" => Some(personality.temperament),
-        "controversy" => Some(personality.controversy),
-        _ => None,
-    }
+    request.verify(player).map_err(Into::into)
 }
 
 fn write_csv(writer: &mut dyn Write, players: &[&fm27_core::Player]) -> Result<()> {
@@ -567,7 +436,16 @@ mod tests {
         let values = vec!["crossing=100".to_owned(), "consistency=85".to_owned()];
         assert_eq!(
             parse_assignments(&values).unwrap(),
-            vec![("crossing".to_owned(), 100), ("consistency".to_owned(), 85)]
+            vec![
+                AttributeEdit {
+                    key: "crossing".to_owned(),
+                    value: 100
+                },
+                AttributeEdit {
+                    key: "consistency".to_owned(),
+                    value: 85
+                }
+            ]
         );
     }
 
@@ -587,9 +465,9 @@ mod tests {
 
     #[test]
     fn warns_about_ca_rebalancing() {
-        let request = EditRequest {
+        let request = PlayerEditRequest {
             ca: Some(150),
-            ..EditRequest::default()
+            ..PlayerEditRequest::default()
         };
         assert!(
             request
@@ -601,9 +479,12 @@ mod tests {
 
     #[test]
     fn warns_about_visible_attributes_without_ca() {
-        let request = EditRequest {
-            attributes: vec![("crossing".to_owned(), 100)],
-            ..EditRequest::default()
+        let request = PlayerEditRequest {
+            attributes: vec![AttributeEdit {
+                key: "crossing".to_owned(),
+                value: 100,
+            }],
+            ..PlayerEditRequest::default()
         };
         assert!(
             request
@@ -615,18 +496,24 @@ mod tests {
 
     #[test]
     fn hidden_attribute_edits_do_not_warn() {
-        let request = EditRequest {
-            attributes: vec![("consistency".to_owned(), 100)],
-            ..EditRequest::default()
+        let request = PlayerEditRequest {
+            attributes: vec![AttributeEdit {
+                key: "consistency".to_owned(),
+                value: 100,
+            }],
+            ..PlayerEditRequest::default()
         };
         assert!(request.warnings().is_empty());
     }
 
     #[test]
     fn determination_edits_do_not_warn() {
-        let request = EditRequest {
-            attributes: vec![("determination".to_owned(), 100)],
-            ..EditRequest::default()
+        let request = PlayerEditRequest {
+            attributes: vec![AttributeEdit {
+                key: "determination".to_owned(),
+                value: 100,
+            }],
+            ..PlayerEditRequest::default()
         };
         assert!(request.warnings().is_empty());
     }

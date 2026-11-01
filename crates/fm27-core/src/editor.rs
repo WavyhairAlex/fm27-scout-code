@@ -8,15 +8,17 @@ use std::collections::{HashMap, HashSet};
 use std::path::Path;
 
 use chrono::NaiveDate;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 use crate::container::{SaveFile, SaveWriteReport};
 use crate::error::{Error, Result};
 use crate::layout::{
-    ATTRIBUTE_KEYS, BUILD, GAME_DB_SCHEMA, PERSONALITY_KEYS, PersonLayout, PlayerLayout, read_i16,
-    read_u8, read_u16, read_u64, stored_attribute_index, trait_name,
+    ATTRIBUTE_KEYS, BUILD, GAME_DB_SCHEMA, PERSONALITY_KEYS, PersonLayout, PlayerLayout,
+    is_ca_exempt_attribute, read_i16, read_u8, read_u16, read_u64, stored_attribute_index,
+    trait_name,
 };
 use crate::metadata::SaveMetadata;
+use crate::model::Player;
 use crate::names::NamePools;
 use crate::parse::closing_person_header;
 use crate::persons::{ClubLookup, PersonDecoder, PersonLocation};
@@ -27,6 +29,160 @@ pub struct EditChange {
     pub field: String,
     pub before: i64,
     pub after: i64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct AttributeEdit {
+    pub key: String,
+    pub value: u8,
+}
+
+/// A set of player edits shared by the CLI and the desktop app.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(default)]
+pub struct PlayerEditRequest {
+    pub ca: Option<u16>,
+    pub pa: Option<i16>,
+    pub attributes: Vec<AttributeEdit>,
+    pub personality: Vec<AttributeEdit>,
+    pub traits: Vec<u8>,
+    pub untraits: Vec<u8>,
+}
+
+impl PlayerEditRequest {
+    pub fn is_empty(&self) -> bool {
+        self.ca.is_none()
+            && self.pa.is_none()
+            && self.attributes.is_empty()
+            && self.personality.is_empty()
+            && self.traits.is_empty()
+            && self.untraits.is_empty()
+    }
+
+    /// Warnings for the UI/CLI. CA drives CA-weighted attributes; hidden
+    /// attributes and determination are exempt.
+    pub fn warnings(&self) -> Vec<String> {
+        let ca_weighted_attribute_edit = self
+            .attributes
+            .iter()
+            .any(|edit| !is_ca_exempt_attribute(&edit.key));
+        let mut warnings = Vec::new();
+        if self.ca.is_some() {
+            warnings.push(
+                "FM recalculates visible attributes toward CA over roughly a month; hidden attributes, personality and traits are stable."
+                    .to_owned(),
+            );
+        }
+        if ca_weighted_attribute_edit {
+            if self.ca.is_some() {
+                warnings.push(
+                    "FM may trim visible attributes to fit CA; key attributes are usually preserved near their edited values. Raise CA or edit fewer key attributes if the trim is too large."
+                        .to_owned(),
+                );
+            } else {
+                warnings.push(
+                    "visible attribute edits without --ca will be trimmed toward the current CA; set --ca/--pa to keep them."
+                        .to_owned(),
+                );
+            }
+        }
+        warnings
+    }
+
+    pub fn apply(&self, editor: &mut PlayerEditor, uid: u32) -> Result<()> {
+        if let Some(value) = self.ca {
+            editor.set_ca(uid, value)?;
+        }
+        if let Some(value) = self.pa {
+            editor.set_pa(uid, value)?;
+        }
+        for edit in &self.attributes {
+            editor.set_attribute(uid, &edit.key, edit.value)?;
+        }
+        for edit in &self.personality {
+            editor.set_personality(uid, &edit.key, edit.value)?;
+        }
+        for bit in &self.traits {
+            editor.set_trait(uid, *bit, true)?;
+        }
+        for bit in &self.untraits {
+            editor.set_trait(uid, *bit, false)?;
+        }
+        Ok(())
+    }
+
+    pub fn verify(&self, player: &Player) -> Result<()> {
+        if let Some(expected) = self.ca {
+            if player.ca != expected {
+                return Err(Error::parse(format!(
+                    "CA verification failed: expected {expected}, got {}",
+                    player.ca
+                )));
+            }
+        }
+        if let Some(expected) = self.pa {
+            if player.pa != Some(expected) {
+                return Err(Error::parse(format!(
+                    "PA verification failed: expected {expected}, got {:?}",
+                    player.pa
+                )));
+            }
+        }
+        for edit in &self.attributes {
+            if player.raw_attributes.get(&edit.key) != Some(edit.value) {
+                return Err(Error::parse(format!(
+                    "attribute {} verification failed: expected {}, got {:?}",
+                    edit.key,
+                    edit.value,
+                    player.raw_attributes.get(&edit.key)
+                )));
+            }
+        }
+        for edit in &self.personality {
+            if personality_value(player, &edit.key) != Some(edit.value) {
+                return Err(Error::parse(format!(
+                    "personality {} verification failed: expected {}",
+                    edit.key, edit.value
+                )));
+            }
+        }
+        for bit in &self.traits {
+            if player
+                .trait_bits
+                .is_none_or(|bits| bits & (1u64 << *bit) == 0)
+            {
+                return Err(Error::parse(format!(
+                    "trait {bit} verification failed: it is not set"
+                )));
+            }
+        }
+        for bit in &self.untraits {
+            if player
+                .trait_bits
+                .is_some_and(|bits| bits & (1u64 << *bit) != 0)
+            {
+                return Err(Error::parse(format!(
+                    "trait {bit} verification failed: it is still set"
+                )));
+            }
+        }
+        Ok(())
+    }
+}
+
+fn personality_value(player: &Player, key: &str) -> Option<u8> {
+    let personality = player.personality?;
+    match key {
+        "adaptability" => Some(personality.adaptability),
+        "ambition" => Some(personality.ambition),
+        "loyalty" => Some(personality.loyalty),
+        "pressure" => Some(personality.pressure),
+        "professionalism" => Some(personality.professionalism),
+        "sportsmanship" => Some(personality.sportsmanship),
+        "temperament" => Some(personality.temperament),
+        "controversy" => Some(personality.controversy),
+        _ => None,
+    }
 }
 
 /// A mutable view over one save's `game_db` bytes.

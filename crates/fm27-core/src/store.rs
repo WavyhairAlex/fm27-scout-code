@@ -484,6 +484,17 @@ impl Store {
         Ok(save_id)
     }
 
+    pub fn save_path(&self, save_id: i64) -> Result<Option<String>> {
+        self.conn
+            .query_row(
+                "SELECT path FROM saves WHERE id = ?1",
+                params![save_id],
+                |row| row.get(0),
+            )
+            .optional()
+            .map_err(Error::from)
+    }
+
     pub fn list_saves(&self) -> Result<Vec<SaveRecord>> {
         let mut statement = self.conn.prepare(
             "SELECT s.id, s.path, s.file_name, s.game, s.build, s.game_date, s.parser_version,

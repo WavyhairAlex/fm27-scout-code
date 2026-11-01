@@ -8,7 +8,7 @@
 //! ```
 
 use fm27_core::container::SaveFile;
-use fm27_core::editor::PlayerEditor;
+use fm27_core::editor::{AttributeEdit, PlayerEditRequest, PlayerEditor};
 use fm27_core::layout::trait_name;
 use fm27_core::metadata::read_metadata;
 use fm27_core::parse_save;
@@ -44,18 +44,6 @@ fn edits_ca_pa_attributes_personality_and_traits_in_a_copy() {
         .unwrap_or(200)
         .max(i16::try_from(new_ca + 1).unwrap())
         .min(200);
-    editor.set_ca(source.uid, new_ca).expect("set CA");
-    editor.set_pa(source.uid, new_pa).expect("set PA");
-    editor
-        .set_attribute(source.uid, "crossing", 100)
-        .expect("set crossing");
-    editor
-        .set_attribute(source.uid, "consistency", 100)
-        .expect("set consistency");
-    editor
-        .set_personality(source.uid, "professionalism", 20)
-        .expect("set professionalism");
-
     let trait_bit = (0..64u8)
         .find(|bit| {
             trait_name(*bit).is_some()
@@ -64,9 +52,27 @@ fn edits_ca_pa_attributes_personality_and_traits_in_a_copy() {
                     .is_none_or(|bits| bits & (1u64 << *bit) == 0)
         })
         .expect("an unset named trait");
-    editor
-        .set_trait(source.uid, trait_bit, true)
-        .expect("set trait");
+    let request = PlayerEditRequest {
+        ca: Some(new_ca),
+        pa: Some(new_pa),
+        attributes: vec![
+            AttributeEdit {
+                key: "crossing".to_owned(),
+                value: 100,
+            },
+            AttributeEdit {
+                key: "consistency".to_owned(),
+                value: 100,
+            },
+        ],
+        personality: vec![AttributeEdit {
+            key: "professionalism".to_owned(),
+            value: 20,
+        }],
+        traits: vec![trait_bit],
+        untraits: vec![],
+    };
+    request.apply(&mut editor, source.uid).expect("apply edits");
     editor.validate().expect("validate edits");
 
     let directory = tempfile::tempdir().expect("tempdir");
@@ -97,6 +103,9 @@ fn edits_ca_pa_attributes_personality_and_traits_in_a_copy() {
             .trait_bits
             .is_some_and(|bits| bits & (1u64 << trait_bit) != 0)
     );
+    request
+        .verify(changed)
+        .expect("verify the shared edit request");
 
     let unchanged = edited
         .players
