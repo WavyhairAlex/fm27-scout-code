@@ -74,32 +74,33 @@ The CLI takes raw values. To set a displayed value `d`, use a raw value around
 PA is a ceiling. Raising PA alone only helps players who can still develop, and it
 does not change current attributes immediately.
 
-CA and attributes are linked. In a measured FM27 test, a player was edited to
-CA 150 / PA 200 with two visible attributes at raw 100. After 27 in-game days:
+CA and attributes are linked. Controlled FM27 tests produced these results after
+roughly one in-game month:
 
-- CA rose from 150 to 152.
-- PA 200, personality, and the added trait stayed unchanged.
-- The two deliberately raised attributes and the hidden attributes stayed at
-  their edited values.
-- The other 29 visible attributes rose by roughly 5–6 raw points.
+| Edit | CA | Key attributes | Other attributes |
+|---|---:|---|---|
+| CA only, 110 → 150 | 150 → 152 | not set | rose by 11–13 raw points |
+| Attributes only, CA 110 | 110 → 110 | 100 → 85 | fell by 13–15 raw points |
+| CA 150 + six key attributes | 150 → 150 | 100 → 96 | trimmed by 3–4 raw points |
 
-In other words, **CA drives the visible attributes**, and FM spent about a month
-redistributing them to match the new CA. Moving CA alone is therefore a valid
-workflow: set `--ca` and `--pa`, and let the game fill in the attributes.
+In other words, **CA is the attribute budget**, and FM reallocates visible
+attributes to fit it. Raw attribute sum is not CA: FM weights attributes by
+position, so a top-heavy distribution can have a lower raw sum for the same CA.
 
-The CLI prints a warning when:
+Practical workflow:
 
-- `--ca` is changed, because visible attributes will be rebalanced; or
-- a visible attribute is changed without `--ca`, because that change may be
-  temporary.
+- **General boost**: set `--ca` and `--pa`; FM fills in the attributes over
+  roughly a month.
+- **Controlled build**: set `--ca` high enough and set a small number of key
+  attributes. Key attributes are largely preserved; marginal attributes are
+  trimmed.
+- **Visible attributes alone** at a low CA are unstable; FM pulls them back
+  toward the CA budget.
+- Hidden attributes, personality, and traits are independent of CA and are the
+  most stable edits.
 
-Hidden attributes (`consistency`, `important_matches`, `injury_proneness`,
-`versatility`, `dirtiness`), personality, and traits do not participate in this
-rebalancing and are the most stable edits.
-
-For a specific visible-attribute boost, set `--ca` high enough for the desired
-attribute budget and set the key attributes too, then verify over at least a month.
-Editing only visible attributes while leaving CA low is likely to be reverted.
+The CLI prints a warning when `--ca` is changed, when a visible attribute is
+changed without `--ca`, or when both CA and visible attributes are changed.
 
 See [editor-test-plan.md](editor-test-plan.md) for the controlled A/B/C comparison
 of CA-only, attributes-only and CA-plus-attributes edits.

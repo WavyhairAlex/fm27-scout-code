@@ -381,12 +381,12 @@ impl EditRequest {
         if visible_attribute_edit {
             if self.ca.is_some() {
                 warnings.push(
-                    "CA and visible attributes were both edited; FM may still rebalance them. Verify the result in game."
+                    "FM may trim visible attributes to fit CA; key attributes are usually preserved near their edited values. Raise CA or edit fewer key attributes if the trim is too large."
                         .to_owned(),
                 );
             } else {
                 warnings.push(
-                    "visible attribute edits without --ca may be temporary; consider setting --ca/--pa or expect FM to rebalance them."
+                    "visible attribute edits without --ca will be trimmed toward the current CA; set --ca/--pa to keep them."
                         .to_owned(),
                 );
             }

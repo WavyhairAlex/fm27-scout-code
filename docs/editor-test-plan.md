@@ -69,17 +69,45 @@ python3 scripts/compare_editor_test.py \
 The script prints CA/PA, value, personality, traits and every changed raw
 attribute.
 
-## How to read the result
+## Results (2026-08-27)
 
-| Observation | Interpretation |
-|---|---|
-| A's visible attributes rise toward CA 150 | CA-only editing works; FM fills in the attributes |
-| B's six 100s fall back | visible attributes without CA are not stable |
-| B's six 100s stay near 100 | attribute-only editing is viable, but check CA/PA growth |
-| C's six 100s stay and the other attributes rise | CA + key attributes is the best controlled workflow |
-| C's six 100s fall while A's attributes rise | CA distribution wins; recommend CA-only by default |
-| Personality/traits/hidden attributes change | report it; the hidden/personality edit path needs investigation |
+All three saves were loaded from 2026-07-25 and advanced to 2026-08-27. PA,
+personality and traits stayed unchanged in every run.
 
-The expected result from the first test is A and C filling in the remaining
-attributes, while B's six 100s may be trimmed toward CA 110. That would confirm
-the current warning: **CA is the budget; visible attributes are the allocation.**
+| Save | CA | Six key attributes | Raw attribute sum |
+|---|---|---:|---:|
+| A - CA Only | 150 → 152 | baseline → roughly +11 to +13 | 2378 → 2736 |
+| B - Attributes Only | 110 → 110 | 100 → 85 | 2618 → 2181 |
+| C - CA Plus Attributes | 150 → 150 | 100 → 96 | 2618 → 2504 |
+
+Detailed movement:
+
+- **A**: almost every visible attribute rose by 11–13 raw points; flair and
+  natural fitness rose by 1, leadership/bravery by 5. The game filled in the
+  attributes to match the new CA.
+- **B**: every attribute fell by 13–15 raw points, including the six attributes
+  set to 100 (they landed at 85). CA stayed at 110. Attribute-only editing at a
+  low CA is not stable.
+- **C**: almost every attribute was trimmed by 3–4 raw points; the six key
+  attributes stayed at 96. CA stayed at 150. The game preserved the key
+  attributes surprisingly well and trimmed the marginal ones to fit the budget.
+
+The raw sum is **not** CA. FM weights attributes by position, so C can have a
+lower raw sum than A while both are around CA 150: C's six high-weight attributes
+consume more of the budget. Compare the direction of movement and key-attribute
+retention, not the raw sum.
+
+## Conclusion
+
+**Use CA as the primary control.**
+
+- For a general boost, editing CA/PA alone is sufficient; FM fills in the
+  attributes over roughly a month.
+- For a controlled build, set CA/PA plus a small number of key attributes. The
+  key attributes are largely preserved, while marginal attributes are trimmed.
+- Avoid editing visible attributes alone at a low CA; FM will pull them back
+  toward the CA budget.
+- Hidden attributes, personality and traits are independent and stay stable.
+
+The earlier warning is confirmed: **CA is the budget; visible attributes are the
+allocation.**
