@@ -5,7 +5,13 @@ import {
   translate,
   type Language,
 } from "@/lib/i18n";
-import type { FilterOptions, ParseProgress, SaveSummary, SortRule } from "@/lib/types";
+import {
+  HIDDEN_FILTERS,
+  type FilterOptions,
+  type ParseProgress,
+  type SaveSummary,
+  type SortRule,
+} from "@/lib/types";
 
 const SAVED_VIEWS_KEY = "fm27scout.views.v1";
 const LANGUAGE_KEY = "fm27scout.language.v1";
@@ -41,7 +47,6 @@ export interface Filters {
   wageMax: number | null;
   contractEndBefore: string | null;
   contractEndAfter: string | null;
-  onLoan: boolean | null;
 }
 
 export const EMPTY_FILTERS: Filters = {
@@ -68,7 +73,6 @@ export const EMPTY_FILTERS: Filters = {
   wageMax: null,
   contractEndBefore: null,
   contractEndAfter: null,
-  onLoan: null,
 };
 
 export interface SavedView {
@@ -218,14 +222,31 @@ export const useAppStore = create<AppState>((set, get) => ({
   applyView: (id) => {
     const view = get().savedViews.find((item) => item.id === id);
     if (!view) return;
+    const availability =
+      view.filters.availability === "injury_history"
+        ? null
+        : (view.filters.availability ?? null);
+    const enableHidden =
+      !get().hiddenEnabled &&
+      (view.filters.attributes ?? []).some((rule) => HIDDEN_FILTERS.has(rule.key));
+    if (enableHidden) {
+      const locale = resolveLocale(get().language);
+      get().pushToast({
+        title: translate(locale, "toast.hiddenOn.title"),
+        description: translate(locale, "toast.hiddenOn.description"),
+        tone: "default",
+      });
+    }
     set({
       filters: {
         ...EMPTY_FILTERS,
         ...view.filters,
+        availability,
         attributes: view.filters.attributes ?? [],
         genders: view.filters.genders ?? [],
         listings: view.filters.listings ?? [],
       },
+      ...(enableHidden ? { hiddenEnabled: true } : {}),
       sort: view.sort?.length ? view.sort : [{ by: "ca", dir: "desc" }],
       page: 0,
       selectedUid: null,
@@ -246,6 +267,15 @@ export const useAppStore = create<AppState>((set, get) => ({
   addAttribute: (key) =>
     set((state) => {
       if (state.filters.attributes.some((rule) => rule.key === key)) return state;
+      const enableHidden = HIDDEN_FILTERS.has(key) && !state.hiddenEnabled;
+      if (enableHidden) {
+        const locale = resolveLocale(state.language);
+        get().pushToast({
+          title: translate(locale, "toast.hiddenOn.title"),
+          description: translate(locale, "toast.hiddenOn.description"),
+          tone: "default",
+        });
+      }
       return {
         filters: {
           ...state.filters,
@@ -254,6 +284,7 @@ export const useAppStore = create<AppState>((set, get) => ({
             { id: `${key}-${Date.now()}`, key, min: null, max: null },
           ],
         },
+        ...(enableHidden ? { hiddenEnabled: true } : {}),
         page: 0,
       };
     }),
@@ -320,7 +351,19 @@ export const useAppStore = create<AppState>((set, get) => ({
       return { compareUids: [...state.compareUids, uid] };
     }),
   clearCompare: () => set({ compareUids: [] }),
-  setHiddenEnabled: (hiddenEnabled) => set({ hiddenEnabled }),
+  setHiddenEnabled: (hiddenEnabled) =>
+    set((state) => ({
+      hiddenEnabled,
+      filters: hiddenEnabled
+        ? state.filters
+        : {
+            ...state.filters,
+            attributes: state.filters.attributes.filter(
+              (rule) => !HIDDEN_FILTERS.has(rule.key),
+            ),
+          },
+      page: hiddenEnabled ? state.page : 0,
+    })),
   setDisplayMode: (displayMode) => set({ displayMode }),
   setTheme: (theme) => set({ theme }),
   setLanguage: (language) => {

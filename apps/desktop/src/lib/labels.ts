@@ -433,8 +433,10 @@ const NATION_NAMES_EN: Record<string, string> = {
 };
 
 export function attributeLabel(key: string, locale: Locale): string {
-  if (locale === "en") return ATTRIBUTE_LABELS_EN[key] ?? key;
-  return ATTRIBUTE_LABELS[key] ?? key;
+  if (locale === "en") {
+    return ATTRIBUTE_LABELS_EN[key] ?? PERSONALITY_LABELS_EN[key] ?? key;
+  }
+  return ATTRIBUTE_LABELS[key] ?? PERSONALITY_LABELS_ZH[key] ?? key;
 }
 
 export function personalityLabel(key: string, locale: Locale): string {

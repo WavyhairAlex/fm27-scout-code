@@ -149,7 +149,7 @@ python3 -m venv .venv
 
 - 当前只针对 build `27.0.0+2486695` 做了完整验证；其他 FM27 build 会降级并提示，不猜测字段。
 - 国家名称已内置；赛事名称不存于存档，需按编辑器 `database_id` 提供 `shared/competition-names.csv`（赛事/阶段索引本身已解析并缓存）。
-- 当前伤病数据来自 `injury_manager` 的伤病史；该存档没有 FM 的“预计复出”typed 行时，“伤病中”为空，但“伤病史”可用。
+- 伤病数据来自 `injury_manager`：FM27 把当前伤病的预计复出窗口存在两个 stride-14 数组里，log 数组则是滚动伤病历史。“伤病中”由预计复出窗口推导，不再依赖 typed 数组是否有数据。
 - 合同条款、租借和合同链已解析；少数未观测的 fallback 结构会显式留空。
 - Windows/Linux 暂不构建。
 - CI 发布的是未签名 DMG；首次打开需前往「系统设置 → 隐私与安全性 → 仍要打开」。Developer ID 签名/公证为可选项，CI 不使用，且需要付费 Apple Developer 账号。

@@ -7,6 +7,7 @@ import type {
   Player,
   PlayerQuery,
   PlayerRow,
+  Personality,
   Positions,
   RoleScore,
   SaveRecord,
@@ -511,7 +512,10 @@ export function mockQuery(query: PlayerQuery): {
   }
   for (const filter of query.attributes ?? []) {
     rows = rows.filter((row) => {
-      const value = row.attributes[filter.key] ?? 0;
+      const value =
+        filter.key in row.attributes
+          ? row.attributes[filter.key]
+          : (row.personality?.[filter.key as keyof Personality] ?? 0);
       return (filter.min == null || value >= filter.min) && (filter.max == null || value <= filter.max);
     });
   }

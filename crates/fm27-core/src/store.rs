@@ -9,7 +9,7 @@ use rusqlite::{Connection, OptionalExtension, params, params_from_iter};
 use serde::{Deserialize, Serialize};
 
 use crate::error::{Error, Result};
-use crate::layout::{ATTRIBUTE_KEYS, POSITION_KEYS};
+use crate::layout::{ATTRIBUTE_KEYS, PERSONALITY_KEYS, POSITION_KEYS};
 use crate::model::{
     Attributes, Club, Competition, Contract, ParseReport, Personality, Player, Positions,
     SaveSummary, Trait,
@@ -1382,18 +1382,24 @@ fn build_where(query: &PlayerQuery, params: &mut Vec<Value>) -> Result<String> {
         params.push(Value::Integer(threshold as i64));
     }
     for filter in &query.attributes {
-        if !ATTRIBUTE_KEYS.contains(&filter.key.as_str()) {
+        let is_attribute = ATTRIBUTE_KEYS.contains(&filter.key.as_str());
+        let is_personality = PERSONALITY_KEYS.contains(&filter.key.as_str());
+        if !is_attribute && !is_personality {
             return Err(Error::parse(format!(
                 "unknown attribute filter {:?}",
                 filter.key
             )));
         }
-        if !query.include_hidden && is_hidden_attribute(&filter.key) {
+        if !query.include_hidden && (is_personality || is_hidden_attribute(&filter.key)) {
             return Err(Error::parse(
                 "hidden attribute filters require hidden attributes to be enabled",
             ));
         }
-        let expression = format!("json_extract(p.attributes_json, '$.{}')", filter.key);
+        let expression = if is_personality {
+            format!("json_extract(p.personality_json, '$.{}')", filter.key)
+        } else {
+            format!("json_extract(p.attributes_json, '$.{}')", filter.key)
+        };
         add_range(filter.min, filter.max, &expression, params, &mut clauses);
     }
     add_range(
@@ -1621,4 +1627,54 @@ pub fn report_from_parse(parsed: &ParsedSave) -> ParseReport {
 
 pub fn club_count(clubs: &[Club]) -> usize {
     clubs.len()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn personality_filter(key: &str) -> AttributeFilter {
+        AttributeFilter {
+            key: key.to_owned(),
+            min: Some(15),
+            max: None,
+        }
+    }
+
+    #[test]
+    fn routes_personality_filters_to_the_personality_column() {
+        let query = PlayerQuery {
+            attributes: vec![personality_filter("professionalism")],
+            include_hidden: true,
+            ..PlayerQuery::default()
+        };
+        let mut params = Vec::new();
+        let sql = build_where(&query, &mut params).expect("personality filter should be valid");
+        assert!(sql.contains("json_extract(p.personality_json, '$.professionalism') >= ?"));
+        assert_eq!(params.len(), 2);
+        assert!(matches!(params[1], Value::Integer(15)));
+    }
+
+    #[test]
+    fn requires_hidden_attributes_for_personality_filters() {
+        let query = PlayerQuery {
+            attributes: vec![personality_filter("ambition")],
+            include_hidden: false,
+            ..PlayerQuery::default()
+        };
+        let mut params = Vec::new();
+        let error = build_where(&query, &mut params).expect_err("hidden filter should be gated");
+        assert!(error.to_string().contains("hidden attribute filters"));
+    }
+
+    #[test]
+    fn rejects_unknown_attribute_filters() {
+        let query = PlayerQuery {
+            attributes: vec![personality_filter("not_a_real_attribute")],
+            include_hidden: true,
+            ..PlayerQuery::default()
+        };
+        let mut params = Vec::new();
+        assert!(build_where(&query, &mut params).is_err());
+    }
 }

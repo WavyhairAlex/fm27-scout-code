@@ -9,7 +9,7 @@ import {
   X,
 } from "lucide-react";
 import { useFilterOptions } from "@/lib/query";
-import { ATTRIBUTE_LABELS, POSITION_LABELS } from "@/lib/types";
+import { ATTRIBUTE_FILTER_GROUPS, POSITION_LABELS } from "@/lib/types";
 import { attributeLabel, nationLabel } from "@/lib/labels";
 import { useI18n } from "@/lib/useI18n";
 import { cn } from "@/lib/utils";
@@ -26,14 +26,6 @@ const POSITION_ROWS: (string | null)[][] = [
   ["dl", "dc", "dr"],
   [null, "gk", null],
 ];
-
-const HIDDEN_ATTRIBUTES = new Set([
-  "consistency",
-  "dirtiness",
-  "important_matches",
-  "injury_proneness",
-  "versatility",
-]);
 
 export function FilterSidebar() {
   const { t, locale } = useI18n();
@@ -77,12 +69,7 @@ export function FilterSidebar() {
     if (filters.attributes.length) count += filters.attributes.length;
     if (filters.valueMin != null || filters.valueMax != null) count++;
     if (filters.wageMin != null || filters.wageMax != null) count++;
-    if (
-      filters.contractEndBefore ||
-      filters.contractEndAfter ||
-      filters.onLoan != null
-    )
-      count++;
+    if (filters.contractEndBefore || filters.contractEndAfter) count++;
     return count;
   }, [filters]);
 
@@ -95,13 +82,15 @@ export function FilterSidebar() {
     [locale, options?.nations],
   );
 
-  const attributeOptions = useMemo(
+  const attributeGroups = useMemo(
     () =>
-      Object.keys(ATTRIBUTE_LABELS)
-        .filter((key) => hiddenEnabled || !HIDDEN_ATTRIBUTES.has(key))
-        .map((key) => [key, attributeLabel(key, locale)] as const)
-        .sort((a, b) => a[1].localeCompare(b[1], locale)),
-    [hiddenEnabled, locale],
+      ATTRIBUTE_FILTER_GROUPS.map((group) => ({
+        labelKey: group.labelKey,
+        options: group.keys
+          .map((key) => [key, attributeLabel(key, locale)] as const)
+          .sort((a, b) => a[1].localeCompare(b[1], locale)),
+      })),
+    [locale],
   );
 
   const listingOptions = useMemo(
@@ -342,7 +331,8 @@ export function FilterSidebar() {
             {[
               ["", t("filter.allStatuses")],
               ["injured", t("filter.status.injured")],
-              ["injury_history", t("filter.status.injuryHistory")],
+              // "injury_history" is temporarily hidden from the sidebar; the backend
+              // filter and its translations are kept so it can be restored easily.
               ["suspended", t("filter.status.suspended")],
               ["loan", t("filter.status.loan")],
               ["free", t("filter.status.free")],
@@ -355,10 +345,7 @@ export function FilterSidebar() {
                 loan: 3,
                 free: 4,
                 available: 5,
-                injury_history: 6,
-              }[
-                value as "injured" | "suspended" | "loan" | "free" | "available" | "injury_history"
-              ];
+              }[value as "injured" | "suspended" | "loan" | "free" | "available"];
               const count = value
                 ? options?.availability.find((item) => item.id === statusId)?.count
                 : null;
@@ -503,10 +490,14 @@ export function FilterSidebar() {
             className="h-7 text-[11px]"
           >
             <option value="">{t("filter.addAttribute")}</option>
-            {attributeOptions.map(([key, label]) => (
-              <option key={key} value={key}>
-                {label}
-              </option>
+            {attributeGroups.map((group) => (
+              <optgroup key={group.labelKey} label={t(group.labelKey)}>
+                {group.options.map(([key, label]) => (
+                  <option key={key} value={key}>
+                    {label}
+                  </option>
+                ))}
+              </optgroup>
             ))}
           </Select>
           <div className="space-y-1.5">
@@ -606,23 +597,6 @@ export function FilterSidebar() {
                 className="h-7 w-full rounded-[6px] border border-[var(--line)] bg-[var(--surface)] px-1.5 text-[10px]"
               />
             </div>
-          </div>
-          <div className="space-y-1">
-            <Label>{t("filter.loanStatus")}</Label>
-            <Select
-              value={filters.onLoan == null ? "" : filters.onLoan ? "yes" : "no"}
-              onChange={(event) =>
-                patchFilters({
-                  onLoan:
-                    event.target.value === "" ? null : event.target.value === "yes",
-                })
-              }
-              className="h-7 text-[11px]"
-            >
-              <option value="">{t("common.all")}</option>
-              <option value="yes">{t("filter.loanOnly")}</option>
-              <option value="no">{t("filter.notOnLoan")}</option>
-            </Select>
           </div>
         </Section>
       </div>

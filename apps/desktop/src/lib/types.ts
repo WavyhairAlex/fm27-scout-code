@@ -1,3 +1,5 @@
+import type { TranslationKey } from "./i18n";
+
 export type TransferValueState = "ok" | "unset" | "placeholder" | "zero";
 
 export interface Attributes {
@@ -32,6 +34,17 @@ export interface Personality {
   temperament: number;
   controversy: number;
 }
+
+export const PERSONALITY_KEYS = [
+  "adaptability",
+  "ambition",
+  "loyalty",
+  "pressure",
+  "professionalism",
+  "sportsmanship",
+  "temperament",
+  "controversy",
+] as const;
 
 export interface Trait {
   bit: number;
@@ -544,6 +557,27 @@ export const ATTRIBUTE_GROUPS: Record<string, { labelKey: AttributeGroupKey; key
   ],
 };
 
+export const HIDDEN_ATTRIBUTE_KEYS = ATTRIBUTE_GROUPS.hidden[0].keys;
+export const HIDDEN_FILTER_KEYS = [...HIDDEN_ATTRIBUTE_KEYS, ...PERSONALITY_KEYS];
+export const HIDDEN_FILTERS: ReadonlySet<string> = new Set(HIDDEN_FILTER_KEYS);
+
+function filterGroupLabelKey(key: AttributeGroupKey): TranslationKey {
+  return `attribute.group.${key}`;
+}
+
+export const ATTRIBUTE_FILTER_GROUPS: {
+  labelKey: TranslationKey;
+  keys: readonly string[];
+}[] = [
+  ...Object.values(ATTRIBUTE_GROUPS)
+    .flat()
+    .map((group) => ({
+      labelKey: filterGroupLabelKey(group.labelKey),
+      keys: group.keys,
+    })),
+  { labelKey: "attribute.group.personality", keys: [...PERSONALITY_KEYS] },
+];
+
 export const ATTRIBUTE_LABELS: Record<string, string> = {
   crossing: "传中",
   dribbling: "盘带",
@@ -598,3 +632,5 @@ export const ATTRIBUTE_LABELS: Record<string, string> = {
   composure: "冷静",
   concentration: "专注",
 };
+
+export const ATTRIBUTE_FILTER_KEYS = ATTRIBUTE_FILTER_GROUPS.flatMap((group) => group.keys);

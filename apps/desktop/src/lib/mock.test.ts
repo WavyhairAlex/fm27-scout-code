@@ -33,6 +33,18 @@ describe("mock player query", () => {
     }
   });
 
+  it("filters personality attributes", () => {
+    const page = mockQuery({
+      save_id: MOCK_SAVE_ID,
+      attributes: [{ key: "professionalism", min: 20 }],
+      page_size: 500,
+    });
+    expect(page.rows.length).toBeGreaterThan(0);
+    for (const row of page.rows) {
+      expect(row.personality?.professionalism ?? 0).toBeGreaterThanOrEqual(20);
+    }
+  });
+
   it("filters gender and status", () => {
     const women = mockQuery({
       save_id: MOCK_SAVE_ID,

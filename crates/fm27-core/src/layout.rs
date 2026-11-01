@@ -7,8 +7,12 @@ pub const GAME: &str = "FM27";
 pub const BUILD: &str = "27.0.0+2486695";
 pub const GAME_DB_SCHEMA: u32 = 4000;
 /// Cache/parser revision. The suffix invalidates caches written before the
-/// complete player-trait and nation-name tables landed.
-pub const PARSER_VERSION: &str = concat!(env!("CARGO_PKG_VERSION"), "+nation-names+listing");
+/// complete player-trait and nation-name tables landed, and before the current
+/// injury windows were read from the stride-14 arrays.
+pub const PARSER_VERSION: &str = concat!(
+    env!("CARGO_PKG_VERSION"),
+    "+nation-names+listing+injury-windows"
+);
 pub const EARLIEST_YEAR: i32 = 1901;
 pub const LATEST_YEAR: i32 = 2200;
 pub const MISSING_U32: u32 = 0xFFFF_FFFF;
@@ -74,6 +78,17 @@ pub const ATTRIBUTE_KEYS: [&str; 52] = [
     "determination",
     "composure",
     "concentration",
+];
+
+pub const PERSONALITY_KEYS: [&str; 8] = [
+    "adaptability",
+    "ambition",
+    "loyalty",
+    "pressure",
+    "professionalism",
+    "sportsmanship",
+    "temperament",
+    "controversy",
 ];
 
 /// Bit index -> the player trait the game stores in that bit.

@@ -161,7 +161,9 @@ scope ids (code 1) are named through the same index.
 ## Injuries and suspensions
 
 `injury_manager` is a four-array, three-list section ending in
-`01 00 00 00 00 00 ff ff`. Array 2 (stride 13) holds expected-return rows; array 3
+`01 00 00 00 00 00 ff ff`. Arrays 0 and 1 (stride 14) hold the current injury windows: an
+earlier recovery milestone at `+1`, the expected return the game displays at `+5`, and the
+person selector at `+9`. Array 2 (stride 13) holds typed expected-return rows; array 3
 (stride 15) holds injury history. Person selectors are `pindex + 1`. The reference save has
 no array-2 rows and 783 history rows.
 

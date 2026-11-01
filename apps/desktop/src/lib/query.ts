@@ -51,7 +51,6 @@ export function buildPlayerQuery(
     wage_max: filters.wageMax,
     contract_end_before: filters.contractEndBefore,
     contract_end_after: filters.contractEndAfter,
-    on_loan: filters.onLoan,
     include_hidden: includeHidden,
     sort,
     sort_by: primary?.by ?? "ca",
