@@ -75,17 +75,19 @@ The eight personality bytes are stored in a separate person block and use
 
 ### CA-exempt attributes
 
-**Determination** and **Natural Fitness** are visible but do not consume the CA
-budget. In the A/B/C tests they stayed at their original values in every run while
-CA-weighted attributes moved:
+**Determination, Natural Fitness, Flair and Aggression** are visible but do not
+consume the CA budget. In the controlled tests they stayed at their original
+values while CA-weighted attributes moved:
 
-- Determination: `65 → 65` in all three runs.
+- Determination: `65 → 65` in all A/B/C runs.
 - Natural Fitness: `51 → 52` in the CA-only run (+1 training drift), and
   `51 → 51` in both the low-CA and CA-plus-attributes runs.
-- By contrast, stamina and strength fell by 15 raw points in the low-CA run.
+- Flair and Aggression: `100 → 100` in the direct test, while stamina and
+  strength fell from `100 → 94` under the same CA 110 budget.
 
-Both can be edited with `--attr determination=...` or
-`--attr natural_fitness=...` without changing CA.
+They can be edited with `--attr determination=...`, `--attr natural_fitness=...`,
+`--attr flair=...` or `--attr aggression=...` without changing CA. The public FM
+attribute-weight table also marks these four as zero-weight for every position.
 
 Other position-irrelevant attributes (for example, goalkeeper attributes on an
 outfield player) also stayed unchanged in the test, but the editor does not yet
@@ -136,6 +138,32 @@ The CLI prints a warning when `--ca` is changed, when a CA-weighted visible
 attribute is changed without `--ca`, or when both CA and CA-weighted attributes
 are changed. Determination and hidden attributes do not trigger the attribute
 warning.
+
+## CA budget estimate
+
+The desktop editor's **Ability** tab estimates current ability from the edited
+attributes:
+
+- It uses the community FM position-weight table and the published linear fit
+  (`CA ≈ 20 × weighted-average attribute − 120`, clamped to 1–200).
+- Attributes are the displayed 1–20 values; the weaker foot is included.
+- The player's natural/accomplished position can be selected as the basis.
+- Zero-weight attributes (aggression, determination, flair, natural fitness and
+  hidden attributes) do not change the estimate.
+- The estimate updates live while CA or attributes are edited.
+
+The card shows the estimate, a marker for the current/edited CA, and one of:
+
+- **over budget**: attributes imply more CA than the stored value; FM may trim
+  attributes, so raise CA or lower attributes;
+- **under budget**: CA is above the attribute estimate; FM may raise attributes
+  over time;
+- **balanced**: within roughly 3 CA points.
+
+Validation on the reference save (34,011 single-position players) gave a mean
+absolute error of **3.7 CA** and 94% of players within **10 CA**. This is an
+estimate, not an official formula; attributes above 17 can cost slightly more
+than the linear fit predicts.
 
 See [editor-test-plan.md](editor-test-plan.md) for the controlled A/B/C comparison
 of CA-only, attributes-only and CA-plus-attributes edits.

@@ -83,6 +83,19 @@ export interface EditPlayerResult {
   warnings: string[];
 }
 
+export interface CaEstimateRequest {
+  position: string;
+  attributes: Record<string, number>;
+  weaker_foot: number;
+}
+
+export interface CaEstimate {
+  position: string;
+  estimated_ca: number;
+  weighted_average: number;
+  total_weight: number;
+}
+
 export interface RoleScore {
   id: string;
   name: string;
@@ -594,6 +607,8 @@ export const CA_EXEMPT_ATTRIBUTE_KEYS: ReadonlySet<string> = new Set([
   ...HIDDEN_ATTRIBUTE_KEYS,
   "determination",
   "natural_fitness",
+  "flair",
+  "aggression",
 ]);
 export const HIDDEN_FILTER_KEYS = [...HIDDEN_ATTRIBUTE_KEYS, ...PERSONALITY_KEYS];
 export const HIDDEN_FILTERS: ReadonlySet<string> = new Set(HIDDEN_FILTER_KEYS);

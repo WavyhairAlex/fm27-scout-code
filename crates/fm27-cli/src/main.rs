@@ -529,4 +529,18 @@ mod tests {
         };
         assert!(request.warnings().is_empty());
     }
+
+    #[test]
+    fn flair_and_aggression_edits_do_not_warn() {
+        for key in ["flair", "aggression"] {
+            let request = PlayerEditRequest {
+                attributes: vec![AttributeEdit {
+                    key: key.to_owned(),
+                    value: 100,
+                }],
+                ..PlayerEditRequest::default()
+            };
+            assert!(request.warnings().is_empty(), "{key} should be exempt");
+        }
+    }
 }

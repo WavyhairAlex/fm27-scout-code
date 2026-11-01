@@ -9,7 +9,12 @@ import {
   Search,
   Sparkles,
 } from "lucide-react";
-import { editPlayer, getTraitOptions, pickEditOutputFile } from "@/lib/api";
+import {
+  editPlayer,
+  estimatePlayerCa,
+  getTraitOptions,
+  pickEditOutputFile,
+} from "@/lib/api";
 import { attributeLabel, personalityLabel, traitLabel } from "@/lib/labels";
 import { useOpenSave } from "@/lib/openSave";
 import { usePlayerEditDetail } from "@/lib/query";
@@ -17,7 +22,9 @@ import {
   ATTRIBUTE_GROUPS,
   CA_EXEMPT_ATTRIBUTE_KEYS,
   PERSONALITY_KEYS,
+  POSITION_LABELS,
   type AttributeEdit,
+  type CaEstimate,
   type EditPlayerResult,
   type Player,
   type PlayerEditRequest,
@@ -53,6 +60,8 @@ export function EditPlayerDialog() {
   const [personality, setPersonality] = useState<Record<string, number>>({});
   const [traits, setTraits] = useState<Set<number>>(new Set());
   const [traitSearch, setTraitSearch] = useState("");
+  const [estimate, setEstimate] = useState<CaEstimate | null>(null);
+  const [estimatePosition, setEstimatePosition] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<EditPlayerResult | null>(null);
@@ -65,10 +74,50 @@ export function EditPlayerDialog() {
     setPersonality(player.personality ? { ...player.personality } : {});
     setTraits(new Set(player.traits.map((trait) => trait.bit)));
     setTraitSearch("");
+    setEstimatePosition(
+      player.natural_positions[0] ?? player.best_role?.position ?? "STC",
+    );
+    setEstimate(null);
     setTab("ability");
     setError(null);
     setResult(null);
   }, [open, player?.uid]);
+
+  const positionOptions = useMemo(() => {
+    const values = [
+      ...(player?.natural_positions ?? []),
+      ...(player?.accomplished_positions ?? []),
+    ];
+    return values.length > 0 ? [...new Set(values)] : ["STC"];
+  }, [player]);
+
+  useEffect(() => {
+    if (!open || !player || !estimatePosition) {
+      setEstimate(null);
+      return;
+    }
+    const handle = window.setTimeout(() => {
+      const displayAttributes: Record<string, number> = {};
+      for (const [key, value] of Object.entries(attributes)) {
+        displayAttributes[key] = Math.max(1, Math.floor((value + 2) / 5));
+      }
+      void estimatePlayerCa({
+        position: estimatePosition,
+        attributes: displayAttributes,
+        weaker_foot: Math.min(player.left_foot, player.right_foot),
+      })
+        .then(setEstimate)
+        .catch(() => setEstimate(null));
+    }, 120);
+    return () => window.clearTimeout(handle);
+  }, [
+    attributes,
+    estimatePosition,
+    open,
+    player?.left_foot,
+    player?.right_foot,
+    player?.uid,
+  ]);
 
   const originalTraits = useMemo(
     () => new Set(player?.traits.map((trait) => trait.bit) ?? []),
@@ -84,13 +133,15 @@ export function EditPlayerDialog() {
         key: "ca-exempt",
         label: t("edit.group.caExempt"),
         note: t("edit.note.caExempt"),
-        keys: ["determination", "natural_fitness"],
+        keys: ["determination", "natural_fitness", "flair", "aggression"],
       },
     ];
     for (const group of ATTRIBUTE_GROUPS.technical) {
       const keys =
         group.labelKey === "mental"
-          ? group.keys.filter((key) => key !== "determination")
+          ? group.keys.filter(
+              (key) => !["determination", "flair", "aggression"].includes(key),
+            )
           : group.labelKey === "physical"
             ? group.keys.filter((key) => key !== "natural_fitness")
             : group.keys;
@@ -327,9 +378,16 @@ export function EditPlayerDialog() {
                 {label}
               </button>
             ))}
-            <span className="ml-auto self-center text-[10px] text-[var(--muted)]">
-              {t("edit.changed", { count: changedCount })}
-            </span>
+            <div className="ml-auto flex items-center gap-2 self-center text-[10px]">
+              {estimate && (
+                <span className="rounded-[4px] bg-[var(--accent-soft)] px-1.5 py-0.5 font-mono text-[var(--accent-strong)]">
+                  {t("edit.budget.estimatedShort", { value: estimate.estimated_ca })}
+                </span>
+              )}
+              <span className="text-[var(--muted)]">
+                {t("edit.changed", { count: changedCount })}
+              </span>
+            </div>
           </div>
 
           {warnings.length > 0 && (
@@ -347,7 +405,18 @@ export function EditPlayerDialog() {
           )}
 
           {currentTab === "ability" && (
-            <AbilityTab player={player} ca={ca} pa={pa} onCa={setCa} onPa={setPa} />
+            <AbilityTab
+              player={player}
+              ca={ca}
+              pa={pa}
+              estimate={estimate}
+              estimatePosition={estimatePosition}
+              positionOptions={positionOptions}
+              onCa={setCa}
+              onPa={setPa}
+              onEstimatePosition={setEstimatePosition}
+              onUseEstimate={setCa}
+            />
           )}
           {currentTab === "attributes" && (
             <div className="space-y-4">
@@ -468,14 +537,24 @@ function AbilityTab({
   player,
   ca,
   pa,
+  estimate,
+  estimatePosition,
+  positionOptions,
   onCa,
   onPa,
+  onEstimatePosition,
+  onUseEstimate,
 }: {
   player: Player;
   ca: number | null;
   pa: number | null;
+  estimate: CaEstimate | null;
+  estimatePosition: string;
+  positionOptions: string[];
   onCa: (value: number | null) => void;
   onPa: (value: number | null) => void;
+  onEstimatePosition: (position: string) => void;
+  onUseEstimate: (value: number) => void;
 }) {
   const { t } = useI18n();
   return (
@@ -520,8 +599,130 @@ function AbilityTab({
           </div>
         </div>
       </div>
+      <CaBudget
+        estimate={estimate}
+        targetCa={ca ?? player.ca}
+        position={estimatePosition}
+        options={positionOptions}
+        onPosition={onEstimatePosition}
+        onUseEstimate={onUseEstimate}
+      />
       <div className="rounded-xl border border-[var(--line)] bg-[var(--surface-2)] p-3 text-[11px] leading-relaxed text-[var(--muted)]">
         {t("edit.attributeBudget")}
+      </div>
+    </div>
+  );
+}
+
+function CaBudget({
+  estimate,
+  targetCa,
+  position,
+  options,
+  onPosition,
+  onUseEstimate,
+}: {
+  estimate: CaEstimate | null;
+  targetCa: number;
+  position: string;
+  options: string[];
+  onPosition: (position: string) => void;
+  onUseEstimate: (value: number) => void;
+}) {
+  const { t } = useI18n();
+  const delta = estimate ? estimate.estimated_ca - targetCa : 0;
+  const status =
+    !estimate
+      ? t("edit.budget.loading")
+      : delta > 3
+        ? t("edit.budget.over", {
+            estimate: estimate.estimated_ca,
+            ca: targetCa,
+          })
+        : delta < -3
+          ? t("edit.budget.under", {
+              estimate: estimate.estimated_ca,
+              ca: targetCa,
+            })
+          : t("edit.budget.balanced");
+  const dotColor =
+    !estimate || Math.abs(delta) <= 3
+      ? "bg-[var(--accent)]"
+      : delta > 0
+        ? "bg-[var(--gold)]"
+        : "bg-[var(--blue)]";
+  const estimatePercent = estimate ? Math.max(2, Math.min(100, (estimate.estimated_ca / 200) * 100)) : 0;
+  const targetPercent = Math.max(0, Math.min(100, (targetCa / 200) * 100));
+  return (
+    <div className="rounded-xl border border-[var(--line)] bg-[var(--surface)] p-3">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <div className="text-[10px] font-semibold uppercase tracking-wider text-[var(--muted)]">
+            {t("edit.budget.title")}
+          </div>
+          <div className="mt-1 flex items-baseline gap-1">
+            <span className="font-mono text-[22px] font-semibold leading-none text-[var(--ink)]">
+              {estimate?.estimated_ca ?? "—"}
+            </span>
+            <span className="text-[10px] text-[var(--muted)]">/ 200</span>
+          </div>
+          <div className="mt-1 text-[9px] text-[var(--muted)]">
+            {t("edit.budget.estimated")}
+            {estimate
+              ? ` · ${t("edit.budget.average", {
+                  value: estimate.weighted_average.toFixed(1),
+                })}`
+              : ""}
+          </div>
+        </div>
+        <label className="flex flex-col items-end gap-1 text-[9px] text-[var(--muted)]">
+          {t("edit.budget.position")}
+          <select
+            value={position}
+            onChange={(event) => onPosition(event.target.value)}
+            className="h-7 rounded-[6px] border border-[var(--line)] bg-[var(--surface)] px-1.5 text-[10px] text-[var(--ink)]"
+          >
+            {options.map((option) => (
+              <option key={option} value={option}>
+                {POSITION_LABELS[option.toLowerCase()] ?? option}
+              </option>
+            ))}
+          </select>
+        </label>
+      </div>
+
+      <div className="relative mt-3 h-2 overflow-hidden rounded-full bg-[var(--surface-3)]">
+        <div
+          className={cn(
+            "h-full rounded-full transition-[width]",
+            delta > 3 ? "bg-[var(--gold)]" : delta < -3 ? "bg-[var(--blue)]" : "bg-[var(--accent)]",
+          )}
+          style={{ width: `${estimatePercent}%` }}
+        />
+        <div
+          className="absolute top-[-2px] h-3 w-[2px] rounded-full bg-[var(--ink)]/70"
+          style={{ left: `calc(${targetPercent}% - 1px)` }}
+          title={t("edit.budget.currentCa", { value: targetCa })}
+        />
+      </div>
+      <div className="mt-2 flex items-start justify-between gap-2 text-[10px] leading-relaxed">
+        <div className="flex items-start gap-1.5">
+          <span className={cn("mt-[3px] h-1.5 w-1.5 shrink-0 rounded-full", dotColor)} />
+          <span className="text-[var(--muted)]">{status}</span>
+        </div>
+        {estimate && estimate.estimated_ca !== targetCa && (
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-6 shrink-0 px-1.5 text-[9px]"
+            onClick={() => onUseEstimate(estimate.estimated_ca)}
+          >
+            {t("edit.budget.use", { value: estimate.estimated_ca })}
+          </Button>
+        )}
+      </div>
+      <div className="mt-1 text-[9px] leading-relaxed text-[var(--muted)]">
+        {t("edit.budget.note")}
       </div>
     </div>
   );

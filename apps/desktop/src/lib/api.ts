@@ -3,6 +3,8 @@ import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { open, save } from "@tauri-apps/plugin-dialog";
 import type {
   AnalysisOverview,
+  CaEstimate,
+  CaEstimateRequest,
   Competition,
   EditPlayerResult,
   ExportReport,
@@ -65,6 +67,24 @@ export async function getPlayer(
 export async function getTraitOptions(): Promise<TraitOption[]> {
   if (!isTauri) return MOCK_TRAIT_OPTIONS;
   return invoke<TraitOption[]>("trait_options");
+}
+
+export async function estimatePlayerCa(
+  request: CaEstimateRequest,
+): Promise<CaEstimate | null> {
+  if (!isTauri) {
+    const values = Object.values(request.attributes);
+    const weighted_average = values.length
+      ? values.reduce((sum, value) => sum + value, 0) / values.length
+      : 0;
+    return {
+      position: request.position,
+      estimated_ca: Math.max(1, Math.min(200, Math.round(weighted_average * 20 - 120))),
+      weighted_average,
+      total_weight: 0,
+    };
+  }
+  return invoke<CaEstimate>("estimate_player_ca", { request });
 }
 
 export async function editPlayer(

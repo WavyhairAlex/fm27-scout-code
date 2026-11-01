@@ -1,10 +1,13 @@
+use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 
+use fm27_core::ability::{CaEstimate, estimate_ca};
 use fm27_core::container::SaveFile;
 use fm27_core::editor::{EditChange, PlayerEditRequest, PlayerEditor};
 use fm27_core::export::write_export;
 use fm27_core::metadata::read_metadata;
+use fm27_core::model::Attributes;
 use fm27_core::store::{
     AnalysisOverview, FilterOptions, PlayerPage, PlayerQuery, SaveRecord, SnapshotPoint,
     SquadAnalysis, Store,
@@ -12,7 +15,7 @@ use fm27_core::store::{
 use fm27_core::{
     ParseReport, Player, SaveSummary, inspect_save, parse_save_with_progress, parser_version,
 };
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use tauri::menu::{Menu, MenuItem, PredefinedMenuItem, Submenu};
 use tauri::{AppHandle, Emitter, Manager, State};
 
@@ -38,6 +41,13 @@ struct OpenSaveResult {
 struct TraitOption {
     bit: u8,
     name: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct CaEstimateRequest {
+    position: String,
+    attributes: BTreeMap<String, u8>,
+    weaker_foot: u8,
 }
 
 #[derive(Debug, Serialize)]
@@ -240,6 +250,21 @@ fn get_player(
     store
         .get_player(save_id, uid, include_hidden)
         .map_err(error_string)
+}
+
+#[tauri::command]
+fn estimate_player_ca(request: CaEstimateRequest) -> Result<CaEstimate, String> {
+    let mut attributes = Attributes::default();
+    for (index, key) in fm27_core::layout::ATTRIBUTE_KEYS.iter().enumerate() {
+        if let Some(value) = request.attributes.get(*key) {
+            attributes.values[index] = *value;
+        }
+    }
+    for value in &mut attributes.values {
+        *value = (*value).max(1);
+    }
+    estimate_ca(&attributes, request.weaker_foot, &request.position)
+        .ok_or_else(|| format!("cannot estimate CA for position {:?}", request.position))
 }
 
 #[tauri::command]
@@ -665,6 +690,7 @@ pub fn run() {
             query_players,
             get_player,
             edit_player,
+            estimate_player_ca,
             trait_options,
             player_roles,
             growth_history,
@@ -701,6 +727,21 @@ pub fn run() {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn estimates_ca_from_a_display_attribute_map() {
+        let request = CaEstimateRequest {
+            position: "SC".to_owned(),
+            attributes: fm27_core::layout::ATTRIBUTE_KEYS
+                .iter()
+                .map(|key| ((*key).to_owned(), 12))
+                .collect(),
+            weaker_foot: 12,
+        };
+        let estimate = estimate_player_ca(request).expect("estimate");
+        assert_eq!(estimate.position, "SC");
+        assert_eq!(estimate.estimated_ca, 120);
+    }
 
     #[test]
     #[ignore = "requires a real FM27 save and FM27_TEST_SAVE"]

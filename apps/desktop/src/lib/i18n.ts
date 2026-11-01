@@ -503,7 +503,22 @@ const en = {
   "edit.pa": "Potential ability (PA)",
   "edit.original": "Original {value}",
   "edit.attributeBudget":
-    "CA is the attribute budget. FM rebalances CA-weighted attributes over roughly a month; hidden attributes, determination, natural fitness, personality and traits are stable. Editing CA-weighted attributes without CA is temporary.",
+    "CA is the attribute budget. FM rebalances CA-weighted attributes over roughly a month; hidden attributes, determination, natural fitness, flair, aggression, personality and traits are stable. Editing CA-weighted attributes without CA is temporary.",
+  "edit.budget.title": "CA budget",
+  "edit.budget.estimated": "Estimated from attributes",
+  "edit.budget.estimatedShort": "Est. CA {value}",
+  "edit.budget.average": "avg {value}",
+  "edit.budget.position": "Position basis",
+  "edit.budget.currentCa": "Current CA {value}",
+  "edit.budget.over":
+    "Attributes imply about {estimate} CA, above {ca}. FM may trim attributes; raise CA to about {estimate} or reduce attributes.",
+  "edit.budget.under":
+    "CA {ca} is above the attribute estimate of about {estimate}; FM may raise attributes over time.",
+  "edit.budget.balanced": "Attributes and CA balance within about 3 points.",
+  "edit.budget.use": "Use CA {value}",
+  "edit.budget.note":
+    "Approximate estimate using community FM weights; high attributes (17+) can cost slightly more.",
+  "edit.budget.loading": "Estimating…",
   "edit.warning.ca":
     "FM treats CA as the attribute budget and rebalances visible attributes over roughly a month.",
   "edit.warning.caAttrs":
@@ -1027,7 +1042,21 @@ const zhCN: Record<TranslationKey, string> = {
   "edit.pa": "潜在能力（PA）",
   "edit.original": "原值 {value}",
   "edit.attributeBudget":
-    "CA 是属性预算。FM 会在大约一个月内重新分配参与 CA 计算的属性；隐藏属性、Determination、Natural Fitness、性格和习惯保持稳定。只改参与 CA 的可见属性而不改 CA，是临时的。",
+    "CA 是属性预算。FM 会在大约一个月内重新分配参与 CA 计算的属性；隐藏属性、Determination、Natural Fitness、Flair、Aggression、性格和习惯保持稳定。只改参与 CA 的可见属性而不改 CA，是临时的。",
+  "edit.budget.title": "CA 预算",
+  "edit.budget.estimated": "按属性估算",
+  "edit.budget.estimatedShort": "估算 CA {value}",
+  "edit.budget.average": "均值 {value}",
+  "edit.budget.position": "位置基准",
+  "edit.budget.currentCa": "当前 CA {value}",
+  "edit.budget.over":
+    "属性大约对应 CA {estimate}，高于 {ca}。FM 可能会压缩属性；建议把 CA 提高到约 {estimate}，或降低属性。",
+  "edit.budget.under":
+    "CA {ca} 高于属性估算值 {estimate}；FM 可能随时间提升属性。",
+  "edit.budget.balanced": "属性与 CA 大致平衡（误差约 3 点以内）。",
+  "edit.budget.use": "设为 CA {value}",
+  "edit.budget.note": "基于社区 FM 权重估算；17+ 的高属性可能略贵。",
+  "edit.budget.loading": "正在估算…",
   "edit.warning.ca": "CA 是属性预算，FM 会在大约一个月内重新分配可见属性。",
   "edit.warning.caAttrs":
     "同时修改 CA 和参与 CA 计算的属性；关键属性通常接近保留，但可能被压缩以匹配 CA 预算。",

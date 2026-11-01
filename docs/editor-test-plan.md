@@ -108,10 +108,14 @@ rose to 52 in the CA-only run, a +1 training drift. In the same low-CA run,
 stamina and strength fell by 15 raw points. Natural Fitness therefore does not
 consume the CA budget either.
 
-The test player was a striker, and his goalkeeper attributes, `flair` and
-`aggression` also stayed unchanged. That is consistent with position-specific CA
-weights, but those cases are not classified globally yet; the editor only marks
-determination, natural fitness and the hidden attributes as CA-exempt.
+The direct D test set Natural Fitness, Determination, Flair and Aggression to
+100 at CA 110. After the month, all four stayed at **100**, while the control
+attributes Stamina and Strength fell from **100 to 94**. CA moved from 110 to
+113 through normal development. Flair and Aggression are therefore CA-exempt too;
+the public FM attribute-weight table independently marks all four as zero-weight.
+
+The test player was a striker and his goalkeeper attributes also stayed unchanged,
+but the editor does not yet model per-position weights for those niche attributes.
 
 ## Conclusion
 
@@ -123,34 +127,41 @@ determination, natural fitness and the hidden attributes as CA-exempt.
   key attributes are largely preserved, while marginal attributes are trimmed.
 - Avoid editing visible attributes alone at a low CA; FM will pull them back
   toward the CA budget.
-- Hidden attributes, **determination**, **natural fitness**, personality and
-  traits are independent and stay stable.
+- Hidden attributes, **determination**, **natural fitness**, **flair**,
+  **aggression**, personality and traits are independent and stay stable.
 
 The earlier warning is confirmed: **CA is the budget; visible attributes are the
 allocation.**
 
-## Optional direct exemption test (D)
+## Direct exemption test (D) — results
 
-A fourth save, `FM27 Scout Test D - CA Exempt.fm`, uses CA 110 / PA 200 and sets
-six attributes to raw 100:
+`FM27 Scout Test D - CA Exempt.fm` started at CA 110 / PA 200 with six attributes
+at raw 100:
 
 ```text
 natural_fitness, determination, flair, aggression, stamina, strength
 ```
 
-Advance it to 2026-08-27 as before. Expected result if the classification is
-correct:
+After one month (2026-08-27):
 
-- `natural_fitness` and `determination` stay at 100 (CA-exempt).
-- `stamina` and `strength` fall toward the CA 110 budget (CA-weighted controls).
-- `flair` and `aggression` indicate whether they are also position-specific
-  exemptions for a striker.
+| Attribute | Result |
+|---|---|
+| natural_fitness | 100 → 100 |
+| determination | 100 → 100 |
+| flair | 100 → 100 |
+| aggression | 100 → 100 |
+| stamina | 100 → 94 |
+| strength | 100 → 94 |
+| CA | 110 → 113 |
 
-Compare with:
+The controls dropped while the four exemptions stayed, confirming the
+classification.
+
+The result can be reproduced with:
 
 ```bash
 python3 scripts/compare_editor_test.py \
   --baseline "target/editor-test/FM27 Scout Test D - CA Exempt.fm" \
-  --after "/path/to/D - month.fm" \
+  --after "target/editor-test/results/D - month.fm" \
   --uid 2000395878
 ```

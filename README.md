@@ -33,6 +33,7 @@ The 0.2.1 runnable release is complete:
 - SQLite cache + server-side pagination; the CLI and desktop app share `fm27-core`.
 - React UI: filters, multi-column sorting, player details, 2–4 player comparison, CSV/JSON export, hidden-attribute toggle, light/dark themes.
 - Player editor: CA/PA, attributes, hidden attributes, determination, personality and traits, written to a new save file with CA-rebalancing warnings; the source save is never modified.
+- CA budget estimator: live estimate from the edited attributes using the community FM position weights, with over/under-budget guidance and position selection.
 - Multilingual UI: English / Simplified Chinese, follows the system language by default and falls back to English for unsupported languages; can be switched in Settings, and the native menu follows the selection.
 - Analysis centre: age/CA distributions, club strength ranking, squad depth and wonderkid radar (age + PA + CA gap).
 - Quick filters: wonderkids, expiring contracts, high potential, injured / injury history / suspended / on loan / free agent / available.
@@ -123,8 +124,8 @@ cargo build --release -p fm27-cli
 The `edit` subcommand is documented in [docs/editor.md](docs/editor.md). It only
 supports build `27.0.0+2486695` and always writes a separate output file. CA is the
 attribute budget: FM rebalances CA-weighted visible attributes over roughly a
-month, while hidden attributes, determination, natural fitness, personality, and
-traits stay stable. Visible attributes alone are unstable; CA plus a few key attributes is
+month, while hidden attributes, determination, natural fitness, flair, aggression,
+personality, and traits stay stable. Visible attributes alone are unstable; CA plus a few key attributes is
 the controlled workflow.
 
 ## Validation
