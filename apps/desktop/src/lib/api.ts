@@ -74,10 +74,26 @@ export async function editPlayer(
   request: PlayerEditRequest,
 ): Promise<EditPlayerResult> {
   if (!isTauri) {
+    const changes = [
+      ...(request.ca != null ? [{ field: "ca", before: 0, after: request.ca }] : []),
+      ...(request.pa != null ? [{ field: "pa", before: 0, after: request.pa }] : []),
+      ...request.attributes.map((edit) => ({
+        field: `attribute.${edit.key}`,
+        before: 0,
+        after: edit.value,
+      })),
+      ...request.personality.map((edit) => ({
+        field: `personality.${edit.key}`,
+        before: 0,
+        after: edit.value,
+      })),
+      ...request.traits.map((bit) => ({ field: `trait.${bit}`, before: 0, after: 1 })),
+      ...request.untraits.map((bit) => ({ field: `trait.${bit}`, before: 1, after: 0 })),
+    ];
     return {
       output: outputPath,
       file_size: 0,
-      changes: [],
+      changes,
       warnings: [],
     };
   }

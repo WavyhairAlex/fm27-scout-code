@@ -470,7 +470,7 @@ const en = {
   "parse.stage.decode": "Decoding players",
   "parse.stage.done": "Done",
   "parse.note":
-    "Only a read-only copy is read; the game directory is never written. The first parse takes about 1–3 seconds, then the local cache is used.",
+    "Parsing reads a read-only copy and never writes to the game directory. The first parse takes about 1–3 seconds, then the local cache is used. Editing writes a separate file you choose.",
 
   // Toasts
   "toast.close": "Dismiss notification",
@@ -521,6 +521,7 @@ const en = {
   "edit.note.traits": "Traits are independent of CA; existing values are kept.",
   "edit.traits.search": "Search traits…",
   "edit.traits.none": "No traits selected.",
+  "edit.traitsUnavailable": "Trait data is unavailable for this player.",
   "edit.traitCount": "{count} traits",
   "edit.noChanges": "No changes to save.",
   "edit.noPlayer": "Player data is not loaded.",
@@ -530,7 +531,7 @@ const en = {
   "edit.invalidCaPa": "CA cannot be higher than PA.",
   "edit.invalidAttribute": "Attributes must be between 1 and 100.",
   "edit.invalidPersonality": "Personality values must be between 1 and 20.",
-  "edit.outputHint": "You choose a new .fm file when saving; the source file is never overwritten.",
+  "edit.outputHint": "Choose a new .fm file when saving; existing files are not overwritten.",
   "edit.saveCopy": "Save a copy…",
   "edit.saving": "Writing save…",
   "edit.successTitle": "Edited save written",
@@ -996,7 +997,7 @@ const zhCN: Record<TranslationKey, string> = {
   "parse.stage.decode": "解码球员",
   "parse.stage.done": "完成",
   "parse.note":
-    "只读取存档副本，不写入游戏目录。首次解析约 1–3 秒，之后会直接使用本地缓存。",
+    "解析只读取存档副本，不写入游戏目录。首次解析约 1–3 秒，之后会直接使用本地缓存；编辑只会写入你选择的新文件。",
 
   "toast.close": "关闭提示",
   "toast.hiddenOn.title": "隐藏属性已开启",
@@ -1042,6 +1043,7 @@ const zhCN: Record<TranslationKey, string> = {
   "edit.note.traits": "习惯不受 CA 影响，已有值会保留。",
   "edit.traits.search": "搜索习惯…",
   "edit.traits.none": "未选择习惯。",
+  "edit.traitsUnavailable": "该球员没有可编辑的习惯数据。",
   "edit.traitCount": "{count} 个习惯",
   "edit.noChanges": "没有需要保存的修改。",
   "edit.noPlayer": "球员数据尚未加载。",
@@ -1051,7 +1053,7 @@ const zhCN: Record<TranslationKey, string> = {
   "edit.invalidCaPa": "CA 不能高于 PA。",
   "edit.invalidAttribute": "属性必须在 1–100 之间。",
   "edit.invalidPersonality": "性格值必须在 1–20 之间。",
-  "edit.outputHint": "保存时选择一个新 .fm 文件，源文件不会被覆盖。",
+  "edit.outputHint": "保存时选择一个新 .fm 文件；已有文件不会被覆盖。",
   "edit.saveCopy": "另存为新存档…",
   "edit.saving": "正在写入存档…",
   "edit.successTitle": "编辑后的存档已写入",

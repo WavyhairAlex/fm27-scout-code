@@ -435,6 +435,7 @@ export function EditPlayerDialog() {
               options={traitOptions}
               selected={traits}
               search={traitSearch}
+              available={player.trait_bits != null}
               onSearch={setTraitSearch}
               onToggle={(bit, checked) =>
                 setTraits((current) => {
@@ -589,6 +590,7 @@ function TraitsTab({
   options,
   selected,
   search,
+  available,
   onSearch,
   onToggle,
 }: {
@@ -596,10 +598,18 @@ function TraitsTab({
   options: { bit: number; name: string }[];
   selected: Set<number>;
   search: string;
+  available: boolean;
   onSearch: (value: string) => void;
   onToggle: (bit: number, checked: boolean) => void;
 }) {
   const { t } = useI18n();
+  if (!available) {
+    return (
+      <div className="rounded-lg border border-[var(--line)] bg-[var(--surface-2)] px-3 py-2 text-[10px] text-[var(--muted)]">
+        {t("edit.traitsUnavailable")}
+      </div>
+    );
+  }
   const filtered = options.filter((option) =>
     traitLabel(option.bit, option.name, locale).toLowerCase().includes(search.toLowerCase()),
   );

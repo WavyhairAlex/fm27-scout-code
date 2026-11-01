@@ -270,50 +270,65 @@ async fn edit_player(
             .map_err(error_string)?
             .ok_or_else(|| "save not found".to_owned())?
     };
-    let warnings = request.warnings();
-    tauri::async_runtime::spawn_blocking(move || -> Result<EditPlayerResult, String> {
-        if request.is_empty() {
-            return Err("no edits requested".to_owned());
-        }
-        let save = SaveFile::open(&source).map_err(error_string)?;
-        let metadata = read_metadata(&save).map_err(error_string)?;
-        let mut editor = PlayerEditor::open(&save, &metadata).map_err(error_string)?;
-        request.apply(&mut editor, uid).map_err(error_string)?;
-        editor.validate().map_err(error_string)?;
-
-        let output = PathBuf::from(&output_path);
-        let save_name = output
-            .file_stem()
-            .map(|value| value.to_string_lossy().into_owned())
-            .filter(|value| !value.is_empty());
-        let report = editor
-            .write_as(&save, &output, 3, save_name.as_deref())
-            .map_err(error_string)?;
-
-        let verify = fm27_core::parse_save(&output)
-            .map_err(error_string)
-            .and_then(|parsed| {
-                parsed
-                    .players
-                    .iter()
-                    .find(|player| player.uid == uid)
-                    .ok_or_else(|| format!("edited save no longer contains player uid {uid}"))
-                    .and_then(|player| request.verify(player).map_err(error_string))
-            });
-        if let Err(error) = verify {
-            let _ = std::fs::remove_file(&output);
-            return Err(error);
-        }
-
-        Ok(EditPlayerResult {
-            output: report.output,
-            file_size: report.file_size,
-            changes: editor.changes().to_vec(),
-            warnings,
-        })
+    tauri::async_runtime::spawn_blocking(move || {
+        edit_player_file(source, uid, output_path, request)
     })
     .await
     .map_err(error_string)?
+}
+
+fn edit_player_file(
+    source: String,
+    uid: u32,
+    output_path: String,
+    request: PlayerEditRequest,
+) -> Result<EditPlayerResult, String> {
+    if request.is_empty() {
+        return Err("no edits requested".to_owned());
+    }
+    let warnings = request.warnings();
+    let save = SaveFile::open(&source).map_err(error_string)?;
+    let metadata = read_metadata(&save).map_err(error_string)?;
+    let mut editor = PlayerEditor::open(&save, &metadata).map_err(error_string)?;
+    request.apply(&mut editor, uid).map_err(error_string)?;
+    editor.validate().map_err(error_string)?;
+
+    let output = PathBuf::from(&output_path);
+    if output.exists() {
+        return Err(format!(
+            "output already exists: {}; choose a new .fm file",
+            output.display()
+        ));
+    }
+    let save_name = output
+        .file_stem()
+        .map(|value| value.to_string_lossy().into_owned())
+        .filter(|value| !value.is_empty());
+    let report = editor
+        .write_as(&save, &output, 3, save_name.as_deref())
+        .map_err(error_string)?;
+
+    let verify = fm27_core::parse_save(&output)
+        .map_err(error_string)
+        .and_then(|parsed| {
+            parsed
+                .players
+                .iter()
+                .find(|player| player.uid == uid)
+                .ok_or_else(|| format!("edited save no longer contains player uid {uid}"))
+                .and_then(|player| request.verify(player).map_err(error_string))
+        });
+    if let Err(error) = verify {
+        let _ = std::fs::remove_file(&output);
+        return Err(error);
+    }
+
+    Ok(EditPlayerResult {
+        output: report.output,
+        file_size: report.file_size,
+        changes: editor.changes().to_vec(),
+        warnings,
+    })
 }
 
 #[tauri::command]
@@ -681,4 +696,55 @@ pub fn run() {
                 }
             }
         });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    #[ignore = "requires a real FM27 save and FM27_TEST_SAVE"]
+    fn edits_a_player_and_refuses_to_overwrite_an_existing_output() {
+        let source = std::env::var("FM27_TEST_SAVE").expect("set FM27_TEST_SAVE");
+        let parsed = fm27_core::parse_save(&source).expect("parse source save");
+        let player = parsed
+            .players
+            .iter()
+            .find(|player| player.pa.is_some())
+            .expect("a player with potential ability");
+        let uid = player.uid;
+        let directory = tempfile::tempdir().expect("tempdir");
+        let output = directory.path().join("desktop-edited.fm");
+
+        let request = PlayerEditRequest {
+            pa: Some(200),
+            ..PlayerEditRequest::default()
+        };
+        let result = edit_player_file(source.clone(), uid, output.display().to_string(), request)
+            .expect("edit player");
+        assert!(Path::new(&result.output).exists());
+        assert_eq!(result.changes.len(), 1);
+
+        let edited = fm27_core::parse_save(&result.output).expect("parse edited save");
+        assert_eq!(
+            edited
+                .players
+                .iter()
+                .find(|player| player.uid == uid)
+                .map(|player| player.pa),
+            Some(Some(200))
+        );
+
+        let error = edit_player_file(
+            source,
+            uid,
+            output.display().to_string(),
+            PlayerEditRequest {
+                pa: Some(199),
+                ..PlayerEditRequest::default()
+            },
+        )
+        .expect_err("existing output must be refused");
+        assert!(error.contains("already exists"));
+    }
 }

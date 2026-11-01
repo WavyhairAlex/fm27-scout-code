@@ -191,6 +191,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       page: 0,
       selectedUid: null,
       compareUids: [],
+      editOpen: false,
     }),
   clearSession: () =>
     set({
