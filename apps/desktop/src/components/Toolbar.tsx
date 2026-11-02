@@ -15,6 +15,8 @@ import {
   PanelLeftOpen,
   Search,
   Settings2,
+  Shield,
+  Users,
   X,
 } from "lucide-react";
 import { useSaves } from "@/lib/query";
@@ -28,6 +30,8 @@ import { Badge, Button, Input } from "./ui";
 export function Toolbar() {
   const { t, locale } = useI18n();
   const summary = useAppStore((state) => state.summary);
+  const viewMode = useAppStore((state) => state.viewMode);
+  const setViewMode = useAppStore((state) => state.setViewMode);
   const sidebarOpen = useAppStore((state) => state.sidebarOpen);
   const setSidebarOpen = useAppStore((state) => state.setSidebarOpen);
   const filters = useAppStore((state) => state.filters);
@@ -170,8 +174,38 @@ export function Toolbar() {
           <FilePlus2 size={13} />
           {t("toolbar.open")}
         </Button>
+
+        <div className="flex h-8 items-center rounded-[7px] border border-[var(--line)] bg-[var(--surface-2)] p-0.5">
+          <button
+            type="button"
+            onClick={() => setViewMode("players")}
+            className={cn(
+              "focus-ring flex h-6 items-center gap-1 rounded-[5px] px-2 text-[10px] font-medium transition-colors",
+              viewMode === "players"
+                ? "bg-[var(--surface)] text-[var(--ink)] shadow-sm"
+                : "text-[var(--muted)] hover:text-[var(--ink)]",
+            )}
+          >
+            <Users size={11} />
+            {t("toolbar.players")}
+          </button>
+          <button
+            type="button"
+            onClick={() => setViewMode("clubs")}
+            className={cn(
+              "focus-ring flex h-6 items-center gap-1 rounded-[5px] px-2 text-[10px] font-medium transition-colors",
+              viewMode === "clubs"
+                ? "bg-[var(--surface)] text-[var(--ink)] shadow-sm"
+                : "text-[var(--muted)] hover:text-[var(--ink)]",
+            )}
+          >
+            <Shield size={11} />
+            {t("toolbar.clubs")}
+          </button>
+        </div>
       </div>
 
+      {viewMode === "players" && (
       <div className="no-drag mx-auto flex w-full max-w-[560px] items-center">
         <div className="relative w-full">
           <Search
@@ -201,6 +235,7 @@ export function Toolbar() {
           </div>
         </div>
       </div>
+      )}
 
       <div className="no-drag flex items-center gap-1">
         {Object.keys(pendingEdits).length > 0 && (

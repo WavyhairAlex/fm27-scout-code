@@ -12,19 +12,21 @@ use crate::competitions::CompetitionIndex;
 use crate::container::SaveFile;
 use crate::contracts::ContractDecoder;
 use crate::error::{Error, Result};
+use crate::finances::read_club_finances;
 use crate::layout::{
     ATTRIBUTE_KEYS, MISSING_U32, PARSER_VERSION, POSITION_NAMES, PlayerLayout, decode_date,
     read_i16, read_u8, read_u16, read_u32, scale_attribute, stored_attribute_index,
 };
 use crate::metadata::{SaveMetadata, read_metadata};
 use crate::model::{
-    Attributes, Club, Competition, ParseReport, Player, Positions, Reputation, SaveSummary,
-    TransferValueState,
+    Attributes, Club, Competition, FinanceMonth, ParseReport, Player, Positions, Reputation,
+    SaveSummary, Stadium, TransferValueState,
 };
 use crate::names::NamePools;
 use crate::nations::NationIndex;
 use crate::persons::{ClubLookup, PersonDecoder};
 use crate::player_scan::PlayerRecords;
+use crate::stadiums::read_stadium_index;
 
 #[derive(Debug, Clone, Serialize)]
 pub struct ParseProgress {
@@ -41,6 +43,8 @@ pub struct ParsedSave {
     pub players: Vec<Player>,
     pub clubs: Vec<Club>,
     pub competitions: Vec<Competition>,
+    pub club_finances: Vec<FinanceMonth>,
+    pub stadiums: Vec<Stadium>,
     pub report: ParseReport,
 }
 
@@ -62,6 +66,11 @@ pub fn parse_save_with_progress(
     let path = path.as_ref();
     let save = SaveFile::open(path)?;
     let metadata = read_metadata(&save)?;
+    let reference_date = metadata
+        .game_date
+        .as_deref()
+        .and_then(|text| NaiveDate::parse_from_str(text, "%Y-%m-%d").ok())
+        .unwrap_or_else(|| NaiveDate::from_ymd_opt(2026, 7, 1).unwrap());
     progress(ParseProgress {
         stage: "game_db".to_owned(),
         current: 0,
@@ -97,6 +106,15 @@ pub fn parse_save_with_progress(
             .name_for(club.fa_nation_id as u16)
             .map(str::to_owned);
     }
+    let finance_data = read_club_finances(&game_db, &clubs, Some(reference_date));
+    for club in &mut clubs.clubs {
+        club.corporate_facilities = finance_data
+            .corporate_facilities
+            .get(&club.uid)
+            .copied()
+            .flatten();
+    }
+    let stadiums = read_stadium_index(&game_db, &clubs).stadiums;
 
     progress(ParseProgress {
         stage: "competitions".to_owned(),
@@ -105,6 +123,9 @@ pub fn parse_save_with_progress(
         message: "正在解析赛事索引".to_owned(),
     });
     let mut warnings = Vec::new();
+    if stadiums.is_empty() {
+        warnings.push("stadium table unavailable".to_owned());
+    }
     let competitions = match CompetitionIndex::read(&game_db) {
         Ok(index) => {
             if index.stage_gaps > 0 {
@@ -120,12 +141,6 @@ pub fn parse_save_with_progress(
             CompetitionIndex::default()
         }
     };
-
-    let reference_date = metadata
-        .game_date
-        .as_deref()
-        .and_then(|text| NaiveDate::parse_from_str(text, "%Y-%m-%d").ok())
-        .unwrap_or_else(|| NaiveDate::from_ymd_opt(2026, 7, 1).unwrap());
 
     let mut injuries = if save.sections.contains_key("injury_manager") {
         save.read_section("injury_manager")
@@ -486,6 +501,19 @@ pub fn parse_save_with_progress(
         .iter()
         .filter(|player| player.contract.is_some())
         .count();
+    let clubs_with_finance = {
+        let mut uids: Vec<u32> = finance_data.months.iter().map(|row| row.club_uid).collect();
+        uids.sort_unstable();
+        uids.dedup();
+        uids.len()
+    };
+    let clubs_with_corporate_facilities = finance_data
+        .corporate_facilities
+        .values()
+        .filter(|value| value.is_some())
+        .count();
+    let club_finance_months = finance_data.months.len();
+    let stadium_count = stadiums.len();
     let report = ParseReport {
         save: summary.clone(),
         players: players.len(),
@@ -495,6 +523,10 @@ pub fn parse_save_with_progress(
         competition_stages: competitions.stage_count,
         competitions_with_database_id: competitions.with_database_id,
         competitions_with_name: competitions.with_name,
+        club_finance_months,
+        clubs_with_finance,
+        stadiums: stadium_count,
+        clubs_with_corporate_facilities,
         markerless_players: record_index.markerless,
         players_with_person: with_person,
         players_with_club: with_club,
@@ -509,6 +541,8 @@ pub fn parse_save_with_progress(
         players,
         clubs: clubs.clubs,
         competitions: competitions.competitions,
+        club_finances: finance_data.months,
+        stadiums,
         report,
     })
 }

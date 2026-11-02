@@ -35,7 +35,7 @@ pnpm tauri dev
 Release build paths:
 
 ```text
-target/universal-apple-darwin/release/bundle/dmg/FM27 Scout_1.0.0_universal.dmg
+target/universal-apple-darwin/release/bundle/dmg/FM27 Scout_1.1.0_universal.dmg
 target/universal-apple-darwin/release/bundle/macos/FM27 Scout.app
 ```
 
@@ -71,10 +71,20 @@ cargo build --release -p fm27-cli
 # Competition index and editor database ids
 ./target/release/fm27scout competitions "/path/to/save.fm" --output competitions.json
 
+# Clubs with finance, facilities and stadiums
+./target/release/fm27scout clubs "/path/to/save.fm" --details --output clubs.json
+
 # Experimental: edit one player into a new save file (the source is never modified)
 ./target/release/fm27scout edit "/path/to/save.fm" --uid 228 \
   --ca 150 --pa 199 --attr crossing=100 --attr consistency=100 \
   --personality professionalism=20 --output edited.fm
+
+# Experimental: edit low-risk club fields into a new save file
+./target/release/fm27scout edit-club "/path/to/save.fm" --club-uid 1155 \
+  --reputation 6500 --corporate-facilities 8 \
+  --balance 30000000 --transfer-budget 6000000 --wage-budget 600000 \
+  --stadium-uid 43156154 --all-seater 1300 --expansion 6000 \
+  --output club-edited.fm
 ```
 
 The `edit` subcommand is documented in [editor.md](editor.md). It only supports
@@ -104,6 +114,11 @@ python3 -m venv .venv
 .venv/bin/python scripts/oracle_competitions.py --output /tmp/oracle_competitions.json
 ./target/release/fm27scout competitions "/path/to/save.fm" --output /tmp/rust_competitions.json
 .venv/bin/python scripts/compare_competitions.py /tmp/oracle_competitions.json /tmp/rust_competitions.json
+
+# Club, finance, facilities and stadium comparison
+.venv/bin/python scripts/oracle_clubs.py "/path/to/save.fm" --output /tmp/oracle_clubs.json
+./target/release/fm27scout clubs "/path/to/save.fm" --details --output /tmp/rust_clubs.json
+.venv/bin/python scripts/compare_clubs.py /tmp/oracle_clubs.json /tmp/rust_clubs.json
 ```
 
 Reference results are in [validation.md](validation.md). The name-table format is

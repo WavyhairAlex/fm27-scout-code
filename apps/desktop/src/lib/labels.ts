@@ -84,6 +84,56 @@ const PERSONALITY_LABELS_ZH: Record<string, string> = {
   controversy: "争议",
 };
 
+const CORPORATE_FACILITIES_LABELS: Record<Locale, Record<number, string>> = {
+  en: {
+    1: "Basic",
+    2: "Basic",
+    5: "Fairly Basic",
+    6: "Adequate",
+    7: "Adequate",
+    8: "Adequate",
+    9: "Adequate",
+    10: "Average",
+    11: "Average",
+    12: "Average",
+    13: "Good",
+    14: "Good",
+    15: "Good",
+    17: "Excellent",
+    18: "Excellent",
+    19: "Excellent",
+    20: "Excellent",
+  },
+  "zh-CN": {
+    1: "基础",
+    2: "基础",
+    5: "较基础",
+    6: "合格",
+    7: "合格",
+    8: "合格",
+    9: "合格",
+    10: "一般",
+    11: "一般",
+    12: "一般",
+    13: "良好",
+    14: "良好",
+    15: "良好",
+    17: "优秀",
+    18: "优秀",
+    19: "优秀",
+    20: "优秀",
+  },
+};
+
+/** The game displays corporate facilities as a word; unnamed codes stay numeric. */
+export function corporateFacilitiesLabel(
+  value: number | null | undefined,
+  locale: Locale,
+): string | null {
+  if (value == null) return null;
+  return CORPORATE_FACILITIES_LABELS[locale][value] ?? `#${value}`;
+}
+
 const SEVERITY_LABELS: Record<Locale, Record<number, string>> = {
   en: { 0: "Minor", 1: "Moderate", 2: "Severe", 3: "Major" },
   "zh-CN": { 0: "轻微", 1: "轻度", 2: "中度", 3: "重度" },

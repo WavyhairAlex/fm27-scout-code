@@ -3,7 +3,10 @@ import {
   MOCK_PLAYERS,
   MOCK_SAVE_ID,
   mockAnalysisOverview,
+  mockClubDetail,
+  mockClubFilterOptions,
   mockQuery,
+  mockQueryClubs,
   mockSquadAnalysis,
 } from "./mock";
 
@@ -125,6 +128,42 @@ describe("mock player query", () => {
     expect(squad.player_count).toBeGreaterThan(0);
     expect(squad.players[0].club_uid).toBe(clubUid);
   });
+
+describe("mock club query", () => {
+  it("searches clubs by name", () => {
+    const page = mockQueryClubs({
+      save_id: MOCK_SAVE_ID,
+      search: "Barcelona",
+      page_size: 10,
+    });
+    expect(page.total).toBeGreaterThan(0);
+    expect(page.rows[0].name).toContain("Barcelona");
+  });
+
+  it("filters clubs with finances and sorts by balance", () => {
+    const page = mockQueryClubs({
+      save_id: MOCK_SAVE_ID,
+      has_finances: true,
+      sort_by: "balance",
+      sort_dir: "desc",
+      page_size: 20,
+    });
+    expect(page.rows.every((row) => row.finance_month != null)).toBe(true);
+    for (let index = 1; index < page.rows.length; index += 1) {
+      expect(page.rows[index - 1].balance ?? 0).toBeGreaterThanOrEqual(
+        page.rows[index].balance ?? 0,
+      );
+    }
+  });
+
+  it("returns a detail with finances and a stadium", () => {
+    const detail = mockClubDetail(1708);
+    expect(detail).not.toBeNull();
+    expect(detail!.finance_months.length).toBeGreaterThan(0);
+    expect(detail!.stadiums.length).toBeGreaterThan(0);
+    expect(mockClubFilterOptions().clubs_with_finances).toBeGreaterThan(0);
+  });
+});
 
   it("applies the PA-CA gap filter", () => {
     const page = mockQuery({

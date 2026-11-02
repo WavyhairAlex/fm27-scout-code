@@ -59,6 +59,8 @@ export function Inspector() {
   const setHiddenEnabled = useAppStore((state) => state.setHiddenEnabled);
   const setEditOpen = useAppStore((state) => state.setEditOpen);
   const pendingEdits = useAppStore((state) => state.pendingEdits);
+  const setViewMode = useAppStore((state) => state.setViewMode);
+  const setSelectedClubUid = useAppStore((state) => state.setSelectedClubUid);
   const pushToast = useAppStore((state) => state.pushToast);
   const gameDate = useAppStore((state) => state.summary?.game_date ?? null);
   const displayMode = useAppStore((state) => state.displayMode);
@@ -183,9 +185,22 @@ export function Inspector() {
                       )}
                     </Button>
                   </div>
-                  <div className="mt-0.5 truncate text-[11px] text-[var(--muted)]">
-                    {player.club_name ?? t("common.freeAgent")}
-                  </div>
+                  {player.club_uid != null ? (
+                    <button
+                      type="button"
+                      className="mt-0.5 block max-w-full truncate text-left text-[11px] text-[var(--muted)] hover:text-[var(--accent-strong)] hover:underline"
+                      onClick={() => {
+                        setSelectedClubUid(player.club_uid);
+                        setViewMode("clubs");
+                      }}
+                    >
+                      {player.club_name ?? t("common.freeAgent")}
+                    </button>
+                  ) : (
+                    <div className="mt-0.5 truncate text-[11px] text-[var(--muted)]">
+                      {player.club_name ?? t("common.freeAgent")}
+                    </div>
+                  )}
                   <div className="mt-0.5 flex items-center gap-1.5 text-[11px] text-[var(--muted)]">
                     <span>{t("common.yearsOld", { age: player.age ?? "?" })}</span>
                     <span className="text-[var(--line-strong)]">·</span>

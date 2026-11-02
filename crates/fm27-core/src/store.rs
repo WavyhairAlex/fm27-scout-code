@@ -11,12 +11,33 @@ use serde::{Deserialize, Serialize};
 use crate::error::{Error, Result};
 use crate::layout::{ATTRIBUTE_KEYS, HIDDEN_ATTRIBUTE_KEYS, PERSONALITY_KEYS, POSITION_KEYS};
 use crate::model::{
-    Attributes, Club, Competition, Contract, ParseReport, Personality, Player, Positions,
-    SaveSummary, Trait,
+    Attributes, Club, ClubDetail, ClubLink, Competition, Contract, FinanceMonth, ParseReport,
+    Personality, Player, Positions, SaveSummary, Stadium, Trait,
 };
 use crate::parse::ParsedSave;
 
 const SCHEMA: &str = include_str!("../../../shared/schema.sql");
+
+const CLUB_CTE: &str = "WITH stats AS (
+        SELECT p.club_uid,
+               COUNT(*) AS player_count,
+               AVG(p.age) AS average_age,
+               AVG(p.ca) AS average_ca,
+               SUM(COALESCE(p.transfer_value, 0)) AS total_value,
+               SUM(COALESCE(c2.wage, 0)) AS total_wage
+        FROM players p
+        LEFT JOIN contracts c2 ON c2.save_id = p.save_id AND c2.player_uid = p.uid
+        WHERE p.save_id = ? AND p.club_uid IS NOT NULL
+        GROUP BY p.club_uid
+      ),
+      stads AS (
+        SELECT owner_club_uid,
+               COUNT(*) AS stadium_count,
+               MAX(all_seater_capacity) AS stadium_capacity
+        FROM stadiums
+        WHERE save_id = ? AND owner_club_uid IS NOT NULL
+        GROUP BY owner_club_uid
+      )";
 
 pub struct Store {
     conn: Connection,
@@ -121,6 +142,98 @@ pub struct PlayerPage {
     pub page: u32,
     pub page_size: u32,
     pub rows: Vec<PlayerRow>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(default)]
+pub struct ClubQuery {
+    pub save_id: i64,
+    pub search: Option<String>,
+    pub nation_ids: Vec<u32>,
+    pub genders: Vec<u8>,
+    pub reputation_min: Option<u16>,
+    pub reputation_max: Option<u16>,
+    pub last_position_min: Option<u8>,
+    pub last_position_max: Option<u8>,
+    pub has_finances: Option<bool>,
+    pub balance_min: Option<i64>,
+    pub balance_max: Option<i64>,
+    pub transfer_budget_min: Option<i64>,
+    pub transfer_budget_max: Option<i64>,
+    pub wage_budget_min: Option<i64>,
+    pub wage_budget_max: Option<i64>,
+    pub corporate_facilities_min: Option<u8>,
+    pub corporate_facilities_max: Option<u8>,
+    pub player_count_min: Option<i64>,
+    pub player_count_max: Option<i64>,
+    pub average_ca_min: Option<f64>,
+    pub average_ca_max: Option<f64>,
+    pub total_value_min: Option<i64>,
+    pub total_value_max: Option<i64>,
+    pub has_stadium: Option<bool>,
+    pub stadium_capacity_min: Option<i64>,
+    pub sort: Vec<SortRule>,
+    pub sort_by: Option<String>,
+    pub sort_dir: Option<String>,
+    pub page: Option<u32>,
+    pub page_size: Option<u32>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct ClubRow {
+    pub uid: u32,
+    pub unique_id: Option<u32>,
+    pub name: String,
+    pub short_name: String,
+    pub nation_id: u32,
+    pub nation_name: Option<String>,
+    pub fa_nation_id: u32,
+    pub fa_nation_name: Option<String>,
+    pub city_id: Option<u32>,
+    pub gender: Option<u8>,
+    pub reputation: Option<u16>,
+    pub last_league_position: Option<u8>,
+    pub parent_club_uid: Option<u32>,
+    pub parent_club_name: Option<String>,
+    pub corporate_facilities: Option<u8>,
+    pub finance_month: Option<String>,
+    pub balance: Option<i64>,
+    pub transfer_budget_allocated: Option<i64>,
+    pub transfer_budget_remaining: Option<i64>,
+    pub wage_budget_weekly: Option<i64>,
+    pub wage_payroll_weekly: Option<i64>,
+    pub net: Option<i64>,
+    pub player_count: u64,
+    pub average_age: Option<f64>,
+    pub average_ca: Option<f64>,
+    pub total_value: Option<i64>,
+    pub total_wage: Option<i64>,
+    pub stadium_count: u64,
+    pub stadium_capacity: Option<i64>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct ClubPage {
+    pub total: u64,
+    pub page: u32,
+    pub page_size: u32,
+    pub rows: Vec<ClubRow>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct ClubFilterOptions {
+    pub nations: Vec<FilterOption>,
+    pub genders: Vec<FilterOption>,
+    pub min_reputation: Option<u16>,
+    pub max_reputation: Option<u16>,
+    pub min_balance: Option<i64>,
+    pub max_balance: Option<i64>,
+    pub min_transfer_budget: Option<i64>,
+    pub max_transfer_budget: Option<i64>,
+    pub min_wage_budget: Option<i64>,
+    pub max_wage_budget: Option<i64>,
+    pub clubs_with_finances: u64,
+    pub clubs_with_stadiums: u64,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -432,28 +545,113 @@ impl Store {
         }
 
         {
+            let mut latest_finance: HashMap<u32, &FinanceMonth> = HashMap::new();
+            for finance in &parsed.club_finances {
+                match latest_finance.get(&finance.club_uid) {
+                    Some(current) if current.month >= finance.month => {}
+                    _ => {
+                        latest_finance.insert(finance.club_uid, finance);
+                    }
+                }
+            }
             let mut club_stmt = transaction.prepare(
                 "INSERT INTO clubs
-                 (save_id, uid, name, short_name, nation_id, nation_name, fa_nation_id,
-                  fa_nation_name, gender, reputation, last_league_position, parent_club_uid,
-                  teams_json)
-                 VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13)",
+                 (save_id, uid, unique_id, name, short_name, nation_id, nation_name, fa_nation_id,
+                  fa_nation_name, city_id, gender, reputation, last_league_position,
+                  parent_club_uid, parent_club_name, corporate_facilities, finance_month, balance,
+                  transfer_budget_allocated, transfer_budget_remaining, wage_budget_weekly,
+                  wage_payroll_weekly, net, teams_json)
+                 VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18,
+                         ?19,?20,?21,?22,?23,?24)",
             )?;
             for club in &parsed.clubs {
+                let finance = latest_finance.get(&club.uid);
                 club_stmt.execute(params![
                     save_id,
                     club.uid,
+                    club.unique_id,
                     club.name,
                     club.short_name,
                     club.nation_id,
                     club.nation_name,
                     club.fa_nation_id,
                     club.fa_nation_name,
+                    club.city_id,
                     club.gender,
                     club.reputation,
                     club.last_league_position,
                     club.parent_club_uid,
+                    club.parent_club_name,
+                    club.corporate_facilities,
+                    finance.map(|row| row.month.as_str()),
+                    finance.map(|row| row.balance),
+                    finance.map(|row| row.transfer_budget_allocated),
+                    finance.map(|row| row.transfer_budget_remaining),
+                    finance.map(|row| row.wage_budget_weekly),
+                    finance.map(|row| row.wage_payroll_weekly),
+                    finance.map(|row| row.net),
                     serde_json::to_string(&club.teams)?,
+                ])?;
+            }
+        }
+
+        {
+            let mut finance_stmt = transaction.prepare(
+                "INSERT INTO club_finances
+                 (save_id, club_uid, month, balance, transfer_budget_allocated,
+                  transfer_budget_remaining, wage_budget_weekly, wage_payroll_weekly,
+                  income_excluding_transfers, net_transfers, wage_bill, net,
+                  expenditure_excluding_transfers, total_income, total_expenditure)
+                 VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15)",
+            )?;
+            for finance in &parsed.club_finances {
+                finance_stmt.execute(params![
+                    save_id,
+                    finance.club_uid,
+                    finance.month,
+                    finance.balance,
+                    finance.transfer_budget_allocated,
+                    finance.transfer_budget_remaining,
+                    finance.wage_budget_weekly,
+                    finance.wage_payroll_weekly,
+                    finance.income_excluding_transfers,
+                    finance.net_transfers,
+                    finance.wage_bill,
+                    finance.net,
+                    finance.expenditure_excluding_transfers,
+                    finance.total_income,
+                    finance.total_expenditure,
+                ])?;
+            }
+        }
+
+        {
+            let mut stadium_stmt = transaction.prepare(
+                "INSERT INTO stadiums
+                 (save_id, uid, name, all_seater_capacity, expansion_capacity, capacity,
+                  owner_club_uid, owner_club_name, pitch_length_dm, pitch_width_dm,
+                  pitch_min_length_dm, pitch_min_width_dm, pitch_max_length_dm,
+                  pitch_max_width_dm, built_date, rebuilt_date)
+                 VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16)",
+            )?;
+            for stadium in &parsed.stadiums {
+                stadium_stmt.execute(params![
+                    save_id,
+                    stadium.uid,
+                    stadium.name,
+                    stadium.all_seater_capacity,
+                    stadium.expansion_capacity,
+                    stadium.capacity,
+                    stadium.owner_club_uid,
+                    stadium.owner_club_name,
+                    stadium.pitch_length_dm,
+                    stadium.pitch_width_dm,
+                    stadium.pitch_min_length_dm,
+                    stadium.pitch_min_width_dm,
+                    stadium.pitch_max_length_dm,
+                    stadium.pitch_max_width_dm,
+                    stadium.built_date,
+                    stadium.rebuilt_date,
                 ])?;
             }
         }
@@ -998,6 +1196,333 @@ impl Store {
         })
     }
 
+    pub fn query_clubs(&self, query: &ClubQuery) -> Result<ClubPage> {
+        let mut params: Vec<Value> = Vec::new();
+        params.push(Value::Integer(query.save_id));
+        params.push(Value::Integer(query.save_id));
+        let where_sql = build_club_where(query, &mut params)?;
+        let count_sql = format!(
+            "{} SELECT COUNT(*)
+             FROM clubs c
+             LEFT JOIN stats s ON s.club_uid = c.uid
+             LEFT JOIN stads st ON st.owner_club_uid = c.uid
+             WHERE {where_sql}",
+            CLUB_CTE
+        );
+        let total: u64 =
+            self.conn
+                .query_row(&count_sql, params_from_iter(params.iter()), |row| {
+                    row.get(0)
+                })?;
+
+        let page = query.page.unwrap_or(0);
+        let page_size = query.page_size.unwrap_or(100).clamp(1, 500);
+        let order = club_order_by(query);
+        let sql = format!(
+            "{} SELECT c.uid, c.unique_id, COALESCE(c.name, ''), COALESCE(c.short_name, ''),
+                    c.nation_id, c.nation_name, c.fa_nation_id, c.fa_nation_name, c.city_id,
+                    c.gender, c.reputation, c.last_league_position, c.parent_club_uid,
+                    c.parent_club_name, c.corporate_facilities, c.finance_month, c.balance,
+                    c.transfer_budget_allocated, c.transfer_budget_remaining,
+                    c.wage_budget_weekly, c.wage_payroll_weekly, c.net,
+                    COALESCE(s.player_count, 0), s.average_age, s.average_ca, s.total_value,
+                    s.total_wage, COALESCE(st.stadium_count, 0), st.stadium_capacity
+             FROM clubs c
+             LEFT JOIN stats s ON s.club_uid = c.uid
+             LEFT JOIN stads st ON st.owner_club_uid = c.uid
+             WHERE {where_sql}
+             {order}
+             LIMIT ? OFFSET ?",
+            CLUB_CTE
+        );
+        let mut page_params = params;
+        page_params.push(Value::Integer(page_size as i64));
+        page_params.push(Value::Integer((page as i64) * page_size as i64));
+        let mut statement = self.conn.prepare(&sql)?;
+        let rows = statement.query_map(params_from_iter(page_params.iter()), |row| {
+            Ok(ClubRow {
+                uid: row.get(0)?,
+                unique_id: row.get(1)?,
+                name: row.get(2)?,
+                short_name: row.get(3)?,
+                nation_id: row.get(4)?,
+                nation_name: row.get(5)?,
+                fa_nation_id: row.get(6)?,
+                fa_nation_name: row.get(7)?,
+                city_id: row.get(8)?,
+                gender: row.get(9)?,
+                reputation: row.get(10)?,
+                last_league_position: row.get(11)?,
+                parent_club_uid: row.get(12)?,
+                parent_club_name: row.get(13)?,
+                corporate_facilities: row.get(14)?,
+                finance_month: row.get(15)?,
+                balance: row.get(16)?,
+                transfer_budget_allocated: row.get(17)?,
+                transfer_budget_remaining: row.get(18)?,
+                wage_budget_weekly: row.get(19)?,
+                wage_payroll_weekly: row.get(20)?,
+                net: row.get(21)?,
+                player_count: row.get::<_, i64>(22)? as u64,
+                average_age: row.get(23)?,
+                average_ca: row.get(24)?,
+                total_value: row.get(25)?,
+                total_wage: row.get(26)?,
+                stadium_count: row.get::<_, i64>(27)? as u64,
+                stadium_capacity: row.get(28)?,
+            })
+        })?;
+        let rows = rows.collect::<std::result::Result<Vec<_>, _>>()?;
+        Ok(ClubPage {
+            total,
+            page,
+            page_size,
+            rows,
+        })
+    }
+
+    pub fn get_club(&self, save_id: i64, uid: u32) -> Result<Option<ClubDetail>> {
+        let row = self
+            .conn
+            .query_row(
+                "SELECT uid, unique_id, COALESCE(name, ''), COALESCE(short_name, ''),
+                        nation_id, nation_name, fa_nation_id, fa_nation_name, city_id, gender,
+                        reputation, last_league_position, parent_club_uid, parent_club_name,
+                        corporate_facilities, teams_json
+                 FROM clubs WHERE save_id = ?1 AND uid = ?2",
+                params![save_id, uid],
+                |row| {
+                    Ok((
+                        row.get::<_, u32>(0)?,
+                        row.get::<_, Option<u32>>(1)?,
+                        row.get::<_, String>(2)?,
+                        row.get::<_, String>(3)?,
+                        row.get::<_, u32>(4)?,
+                        row.get::<_, Option<String>>(5)?,
+                        row.get::<_, u32>(6)?,
+                        row.get::<_, Option<String>>(7)?,
+                        row.get::<_, Option<u32>>(8)?,
+                        row.get::<_, Option<u8>>(9)?,
+                        row.get::<_, Option<u16>>(10)?,
+                        row.get::<_, Option<u8>>(11)?,
+                        row.get::<_, Option<u32>>(12)?,
+                        row.get::<_, Option<String>>(13)?,
+                        row.get::<_, Option<u8>>(14)?,
+                        row.get::<_, Option<String>>(15)?,
+                    ))
+                },
+            )
+            .optional()?;
+        let Some((
+            uid,
+            unique_id,
+            name,
+            short_name,
+            nation_id,
+            nation_name,
+            fa_nation_id,
+            fa_nation_name,
+            city_id,
+            gender,
+            reputation,
+            last_league_position,
+            parent_club_uid,
+            parent_club_name,
+            corporate_facilities,
+            teams_json,
+        )) = row
+        else {
+            return Ok(None);
+        };
+        let club = Club {
+            uid,
+            unique_id,
+            name,
+            short_name,
+            nation_id,
+            nation_name,
+            fa_nation_id,
+            fa_nation_name,
+            city_id,
+            gender,
+            reputation,
+            last_league_position,
+            parent_club_uid,
+            parent_club_name,
+            corporate_facilities,
+            teams: teams_json
+                .and_then(|text| serde_json::from_str(&text).ok())
+                .unwrap_or_default(),
+        };
+        let finance_months = self.club_finance_months(save_id, uid)?;
+        let stadiums = self.club_stadiums(save_id, uid)?;
+        let child_clubs = self.club_children(save_id, uid)?;
+        Ok(Some(ClubDetail {
+            club,
+            finance_months,
+            stadiums,
+            child_clubs,
+        }))
+    }
+
+    fn club_finance_months(&self, save_id: i64, club_uid: u32) -> Result<Vec<FinanceMonth>> {
+        let mut statement = self.conn.prepare(
+            "SELECT f.club_uid, COALESCE(c.name, ''), f.month, f.balance,
+                    f.transfer_budget_allocated, f.transfer_budget_remaining,
+                    f.wage_budget_weekly, f.wage_payroll_weekly, f.income_excluding_transfers,
+                    f.net_transfers, f.wage_bill, f.net, f.expenditure_excluding_transfers,
+                    f.total_income, f.total_expenditure
+             FROM club_finances f
+             LEFT JOIN clubs c ON c.save_id = f.save_id AND c.uid = f.club_uid
+             WHERE f.save_id = ?1 AND f.club_uid = ?2
+             ORDER BY f.month",
+        )?;
+        let rows = statement.query_map(params![save_id, club_uid], |row| {
+            Ok(FinanceMonth {
+                club_uid: row.get(0)?,
+                club_name: row.get(1)?,
+                month: row.get(2)?,
+                balance: row.get(3)?,
+                transfer_budget_allocated: row.get(4)?,
+                transfer_budget_remaining: row.get(5)?,
+                wage_budget_weekly: row.get(6)?,
+                wage_payroll_weekly: row.get(7)?,
+                income_excluding_transfers: row.get(8)?,
+                net_transfers: row.get(9)?,
+                wage_bill: row.get(10)?,
+                net: row.get(11)?,
+                expenditure_excluding_transfers: row.get(12)?,
+                total_income: row.get(13)?,
+                total_expenditure: row.get(14)?,
+            })
+        })?;
+        rows.collect::<std::result::Result<Vec<_>, _>>()
+            .map_err(Error::from)
+    }
+
+    fn club_stadiums(&self, save_id: i64, club_uid: u32) -> Result<Vec<Stadium>> {
+        let mut statement = self.conn.prepare(
+            "SELECT uid, name, all_seater_capacity, expansion_capacity, capacity,
+                    owner_club_uid, owner_club_name, pitch_length_dm, pitch_width_dm,
+                    pitch_min_length_dm, pitch_min_width_dm, pitch_max_length_dm,
+                    pitch_max_width_dm, built_date, rebuilt_date
+             FROM stadiums WHERE save_id = ?1 AND owner_club_uid = ?2
+             ORDER BY all_seater_capacity DESC, uid",
+        )?;
+        let rows = statement.query_map(params![save_id, club_uid], |row| {
+            Ok(Stadium {
+                uid: row.get(0)?,
+                name: row.get(1)?,
+                all_seater_capacity: row.get(2)?,
+                expansion_capacity: row.get(3)?,
+                capacity: row.get(4)?,
+                owner_club_uid: row.get(5)?,
+                owner_club_name: row.get(6)?,
+                pitch_length_dm: row.get(7)?,
+                pitch_width_dm: row.get(8)?,
+                pitch_min_length_dm: row.get(9)?,
+                pitch_min_width_dm: row.get(10)?,
+                pitch_max_length_dm: row.get(11)?,
+                pitch_max_width_dm: row.get(12)?,
+                built_date: row.get(13)?,
+                rebuilt_date: row.get(14)?,
+            })
+        })?;
+        rows.collect::<std::result::Result<Vec<_>, _>>()
+            .map_err(Error::from)
+    }
+
+    fn club_children(&self, save_id: i64, parent_uid: u32) -> Result<Vec<ClubLink>> {
+        let mut statement = self.conn.prepare(
+            "SELECT uid, COALESCE(name, ''), COALESCE(short_name, '')
+             FROM clubs WHERE save_id = ?1 AND parent_club_uid = ?2 ORDER BY name",
+        )?;
+        let rows = statement.query_map(params![save_id, parent_uid], |row| {
+            Ok(ClubLink {
+                uid: row.get(0)?,
+                name: row.get(1)?,
+                short_name: row.get(2)?,
+            })
+        })?;
+        rows.collect::<std::result::Result<Vec<_>, _>>()
+            .map_err(Error::from)
+    }
+
+    pub fn club_filter_options(&self, save_id: i64) -> Result<ClubFilterOptions> {
+        let mut nation_stmt = self.conn.prepare(
+            "SELECT nation_id, COALESCE(MAX(nation_name), 'Nation #' || nation_id), COUNT(*)
+             FROM clubs WHERE save_id = ?1 GROUP BY nation_id
+             ORDER BY COUNT(*) DESC, nation_id",
+        )?;
+        let nations = nation_stmt
+            .query_map(params![save_id], |row| {
+                Ok(FilterOption {
+                    id: row.get(0)?,
+                    name: row.get(1)?,
+                    count: row.get(2)?,
+                })
+            })?
+            .collect::<std::result::Result<Vec<_>, _>>()?;
+        let mut gender_stmt = self.conn.prepare(
+            "SELECT gender, CASE gender WHEN 0 THEN 'Men' WHEN 1 THEN 'Women' ELSE 'Unknown' END,
+                    COUNT(*)
+             FROM clubs WHERE save_id = ?1 GROUP BY gender ORDER BY gender",
+        )?;
+        let genders = gender_stmt
+            .query_map(params![save_id], |row| {
+                Ok(FilterOption {
+                    id: row.get::<_, Option<u8>>(0)?.unwrap_or(255) as u32,
+                    name: row.get(1)?,
+                    count: row.get(2)?,
+                })
+            })?
+            .collect::<std::result::Result<Vec<_>, _>>()?;
+        let ranges = self.conn.query_row(
+            "SELECT MIN(reputation), MAX(reputation), MIN(balance), MAX(balance),
+                    MIN(transfer_budget_remaining), MAX(transfer_budget_remaining),
+                    MIN(wage_budget_weekly), MAX(wage_budget_weekly)
+             FROM clubs WHERE save_id = ?1",
+            params![save_id],
+            |row| {
+                Ok((
+                    row.get::<_, Option<u16>>(0)?,
+                    row.get::<_, Option<u16>>(1)?,
+                    row.get::<_, Option<i64>>(2)?,
+                    row.get::<_, Option<i64>>(3)?,
+                    row.get::<_, Option<i64>>(4)?,
+                    row.get::<_, Option<i64>>(5)?,
+                    row.get::<_, Option<i64>>(6)?,
+                    row.get::<_, Option<i64>>(7)?,
+                ))
+            },
+        )?;
+        let clubs_with_finances = self.conn.query_row(
+            "SELECT COUNT(*) FROM clubs WHERE save_id = ?1 AND finance_month IS NOT NULL",
+            params![save_id],
+            |row| row.get::<_, u64>(0),
+        )?;
+        let clubs_with_stadiums = self.conn.query_row(
+            "SELECT COUNT(DISTINCT owner_club_uid) FROM stadiums
+             WHERE save_id = ?1 AND owner_club_uid IS NOT NULL",
+            params![save_id],
+            |row| row.get::<_, u64>(0),
+        )?;
+        Ok(ClubFilterOptions {
+            nations,
+            genders,
+            min_reputation: ranges.0,
+            max_reputation: ranges.1,
+            min_balance: ranges.2,
+            max_balance: ranges.3,
+            min_transfer_budget: ranges.4,
+            max_transfer_budget: ranges.5,
+            min_wage_budget: ranges.6,
+            max_wage_budget: ranges.7,
+            clubs_with_finances,
+            clubs_with_stadiums,
+        })
+    }
+
     pub fn filter_options(&self, save_id: i64) -> Result<FilterOptions> {
         self.filter_options_with_query(save_id, None)
     }
@@ -1250,6 +1775,17 @@ fn migrate(conn: &Connection) -> Result<()> {
         ("clubs", "nation_name", "TEXT"),
         ("clubs", "fa_nation_name", "TEXT"),
         ("clubs", "gender", "INTEGER"),
+        ("clubs", "unique_id", "INTEGER"),
+        ("clubs", "city_id", "INTEGER"),
+        ("clubs", "parent_club_name", "TEXT"),
+        ("clubs", "corporate_facilities", "INTEGER"),
+        ("clubs", "finance_month", "TEXT"),
+        ("clubs", "balance", "INTEGER"),
+        ("clubs", "transfer_budget_allocated", "INTEGER"),
+        ("clubs", "transfer_budget_remaining", "INTEGER"),
+        ("clubs", "wage_budget_weekly", "INTEGER"),
+        ("clubs", "wage_payroll_weekly", "INTEGER"),
+        ("clubs", "net", "INTEGER"),
     ];
     for (table, column, definition) in COLUMNS {
         if !table_exists(conn, table)? {
@@ -1284,6 +1820,178 @@ fn table_exists(conn: &Connection, table: &str) -> Result<bool> {
 
 fn parse_json_column<T: serde::de::DeserializeOwned + Default>(text: String, _label: &str) -> T {
     serde_json::from_str(&text).unwrap_or_default()
+}
+
+fn build_club_where(query: &ClubQuery, params: &mut Vec<Value>) -> Result<String> {
+    let mut clauses = vec!["c.save_id = ?".to_owned()];
+    params.push(Value::Integer(query.save_id));
+
+    if let Some(search) = query
+        .search
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+    {
+        clauses.push(
+            "(c.name LIKE ? COLLATE NOCASE OR c.short_name LIKE ? COLLATE NOCASE \
+              OR CAST(c.uid AS TEXT) = ?)"
+                .to_owned(),
+        );
+        let pattern = format!("%{search}%");
+        params.push(Value::Text(pattern.clone()));
+        params.push(Value::Text(pattern));
+        params.push(Value::Text(search.to_owned()));
+    }
+    if !query.nation_ids.is_empty() {
+        let placeholders = vec!["?"; query.nation_ids.len()].join(",");
+        clauses.push(format!("c.nation_id IN ({placeholders})"));
+        for id in &query.nation_ids {
+            params.push(Value::Integer(*id as i64));
+        }
+    }
+    if !query.genders.is_empty() {
+        let placeholders = vec!["?"; query.genders.len()].join(",");
+        clauses.push(format!("c.gender IN ({placeholders})"));
+        for gender in &query.genders {
+            params.push(Value::Integer(*gender as i64));
+        }
+    }
+    add_range(
+        query.reputation_min,
+        query.reputation_max,
+        "c.reputation",
+        params,
+        &mut clauses,
+    );
+    add_range(
+        query.last_position_min,
+        query.last_position_max,
+        "c.last_league_position",
+        params,
+        &mut clauses,
+    );
+    if let Some(has_finances) = query.has_finances {
+        clauses.push(if has_finances {
+            "c.finance_month IS NOT NULL".to_owned()
+        } else {
+            "c.finance_month IS NULL".to_owned()
+        });
+    }
+    add_range(
+        query.balance_min,
+        query.balance_max,
+        "c.balance",
+        params,
+        &mut clauses,
+    );
+    add_range(
+        query.transfer_budget_min,
+        query.transfer_budget_max,
+        "c.transfer_budget_remaining",
+        params,
+        &mut clauses,
+    );
+    add_range(
+        query.wage_budget_min,
+        query.wage_budget_max,
+        "c.wage_budget_weekly",
+        params,
+        &mut clauses,
+    );
+    add_range(
+        query.corporate_facilities_min,
+        query.corporate_facilities_max,
+        "c.corporate_facilities",
+        params,
+        &mut clauses,
+    );
+    add_range(
+        query.player_count_min,
+        query.player_count_max,
+        "s.player_count",
+        params,
+        &mut clauses,
+    );
+    if let Some(min) = query.average_ca_min {
+        clauses.push("s.average_ca >= ?".to_owned());
+        params.push(Value::Real(min));
+    }
+    if let Some(max) = query.average_ca_max {
+        clauses.push("s.average_ca <= ?".to_owned());
+        params.push(Value::Real(max));
+    }
+    add_range(
+        query.total_value_min,
+        query.total_value_max,
+        "s.total_value",
+        params,
+        &mut clauses,
+    );
+    if let Some(has_stadium) = query.has_stadium {
+        clauses.push(if has_stadium {
+            "COALESCE(st.stadium_count, 0) > 0".to_owned()
+        } else {
+            "COALESCE(st.stadium_count, 0) = 0".to_owned()
+        });
+    }
+    if let Some(min) = query.stadium_capacity_min {
+        clauses.push("COALESCE(st.stadium_capacity, 0) >= ?".to_owned());
+        params.push(Value::Integer(min));
+    }
+    Ok(clauses.join(" AND "))
+}
+
+fn club_order_by(query: &ClubQuery) -> String {
+    let mut rules: Vec<(String, bool)> = query
+        .sort
+        .iter()
+        .filter(|rule| !rule.by.trim().is_empty())
+        .map(|rule| (rule.by.clone(), rule.dir.eq_ignore_ascii_case("asc")))
+        .collect();
+    if rules.is_empty() {
+        if let Some(by) = query.sort_by.as_deref().filter(|value| !value.is_empty()) {
+            rules.push((
+                by.to_owned(),
+                query
+                    .sort_dir
+                    .as_deref()
+                    .is_some_and(|value| value.eq_ignore_ascii_case("asc")),
+            ));
+        }
+    }
+    if rules.is_empty() {
+        rules.push(("reputation".to_owned(), false));
+    }
+    let mut parts = Vec::new();
+    for (by, ascending) in rules {
+        let expression = club_sort_expression(&by);
+        let direction = if ascending { "ASC" } else { "DESC" };
+        parts.push(format!("CASE WHEN {expression} IS NULL THEN 1 ELSE 0 END"));
+        parts.push(format!("{expression} {direction}"));
+    }
+    parts.push("c.uid ASC".to_owned());
+    format!("ORDER BY {}", parts.join(", "))
+}
+
+fn club_sort_expression(by: &str) -> String {
+    match by {
+        "name" => "c.name".to_owned(),
+        "short_name" => "c.short_name".to_owned(),
+        "nation" | "nation_id" => "c.nation_id".to_owned(),
+        "reputation" => "c.reputation".to_owned(),
+        "last_position" | "last_league_position" => "c.last_league_position".to_owned(),
+        "balance" => "c.balance".to_owned(),
+        "transfer_budget" | "transfer_budget_remaining" => "c.transfer_budget_remaining".to_owned(),
+        "wage_budget" | "wage_budget_weekly" => "c.wage_budget_weekly".to_owned(),
+        "corporate_facilities" => "c.corporate_facilities".to_owned(),
+        "player_count" => "s.player_count".to_owned(),
+        "average_ca" => "s.average_ca".to_owned(),
+        "total_value" => "s.total_value".to_owned(),
+        "total_wage" => "s.total_wage".to_owned(),
+        "stadium_capacity" => "st.stadium_capacity".to_owned(),
+        "uid" => "c.uid".to_owned(),
+        _ => "c.reputation".to_owned(),
+    }
 }
 
 fn build_where(query: &PlayerQuery, params: &mut Vec<Value>) -> Result<String> {

@@ -50,6 +50,42 @@ export interface Filters {
   contractEndAfter: string | null;
 }
 
+export interface ClubFilters {
+  search: string;
+  nationIds: number[];
+  genders: number[];
+  reputationMin: number | null;
+  reputationMax: number | null;
+  hasFinances: boolean | null;
+  balanceMin: number | null;
+  balanceMax: number | null;
+  transferBudgetMin: number | null;
+  transferBudgetMax: number | null;
+  wageBudgetMin: number | null;
+  wageBudgetMax: number | null;
+  corporateFacilitiesMin: number | null;
+  playerCountMin: number | null;
+  hasStadium: boolean | null;
+}
+
+export const EMPTY_CLUB_FILTERS: ClubFilters = {
+  search: "",
+  nationIds: [],
+  genders: [],
+  reputationMin: null,
+  reputationMax: null,
+  hasFinances: null,
+  balanceMin: null,
+  balanceMax: null,
+  transferBudgetMin: null,
+  transferBudgetMax: null,
+  wageBudgetMin: null,
+  wageBudgetMax: null,
+  corporateFacilitiesMin: null,
+  playerCountMin: null,
+  hasStadium: null,
+};
+
 export const EMPTY_FILTERS: Filters = {
   search: "",
   clubUids: [],
@@ -107,16 +143,25 @@ export interface PendingEdit {
   request: PlayerEditRequest;
 }
 
+export type ViewMode = "players" | "clubs";
+
 interface AppState {
   saveId: number | null;
   savedViews: SavedView[];
   summary: SaveSummary | null;
+  viewMode: ViewMode;
   filterOptions: FilterOptions | null;
   filters: Filters;
   sort: SortRule[];
   page: number;
   pageSize: number;
   selectedUid: number | null;
+  clubFilters: ClubFilters;
+  clubSort: SortRule[];
+  clubPage: number;
+  clubPageSize: number;
+  selectedClubUid: number | null;
+  clubEditOpen: boolean;
   compareUids: number[];
   hiddenEnabled: boolean;
   displayMode: DisplayMode;
@@ -137,9 +182,16 @@ interface AppState {
   parseProgress: ParseProgress | null;
   setSession: (saveId: number, summary: SaveSummary | null) => void;
   clearSession: () => void;
+  setViewMode: (mode: ViewMode) => void;
   setFilterOptions: (options: FilterOptions | null) => void;
   patchFilters: (patch: Partial<Filters>) => void;
   resetFilters: () => void;
+  patchClubFilters: (patch: Partial<ClubFilters>) => void;
+  resetClubFilters: () => void;
+  setClubSort: (by: string, additive?: boolean) => void;
+  setClubPage: (page: number) => void;
+  setSelectedClubUid: (uid: number | null) => void;
+  setClubEditOpen: (open: boolean) => void;
   saveView: (name: string) => void;
   applyView: (id: string) => void;
   deleteView: (id: string) => void;
@@ -181,12 +233,19 @@ export const useAppStore = create<AppState>((set, get) => ({
   saveId: null,
   savedViews: loadSavedViews(),
   summary: null,
+  viewMode: "players",
   filterOptions: null,
   filters: EMPTY_FILTERS,
   sort: [{ by: "ca", dir: "desc" }],
   page: 0,
   pageSize: 150,
   selectedUid: null,
+  clubFilters: EMPTY_CLUB_FILTERS,
+  clubSort: [{ by: "reputation", dir: "desc" }],
+  clubPage: 0,
+  clubPageSize: 100,
+  selectedClubUid: null,
+  clubEditOpen: false,
   compareUids: [],
   hiddenEnabled: false,
   displayMode: "display",
@@ -213,6 +272,11 @@ export const useAppStore = create<AppState>((set, get) => ({
       sort: [{ by: "ca", dir: "desc" }],
       page: 0,
       selectedUid: null,
+      clubFilters: EMPTY_CLUB_FILTERS,
+      clubSort: [{ by: "reputation", dir: "desc" }],
+      clubPage: 0,
+      selectedClubUid: null,
+      clubEditOpen: false,
       compareUids: [],
       editOpen: false,
       pendingOpen: false,
@@ -224,6 +288,8 @@ export const useAppStore = create<AppState>((set, get) => ({
       summary: null,
       filterOptions: null,
       selectedUid: null,
+      selectedClubUid: null,
+      clubEditOpen: false,
       compareUids: [],
       settingsOpen: false,
       compareOpen: false,
@@ -233,10 +299,41 @@ export const useAppStore = create<AppState>((set, get) => ({
       pendingOpen: false,
       pendingEdits: {},
     }),
+  setViewMode: (viewMode) => set({ viewMode }),
   setFilterOptions: (filterOptions) => set({ filterOptions }),
   patchFilters: (patch) =>
     set((state) => ({ filters: { ...state.filters, ...patch }, page: 0 })),
   resetFilters: () => set({ filters: EMPTY_FILTERS, page: 0 }),
+  patchClubFilters: (patch) =>
+    set((state) => ({ clubFilters: { ...state.clubFilters, ...patch }, clubPage: 0 })),
+  resetClubFilters: () => set({ clubFilters: EMPTY_CLUB_FILTERS, clubPage: 0 }),
+  setClubSort: (by, additive = false) =>
+    set((state) => {
+      if (!additive) {
+        const current = state.clubSort[0];
+        const dir: "asc" | "desc" =
+          state.clubSort.length === 1 && current?.by === by && current.dir === "desc"
+            ? "asc"
+            : "desc";
+        return { clubSort: [{ by, dir }], clubPage: 0 };
+      }
+      const existing = state.clubSort.find((rule) => rule.by === by);
+      if (existing) {
+        return {
+          clubSort: state.clubSort.map((rule) =>
+            rule.by === by ? { ...rule, dir: rule.dir === "desc" ? "asc" : "desc" } : rule,
+          ),
+          clubPage: 0,
+        };
+      }
+      return {
+        clubSort: [...state.clubSort, { by, dir: "desc" as const }].slice(0, 4),
+        clubPage: 0,
+      };
+    }),
+  setClubPage: (clubPage) => set({ clubPage }),
+  setSelectedClubUid: (selectedClubUid) => set({ selectedClubUid }),
+  setClubEditOpen: (clubEditOpen) => set({ clubEditOpen }),
   saveView: (name) => {
     const trimmed = name.trim();
     if (!trimmed) return;

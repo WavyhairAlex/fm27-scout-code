@@ -73,6 +73,57 @@ after_finance[5..7].count_bytes = 2 (FM26: 1)
 Initial club uid is 0 and has no anchor; it comes from the table's first row.
 Anchor scan fallback: `FF FF FF FF` at record +17.
 
+### Club finance chain
+
+A club that keeps a monthly series stores a counted run of 49-byte rows inside
+its own record. The count is a u32 at `row - 4`; the full chain count range is
+3–1000, with a balanced 1–2 row short chain as a fallback.
+
+```text
++0   tag                 01
++1   balance             i32
++5   transfer allocated  i32
++9   transfer remaining  i32
++13  wage budget         u32
++17  wage payroll        u32
++21  income excl. transfers i32
++25  net transfers       i32
++29  wage bill           i32
++33  net                 i32
++37  expenditure excl. transfers i32
++41  total income        i32
++45  total expenditure   i32
+```
+
+The corporate-facilities byte sits 50 bytes past the end of the chain, range
+1–20. Only clubs in the tracked league nations keep a chain.
+
+### Stadium table
+
+Rows are 181 bytes, unless bit `0x10` of the flags byte at +156 is set: then a
+u32 name length at +158 and that many UTF-8 bytes at +162 follow, and the row is
+`181 + 4 + name_length` bytes.
+
+```text
++0   ordinal             u32
++4   uid                 u32 (stored uid = uid - 1)
++8   uid copy            u32
++12  zero byte           u8
++13  all-seater capacity u32
++21  expansion capacity  u32
++29  owner club index    u32 (FFFFFFFF = none)
++34  capacity            u32
++38  pitch length        u16 (decimetres)
++40  pitch width         u16
++50  built date          game date
++54  rebuilt date        game date
++67.. pitch min/max      four u16
++156 flags               u8
+```
+
+The table is located by twelve consecutive rows carrying ordinals 1, 2, 3 …,
+the uid twice and a zero byte. Ownership is stored; home-ground use is not.
+
 ## Contract
 
 ```text

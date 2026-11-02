@@ -7,7 +7,13 @@ import type {
   BatchEditResult,
   CaEstimate,
   CaEstimateRequest,
+  ClubDetail,
+  ClubEditRequest,
+  ClubFilterOptions,
+  ClubPage,
+  ClubQuery,
   Competition,
+  EditClubResult,
   EditPlayerResult,
   ExportReport,
   FilterOptions,
@@ -31,10 +37,13 @@ import {
   MOCK_SUMMARY,
   MOCK_TRAIT_OPTIONS,
   mockAnalysisOverview,
+  mockClubDetail,
+  mockClubFilterOptions,
   mockFilterOptions,
   mockGrowthHistory,
   mockPlayerRoles,
   mockQuery,
+  mockQueryClubs,
   mockSquadAnalysis,
 } from "./mock";
 
@@ -86,6 +95,82 @@ export async function getPlayer(
 ): Promise<Player | null> {
   if (!isTauri) return MOCK_PLAYERS.find((player) => player.uid === uid) ?? null;
   return invoke<Player | null>("get_player", { saveId, uid, includeHidden });
+}
+
+export async function queryClubs(query: ClubQuery): Promise<ClubPage> {
+  if (!isTauri) return mockQueryClubs(query);
+  return invoke<ClubPage>("query_clubs", { query });
+}
+
+export async function getClub(saveId: number, uid: number): Promise<ClubDetail | null> {
+  if (!isTauri) return mockClubDetail(uid);
+  return invoke<ClubDetail | null>("get_club", { saveId, uid });
+}
+
+export async function getClubFilterOptions(saveId: number): Promise<ClubFilterOptions> {
+  if (!isTauri) return mockClubFilterOptions();
+  return invoke<ClubFilterOptions>("club_filter_options", { saveId });
+}
+
+export async function editClub(
+  saveId: number,
+  clubUid: number,
+  outputPath: string,
+  request: ClubEditRequest,
+): Promise<EditClubResult> {
+  if (!isTauri) {
+    const changes = [
+      ...(request.reputation != null
+        ? [{ field: "reputation", before: 0, after: request.reputation }]
+        : []),
+      ...(request.corporate_facilities != null
+        ? [{ field: "corporate_facilities", before: 0, after: request.corporate_facilities }]
+        : []),
+      ...(request.finances?.balance != null
+        ? [{ field: "finance.balance", before: 0, after: request.finances.balance }]
+        : []),
+      ...(request.finances?.transfer_budget_remaining != null
+        ? [
+            {
+              field: "finance.transfer_budget_remaining",
+              before: 0,
+              after: request.finances.transfer_budget_remaining,
+            },
+          ]
+        : []),
+      ...(request.finances?.wage_budget_weekly != null
+        ? [
+            {
+              field: "finance.wage_budget_weekly",
+              before: 0,
+              after: request.finances.wage_budget_weekly,
+            },
+          ]
+        : []),
+      ...request.stadiums.flatMap((stadium) => [
+        ...(stadium.all_seater_capacity != null
+          ? [
+              {
+                field: "stadium.all_seater_capacity",
+                before: 0,
+                after: stadium.all_seater_capacity,
+              },
+            ]
+          : []),
+        ...(stadium.expansion_capacity != null
+          ? [
+              {
+                field: "stadium.expansion_capacity",
+                before: 0,
+                after: stadium.expansion_capacity,
+              },
+            ]
+          : []),
+      ]),
+    ];
+    return { output: outputPath, file_size: 0, changes, warnings: [] };
+  }
+  return invoke<EditClubResult>("edit_club", { saveId, clubUid, outputPath, request });
 }
 
 export async function savePlayerEdits(
@@ -291,7 +376,7 @@ export async function appInfo(): Promise<AppInfo> {
   if (!isTauri) {
     return {
       data_dir: "~/Library/Application Support/com.fm27scout.desktop",
-      version: "1.0.0",
+      version: "1.1.0",
       nation_names: 228,
       competition_names: 0,
     };
@@ -300,7 +385,7 @@ export async function appInfo(): Promise<AppInfo> {
 }
 
 export async function updaterInfo(): Promise<UpdaterInfo> {
-  if (!isTauri) return { configured: false, version: "1.0.0" };
+  if (!isTauri) return { configured: false, version: "1.1.0" };
   return invoke<UpdaterInfo>("updater_info");
 }
 

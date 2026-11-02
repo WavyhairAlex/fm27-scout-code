@@ -4,6 +4,7 @@ use std::path::{Path, PathBuf};
 use anyhow::{Context, Result, anyhow, bail};
 use clap::{Parser, Subcommand};
 use fm27_core::{
+    club_editor::{ClubEditRequest, ClubEditor, ClubFinanceEdit, StadiumCapacityEdit},
     container::SaveFile,
     editor::{AttributeEdit, PlayerEditRequest, PlayerEditor},
     inspect_save,
@@ -64,6 +65,9 @@ enum Command {
         save: PathBuf,
         #[arg(long)]
         output: Option<PathBuf>,
+        /// Include monthly finances, corporate facilities and stadiums.
+        #[arg(long)]
+        details: bool,
     },
     /// Parse a save and print the competition index as JSON.
     Competitions {
@@ -98,6 +102,53 @@ enum Command {
         /// Remove a trait bit (0-63).
         #[arg(long = "untrait", value_name = "BIT")]
         untraits: Vec<u8>,
+        /// Output path. Defaults to `<save stem>.edited.fm` next to the source.
+        #[arg(long)]
+        output: Option<PathBuf>,
+        /// Internal save name stored in the new file, for test copies.
+        #[arg(long)]
+        save_name: Option<String>,
+        /// Overwrite the output file if it already exists.
+        #[arg(long)]
+        force: bool,
+        /// Print the planned changes without writing a save.
+        #[arg(long)]
+        dry_run: bool,
+        /// zstd compression level for the rebuilt game_db (1-22).
+        #[arg(long, default_value_t = 3)]
+        compression_level: i32,
+    },
+    /// Edit low-risk club fields in a copy of a save.
+    EditClub {
+        /// Source .fm save. It is opened read-only.
+        save: PathBuf,
+        /// Club uid from `fm27scout clubs`.
+        #[arg(long)]
+        club_uid: u32,
+        /// Club reputation (1-10000).
+        #[arg(long)]
+        reputation: Option<u16>,
+        /// Corporate facilities rating (1-20). Only clubs with a finance chain have one.
+        #[arg(long)]
+        corporate_facilities: Option<u8>,
+        /// Latest-month club balance.
+        #[arg(long)]
+        balance: Option<i64>,
+        /// Latest-month transfer budget remaining.
+        #[arg(long)]
+        transfer_budget: Option<i64>,
+        /// Latest-month weekly wage budget.
+        #[arg(long)]
+        wage_budget: Option<i64>,
+        /// Stadium uid to edit. Must be owned by --club-uid.
+        #[arg(long)]
+        stadium_uid: Option<u32>,
+        /// All-seater capacity for --stadium-uid.
+        #[arg(long)]
+        all_seater: Option<u32>,
+        /// Expansion capacity for --stadium-uid.
+        #[arg(long)]
+        expansion: Option<u32>,
         /// Output path. Defaults to `<save stem>.edited.fm` next to the source.
         #[arg(long)]
         output: Option<PathBuf>,
@@ -199,13 +250,28 @@ fn main() -> Result<()> {
                 }))?
             );
         }
-        Command::Clubs { save, output } => {
+        Command::Clubs {
+            save,
+            output,
+            details,
+        } => {
             let parsed = parse_save(&save)?;
             let mut writer: Box<dyn Write> = match &output {
                 Some(path) => Box::new(BufWriter::new(std::fs::File::create(path)?)),
                 None => Box::new(BufWriter::new(io::stdout().lock())),
             };
-            serde_json::to_writer(&mut writer, &parsed.clubs)?;
+            if details {
+                serde_json::to_writer(
+                    &mut writer,
+                    &serde_json::json!({
+                        "clubs": parsed.clubs,
+                        "club_finances": parsed.club_finances,
+                        "stadiums": parsed.stadiums,
+                    }),
+                )?;
+            } else {
+                serde_json::to_writer(&mut writer, &parsed.clubs)?;
+            }
             writer.flush()?;
             if output.is_some() {
                 println!();
@@ -327,6 +393,113 @@ fn main() -> Result<()> {
                 }))?
             );
         }
+        Command::EditClub {
+            save,
+            club_uid,
+            reputation,
+            corporate_facilities,
+            balance,
+            transfer_budget,
+            wage_budget,
+            stadium_uid,
+            all_seater,
+            expansion,
+            output,
+            save_name,
+            force,
+            dry_run,
+            compression_level,
+        } => {
+            if !(1..=22).contains(&compression_level) {
+                bail!("--compression-level must be between 1 and 22");
+            }
+            if stadium_uid.is_none() && (all_seater.is_some() || expansion.is_some()) {
+                bail!("--all-seater and --expansion require --stadium-uid");
+            }
+            let save_file =
+                SaveFile::open(&save).with_context(|| format!("open {}", save.display()))?;
+            let metadata = read_metadata(&save_file).context("read save metadata")?;
+            let mut editor = ClubEditor::open(&save_file, &metadata).context("open club editor")?;
+            let finance = ClubFinanceEdit {
+                balance,
+                transfer_budget_remaining: transfer_budget,
+                wage_budget_weekly: wage_budget,
+            };
+            let request = ClubEditRequest {
+                reputation,
+                corporate_facilities,
+                finances: (!finance.is_empty()).then_some(finance),
+                stadiums: stadium_uid
+                    .map(|stadium_uid| StadiumCapacityEdit {
+                        stadium_uid,
+                        all_seater_capacity: all_seater,
+                        expansion_capacity: expansion,
+                    })
+                    .into_iter()
+                    .collect(),
+            };
+            if request.is_empty() {
+                bail!(
+                    "no edits requested; pass --reputation, --corporate-facilities, --balance, --transfer-budget, --wage-budget or --stadium-uid"
+                );
+            }
+            let warnings = request.warnings();
+            for warning in &warnings {
+                eprintln!("warning: {warning}");
+            }
+            request.apply(&mut editor, club_uid)?;
+            editor.validate()?;
+
+            let output = output.unwrap_or_else(|| default_edit_output(&save));
+            if output == save {
+                bail!("refusing to overwrite the source save; choose a different --output");
+            }
+            if output.exists() && !force {
+                bail!(
+                    "output {} already exists; pass --force to overwrite it",
+                    output.display()
+                );
+            }
+            if dry_run {
+                println!(
+                    "{}",
+                    serde_json::to_string_pretty(&serde_json::json!({
+                        "club_uid": club_uid,
+                        "source": save.display().to_string(),
+                        "output": output.display().to_string(),
+                        "save_name": save_name,
+                        "written": false,
+                        "warnings": warnings,
+                        "changes": editor.changes(),
+                    }))?
+                );
+                return Ok(());
+            }
+
+            let report = editor
+                .write_as(&save_file, &output, compression_level, save_name.as_deref())
+                .context("write edited save")?;
+            let verify = verify_edited_club(&output, club_uid, &request);
+            if let Err(error) = verify {
+                let _ = std::fs::remove_file(&output);
+                return Err(error).context("verify edited save");
+            }
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&serde_json::json!({
+                    "club_uid": club_uid,
+                    "source": save.display().to_string(),
+                    "output": report.output,
+                    "save_name": save_name,
+                    "written": true,
+                    "verified": true,
+                    "warnings": warnings,
+                    "file_size": report.file_size,
+                    "compressed_delta": report.compressed_delta,
+                    "changes": editor.changes(),
+                }))?
+            );
+        }
     }
     Ok(())
 }
@@ -366,6 +539,11 @@ fn verify_edited_save(path: &Path, uid: u32, request: &PlayerEditRequest) -> Res
         .find(|player| player.uid == uid)
         .ok_or_else(|| anyhow!("edited save no longer contains player uid {uid}"))?;
     request.verify(player).map_err(Into::into)
+}
+
+fn verify_edited_club(path: &Path, club_uid: u32, request: &ClubEditRequest) -> Result<()> {
+    let parsed = parse_save(path).context("re-parse edited save")?;
+    request.verify(&parsed, club_uid).map_err(Into::into)
 }
 
 fn write_csv(writer: &mut dyn Write, players: &[&fm27_core::Player]) -> Result<()> {

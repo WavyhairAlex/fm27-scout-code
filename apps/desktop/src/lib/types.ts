@@ -342,6 +342,187 @@ export interface PlayerPage {
   rows: PlayerRow[];
 }
 
+export interface Club {
+  uid: number;
+  unique_id: number | null;
+  name: string;
+  short_name: string;
+  nation_id: number;
+  nation_name: string | null;
+  fa_nation_id: number;
+  fa_nation_name: string | null;
+  city_id: number | null;
+  gender: number | null;
+  reputation: number | null;
+  last_league_position: number | null;
+  parent_club_uid: number | null;
+  parent_club_name: string | null;
+  corporate_facilities: number | null;
+  teams: number[];
+}
+
+export interface FinanceMonth {
+  club_uid: number;
+  club_name: string;
+  month: string;
+  balance: number;
+  transfer_budget_allocated: number;
+  transfer_budget_remaining: number;
+  wage_budget_weekly: number;
+  wage_payroll_weekly: number;
+  income_excluding_transfers: number;
+  net_transfers: number;
+  wage_bill: number;
+  net: number;
+  expenditure_excluding_transfers: number;
+  total_income: number;
+  total_expenditure: number;
+}
+
+export interface Stadium {
+  uid: number;
+  name: string | null;
+  all_seater_capacity: number;
+  expansion_capacity: number;
+  capacity: number | null;
+  owner_club_uid: number | null;
+  owner_club_name: string | null;
+  pitch_length_dm: number;
+  pitch_width_dm: number;
+  pitch_min_length_dm: number;
+  pitch_min_width_dm: number;
+  pitch_max_length_dm: number;
+  pitch_max_width_dm: number;
+  built_date: string | null;
+  rebuilt_date: string | null;
+}
+
+export interface ClubLink {
+  uid: number;
+  name: string;
+  short_name: string;
+}
+
+export interface ClubDetail {
+  club: Club;
+  finance_months: FinanceMonth[];
+  stadiums: Stadium[];
+  child_clubs: ClubLink[];
+}
+
+export interface ClubRow {
+  uid: number;
+  unique_id: number | null;
+  name: string;
+  short_name: string;
+  nation_id: number;
+  nation_name: string | null;
+  fa_nation_id: number;
+  fa_nation_name: string | null;
+  city_id: number | null;
+  gender: number | null;
+  reputation: number | null;
+  last_league_position: number | null;
+  parent_club_uid: number | null;
+  parent_club_name: string | null;
+  corporate_facilities: number | null;
+  finance_month: string | null;
+  balance: number | null;
+  transfer_budget_allocated: number | null;
+  transfer_budget_remaining: number | null;
+  wage_budget_weekly: number | null;
+  wage_payroll_weekly: number | null;
+  net: number | null;
+  player_count: number;
+  average_age: number | null;
+  average_ca: number | null;
+  total_value: number | null;
+  total_wage: number | null;
+  stadium_count: number;
+  stadium_capacity: number | null;
+}
+
+export interface ClubPage {
+  total: number;
+  page: number;
+  page_size: number;
+  rows: ClubRow[];
+}
+
+export interface ClubQuery {
+  save_id: number;
+  search?: string | null;
+  nation_ids?: number[];
+  genders?: number[];
+  reputation_min?: number | null;
+  reputation_max?: number | null;
+  last_position_min?: number | null;
+  last_position_max?: number | null;
+  has_finances?: boolean | null;
+  balance_min?: number | null;
+  balance_max?: number | null;
+  transfer_budget_min?: number | null;
+  transfer_budget_max?: number | null;
+  wage_budget_min?: number | null;
+  wage_budget_max?: number | null;
+  corporate_facilities_min?: number | null;
+  corporate_facilities_max?: number | null;
+  player_count_min?: number | null;
+  player_count_max?: number | null;
+  average_ca_min?: number | null;
+  average_ca_max?: number | null;
+  total_value_min?: number | null;
+  total_value_max?: number | null;
+  has_stadium?: boolean | null;
+  stadium_capacity_min?: number | null;
+  sort?: SortRule[];
+  sort_by?: string | null;
+  sort_dir?: "asc" | "desc" | null;
+  page?: number | null;
+  page_size?: number | null;
+}
+
+export interface ClubFilterOptions {
+  nations: FilterOption[];
+  genders: FilterOption[];
+  min_reputation: number | null;
+  max_reputation: number | null;
+  min_balance: number | null;
+  max_balance: number | null;
+  min_transfer_budget: number | null;
+  max_transfer_budget: number | null;
+  min_wage_budget: number | null;
+  max_wage_budget: number | null;
+  clubs_with_finances: number;
+  clubs_with_stadiums: number;
+}
+
+export interface ClubFinanceEdit {
+  balance: number | null;
+  transfer_budget_remaining: number | null;
+  wage_budget_weekly: number | null;
+}
+
+export interface StadiumCapacityEdit {
+  stadium_uid: number;
+  all_seater_capacity: number | null;
+  expansion_capacity: number | null;
+}
+
+export interface ClubEditRequest {
+  reputation: number | null;
+  corporate_facilities: number | null;
+  finances: ClubFinanceEdit | null;
+  stadiums: StadiumCapacityEdit[];
+}
+
+export interface EditClubResult {
+  output: string;
+  file_size: number;
+  changes: EditChange[];
+  warnings: string[];
+}
+
 export interface SaveRecord {
   id: number;
   path: string;
@@ -387,6 +568,10 @@ export interface ParseReport {
   competition_stages: number;
   competitions_with_database_id: number;
   competitions_with_name: number;
+  club_finance_months: number;
+  clubs_with_finance: number;
+  stadiums: number;
+  clubs_with_corporate_facilities: number;
   markerless_players: number;
   players_with_person: number;
   players_with_club: number;
