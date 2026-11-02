@@ -93,7 +93,7 @@ export function HelpDialog() {
               <Database size={9} /> {t("help.parserPlayers", { count: "46,273" })}
             </Badge>
             <Badge tone="outline">
-              <LockKeyhole size={9} /> parser 1.0.0
+              <LockKeyhole size={9} /> parser 1.1.0
             </Badge>
             <Badge tone="outline">
               <WifiOff size={9} /> offline

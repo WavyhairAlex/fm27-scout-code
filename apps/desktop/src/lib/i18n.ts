@@ -473,7 +473,7 @@ const en = {
 
   // Help dialog
   "help.title": "About & help",
-  "help.description": "FM27 Scout 1.0.0 · Scouting workbench with an optional save editor",
+  "help.description": "FM27 Scout 1.1.0 · Scouting workbench with an optional save editor",
   "help.privacyTitle": "Privacy & local writes",
   "help.privacy.1":
     "Read commands never modify the save. The edit dialog writes a new save file; the source is never overwritten.",
@@ -1157,7 +1157,7 @@ const zhCN: Record<TranslationKey, string> = {
     "CSV 包含表格字段与 52 项属性。导出文件写入你选择的位置；不会上传到任何服务器。",
 
   "help.title": "关于与帮助",
-  "help.description": "FM27 Scout 1.0.0 · 球探工作台，可选存档编辑器",
+  "help.description": "FM27 Scout 1.1.0 · 球探工作台，可选存档编辑器",
   "help.privacyTitle": "隐私与本地写入",
   "help.privacy.1": "读取命令不修改存档；编辑对话框只写入新存档，绝不覆盖源文件。",
   "help.privacy.2": "完全离线，不上传存档、球员或使用数据。",
