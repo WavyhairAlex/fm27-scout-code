@@ -290,17 +290,82 @@ impl Player {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Club {
     pub uid: u32,
+    #[serde(default)]
+    pub unique_id: Option<u32>,
     pub name: String,
     pub short_name: String,
     pub nation_id: u32,
     pub nation_name: Option<String>,
     pub fa_nation_id: u32,
     pub fa_nation_name: Option<String>,
+    #[serde(default)]
+    pub city_id: Option<u32>,
     pub gender: Option<u8>,
     pub reputation: Option<u16>,
     pub last_league_position: Option<u8>,
     pub parent_club_uid: Option<u32>,
+    #[serde(default)]
+    pub parent_club_name: Option<String>,
+    #[serde(default)]
+    pub corporate_facilities: Option<u8>,
     pub teams: Vec<u32>,
+}
+
+/// One club's money in one month, read from the finance chain inside its club record.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FinanceMonth {
+    pub club_uid: u32,
+    pub club_name: String,
+    pub month: String,
+    pub balance: i64,
+    pub transfer_budget_allocated: i64,
+    pub transfer_budget_remaining: i64,
+    pub wage_budget_weekly: i64,
+    pub wage_payroll_weekly: i64,
+    pub income_excluding_transfers: i64,
+    pub net_transfers: i64,
+    pub wage_bill: i64,
+    pub net: i64,
+    pub expenditure_excluding_transfers: i64,
+    pub total_income: i64,
+    pub total_expenditure: i64,
+}
+
+/// A ground from the save's stadium table. The save stores no direct club -> ground
+/// pointer; ownership is a separate field, and home use would require the fixture
+/// calendar.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Stadium {
+    pub uid: u32,
+    pub name: Option<String>,
+    pub all_seater_capacity: u32,
+    pub expansion_capacity: u32,
+    pub capacity: Option<u32>,
+    pub owner_club_uid: Option<u32>,
+    pub owner_club_name: Option<String>,
+    pub pitch_length_dm: u16,
+    pub pitch_width_dm: u16,
+    pub pitch_min_length_dm: u16,
+    pub pitch_min_width_dm: u16,
+    pub pitch_max_length_dm: u16,
+    pub pitch_max_width_dm: u16,
+    pub built_date: Option<String>,
+    pub rebuilt_date: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ClubLink {
+    pub uid: u32,
+    pub name: String,
+    pub short_name: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ClubDetail {
+    pub club: Club,
+    pub finance_months: Vec<FinanceMonth>,
+    pub stadiums: Vec<Stadium>,
+    pub child_clubs: Vec<ClubLink>,
 }
 
 /// One competition named by the save's stage table.
@@ -342,6 +407,10 @@ pub struct ParseReport {
     pub competition_stages: usize,
     pub competitions_with_database_id: usize,
     pub competitions_with_name: usize,
+    pub club_finance_months: usize,
+    pub clubs_with_finance: usize,
+    pub stadiums: usize,
+    pub clubs_with_corporate_facilities: usize,
     pub markerless_players: usize,
     pub players_with_person: usize,
     pub players_with_club: usize,

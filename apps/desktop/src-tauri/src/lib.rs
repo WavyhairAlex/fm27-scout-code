@@ -3,14 +3,15 @@ use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 
 use fm27_core::ability::{CaEstimate, estimate_positions};
+use fm27_core::club_editor::{ClubEditRequest, ClubEditor};
 use fm27_core::container::SaveFile;
 use fm27_core::editor::{EditChange, PlayerEditRequest, PlayerEditor};
 use fm27_core::export::write_export;
 use fm27_core::metadata::read_metadata;
-use fm27_core::model::Attributes;
+use fm27_core::model::{Attributes, ClubDetail};
 use fm27_core::store::{
-    AnalysisOverview, FilterOptions, PlayerPage, PlayerQuery, SaveRecord, SnapshotPoint,
-    SquadAnalysis, Store,
+    AnalysisOverview, ClubFilterOptions, ClubPage, ClubQuery, FilterOptions, PlayerPage,
+    PlayerQuery, SaveRecord, SnapshotPoint, SquadAnalysis, Store,
 };
 use fm27_core::{
     ParseReport, Player, SaveSummary, inspect_save, parse_save_with_progress, parser_version,
@@ -66,6 +67,14 @@ struct BatchEditResult {
 
 #[derive(Debug, Serialize)]
 struct EditPlayerResult {
+    output: String,
+    file_size: u64,
+    changes: Vec<EditChange>,
+    warnings: Vec<String>,
+}
+
+#[derive(Debug, Serialize)]
+struct EditClubResult {
     output: String,
     file_size: u64,
     changes: Vec<EditChange>,
@@ -267,6 +276,31 @@ fn get_player(
 }
 
 #[tauri::command]
+fn query_clubs(state: State<'_, AppState>, query: ClubQuery) -> Result<ClubPage, String> {
+    let store = state.store.lock().map_err(error_string)?;
+    store.query_clubs(&query).map_err(error_string)
+}
+
+#[tauri::command]
+fn get_club(
+    state: State<'_, AppState>,
+    save_id: i64,
+    uid: u32,
+) -> Result<Option<ClubDetail>, String> {
+    let store = state.store.lock().map_err(error_string)?;
+    store.get_club(save_id, uid).map_err(error_string)
+}
+
+#[tauri::command]
+fn club_filter_options(
+    state: State<'_, AppState>,
+    save_id: i64,
+) -> Result<ClubFilterOptions, String> {
+    let store = state.store.lock().map_err(error_string)?;
+    store.club_filter_options(save_id).map_err(error_string)
+}
+
+#[tauri::command]
 fn estimate_player_ca(request: CaEstimateRequest) -> Result<CaEstimate, String> {
     let mut attributes = Attributes::default();
     for (index, key) in fm27_core::layout::ATTRIBUTE_KEYS.iter().enumerate() {
@@ -446,6 +480,75 @@ fn edit_player_file(
     }
 
     Ok(EditPlayerResult {
+        output: report.output,
+        file_size: report.file_size,
+        changes: editor.changes().to_vec(),
+        warnings,
+    })
+}
+
+#[tauri::command]
+async fn edit_club(
+    state: State<'_, AppState>,
+    save_id: i64,
+    club_uid: u32,
+    output_path: String,
+    request: ClubEditRequest,
+) -> Result<EditClubResult, String> {
+    let source = {
+        let store = state.store.lock().map_err(error_string)?;
+        store
+            .save_path(save_id)
+            .map_err(error_string)?
+            .ok_or_else(|| "save not found".to_owned())?
+    };
+    tauri::async_runtime::spawn_blocking(move || {
+        edit_club_file(source, club_uid, output_path, request)
+    })
+    .await
+    .map_err(error_string)?
+}
+
+fn edit_club_file(
+    source: String,
+    club_uid: u32,
+    output_path: String,
+    request: ClubEditRequest,
+) -> Result<EditClubResult, String> {
+    if request.is_empty() {
+        return Err("no edits requested".to_owned());
+    }
+    let warnings = request.warnings();
+    let save = SaveFile::open(&source).map_err(error_string)?;
+    let metadata = read_metadata(&save).map_err(error_string)?;
+    let mut editor = ClubEditor::open(&save, &metadata).map_err(error_string)?;
+    request.apply(&mut editor, club_uid).map_err(error_string)?;
+    editor.validate().map_err(error_string)?;
+
+    let output = PathBuf::from(&output_path);
+    if output.exists() {
+        return Err(format!(
+            "output already exists: {}; choose a new .fm file",
+            output.display()
+        ));
+    }
+    let save_name = output
+        .file_stem()
+        .map(|value| value.to_string_lossy().into_owned())
+        .filter(|value| !value.is_empty());
+    let report = editor
+        .write_as(&save, &output, 3, save_name.as_deref())
+        .map_err(error_string)?;
+
+    let verify = fm27_core::parse_save(&output)
+        .map_err(error_string)
+        .and_then(|parsed| request.verify(&parsed, club_uid).map_err(error_string));
+    if let Err(error) = verify {
+        let _ = std::fs::remove_file(&output);
+        return Err(error);
+    }
+
+    Ok(EditClubResult {
         output: report.output,
         file_size: report.file_size,
         changes: editor.changes().to_vec(),
@@ -786,8 +889,12 @@ pub fn run() {
             list_saves,
             open_save,
             query_players,
+            query_clubs,
             get_player,
+            get_club,
+            club_filter_options,
             edit_player,
+            edit_club,
             save_player_edits,
             estimate_player_ca,
             trait_options,

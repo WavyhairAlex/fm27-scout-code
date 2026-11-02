@@ -1,9 +1,16 @@
 import type {
   AnalysisOverview,
   Attributes,
+  Club,
+  ClubDetail,
+  ClubFilterOptions,
   ClubOverview,
+  ClubPage,
+  ClubQuery,
+  ClubRow,
   DistributionBand,
   FilterOptions,
+  FinanceMonth,
   Player,
   PlayerQuery,
   PlayerRow,
@@ -14,6 +21,7 @@ import type {
   SnapshotPoint,
   SaveSummary,
   SquadAnalysis,
+  Stadium,
   Trait,
   TraitOption,
 } from "./types";
@@ -36,7 +44,7 @@ const CLUBS: [string, number, number][] = [
   ["Casciavit Milano", 1099, 150],
   ["Barcelona", 1708, 173],
   ["Manchester United", 728, 139],
-  ["Tottenham Hotspur", 728, 139],
+  ["Tottenham Hotspur", 729, 139],
   ["Juventus", 1139, 164],
   ["Inter", 1107, 164],
   ["Bayern München", 1852, 164],
@@ -573,6 +581,206 @@ export function mockQuery(query: PlayerQuery): {
   };
 }
 
+
+const MOCK_CLUB_ROWS: ClubRow[] = CLUBS.map(([name, uid, nation], index) => {
+  const hasFinance = index < 6;
+  const balance = hasFinance ? 80_000_000 - index * 9_000_000 : null;
+  return {
+    uid,
+    unique_id: 700000 + uid,
+    name,
+    short_name: name,
+    nation_id: nation,
+    nation_name: NATION_NAMES[nation] ?? null,
+    fa_nation_id: nation,
+    fa_nation_name: NATION_NAMES[nation] ?? null,
+    city_id: 1000 + index,
+    gender: 0,
+    reputation: 9000 - index * 180,
+    last_league_position: 1 + (index % 18),
+    parent_club_uid: null,
+    parent_club_name: null,
+    corporate_facilities: hasFinance ? 6 + (index % 10) : null,
+    finance_month: hasFinance ? "2026-09-01" : null,
+    balance,
+    transfer_budget_allocated: hasFinance ? 20_000_000 - index * 1_000_000 : null,
+    transfer_budget_remaining: hasFinance ? 12_000_000 - index * 900_000 : null,
+    wage_budget_weekly: hasFinance ? 900_000 - index * 60_000 : null,
+    wage_payroll_weekly: hasFinance ? 850_000 - index * 55_000 : null,
+    net: hasFinance ? 1_200_000 - index * 300_000 : null,
+    player_count: 18 + (index % 12),
+    average_age: 24 + (index % 6),
+    average_ca: 145 - index * 2.5,
+    total_value: hasFinance ? 240_000_000 - index * 12_000_000 : 50_000_000 - index * 1_000_000,
+    total_wage: hasFinance ? 44_000_000 - index * 2_000_000 : 12_000_000,
+    stadium_count: index % 4 === 0 ? 0 : 1,
+    stadium_capacity: index % 4 === 0 ? null : 60_000 - index * 2_000,
+  };
+});
+
+export function mockQueryClubs(query: ClubQuery): ClubPage {
+  let rows = [...MOCK_CLUB_ROWS];
+  const search = query.search?.trim().toLowerCase();
+  if (search) {
+    rows = rows.filter(
+      (row) =>
+        row.name.toLowerCase().includes(search) ||
+        row.short_name.toLowerCase().includes(search) ||
+        String(row.uid).includes(search),
+    );
+  }
+  if (query.nation_ids?.length) rows = rows.filter((row) => query.nation_ids!.includes(row.nation_id));
+  if (query.genders?.length) rows = rows.filter((row) => query.genders!.includes(row.gender ?? -1));
+  if (query.reputation_min != null) rows = rows.filter((row) => (row.reputation ?? 0) >= query.reputation_min!);
+  if (query.reputation_max != null) rows = rows.filter((row) => (row.reputation ?? 99999) <= query.reputation_max!);
+  if (query.has_finances != null) {
+    rows = rows.filter((row) => (row.finance_month != null) === query.has_finances);
+  }
+  if (query.balance_min != null) rows = rows.filter((row) => (row.balance ?? -Infinity) >= query.balance_min!);
+  if (query.balance_max != null) rows = rows.filter((row) => (row.balance ?? Infinity) <= query.balance_max!);
+  if (query.transfer_budget_min != null) {
+    rows = rows.filter((row) => (row.transfer_budget_remaining ?? -Infinity) >= query.transfer_budget_min!);
+  }
+  if (query.transfer_budget_max != null) {
+    rows = rows.filter((row) => (row.transfer_budget_remaining ?? Infinity) <= query.transfer_budget_max!);
+  }
+  if (query.player_count_min != null) rows = rows.filter((row) => row.player_count >= query.player_count_min!);
+  if (query.has_stadium != null) rows = rows.filter((row) => (row.stadium_count > 0) === query.has_stadium);
+  const rules = query.sort?.length
+    ? query.sort
+    : [{ by: query.sort_by ?? "reputation", dir: query.sort_dir ?? "desc" }];
+  rows.sort((left, right) => {
+    for (const rule of rules) {
+      const direction = rule.dir === "asc" ? 1 : -1;
+      const read = (row: ClubRow): number | string | null => {
+        switch (rule.by) {
+          case "name": return row.name;
+          case "nation": return row.nation_name;
+          case "balance": return row.balance;
+          case "transfer_budget": return row.transfer_budget_remaining;
+          case "wage_budget": return row.wage_budget_weekly;
+          case "player_count": return row.player_count;
+          case "average_ca": return row.average_ca;
+          case "total_value": return row.total_value;
+          case "stadium_capacity": return row.stadium_capacity;
+          default: return row.reputation;
+        }
+      };
+      const a = read(left);
+      const b = read(right);
+      if (a == null && b == null) continue;
+      if (a == null) return 1;
+      if (b == null) return -1;
+      const compared = (a > b ? 1 : a < b ? -1 : 0) * direction;
+      if (compared !== 0) return compared;
+    }
+    return left.uid - right.uid;
+  });
+  const page = query.page ?? 0;
+  const pageSize = query.page_size ?? 100;
+  return {
+    total: rows.length,
+    page,
+    page_size: pageSize,
+    rows: rows.slice(page * pageSize, (page + 1) * pageSize),
+  };
+}
+
+export function mockClubDetail(uid: number): ClubDetail | null {
+  const row = MOCK_CLUB_ROWS.find((club) => club.uid === uid);
+  if (!row) return null;
+  const club: Club = {
+    uid: row.uid,
+    unique_id: row.unique_id,
+    name: row.name,
+    short_name: row.short_name,
+    nation_id: row.nation_id,
+    nation_name: row.nation_name,
+    fa_nation_id: row.fa_nation_id,
+    fa_nation_name: row.fa_nation_name,
+    city_id: row.city_id,
+    gender: row.gender,
+    reputation: row.reputation,
+    last_league_position: row.last_league_position,
+    parent_club_uid: row.parent_club_uid,
+    parent_club_name: row.parent_club_name,
+    corporate_facilities: row.corporate_facilities,
+    teams: [],
+  };
+  const financeMonths: FinanceMonth[] =
+    row.finance_month == null
+      ? []
+      : ["2026-06-01", "2026-07-01", "2026-08-01", "2026-09-01"].map((month, index) => ({
+          club_uid: row.uid,
+          club_name: row.name,
+          month,
+          balance: (row.balance ?? 0) - (3 - index) * 2_000_000,
+          transfer_budget_allocated: row.transfer_budget_allocated ?? 0,
+          transfer_budget_remaining: (row.transfer_budget_remaining ?? 0) + (3 - index) * 400_000,
+          wage_budget_weekly: row.wage_budget_weekly ?? 0,
+          wage_payroll_weekly: row.wage_payroll_weekly ?? 0,
+          income_excluding_transfers: 3_000_000 + index * 200_000,
+          net_transfers: index % 2 === 0 ? 1_000_000 : -800_000,
+          wage_bill: (row.wage_payroll_weekly ?? 0) * 4,
+          net: 1_000_000 - index * 200_000,
+          expenditure_excluding_transfers: 2_000_000 + index * 100_000,
+          total_income: 3_500_000 + index * 200_000,
+          total_expenditure: 2_500_000 + index * 300_000,
+        }));
+  const stadiums: Stadium[] =
+    row.stadium_count > 0
+      ? [
+          {
+            uid: 500000 + uid,
+            name: `${row.name} Stadium`,
+            all_seater_capacity: row.stadium_capacity ?? 20_000,
+            expansion_capacity: (row.stadium_capacity ?? 20_000) + 5_000,
+            capacity: null,
+            owner_club_uid: row.uid,
+            owner_club_name: row.name,
+            pitch_length_dm: 1050,
+            pitch_width_dm: 680,
+            pitch_min_length_dm: 900,
+            pitch_min_width_dm: 550,
+            pitch_max_length_dm: 1200,
+            pitch_max_width_dm: 900,
+            built_date: "1995-07-01",
+            rebuilt_date: "2015-07-01",
+          },
+        ]
+      : [];
+  return {
+    club,
+    finance_months: financeMonths,
+    stadiums,
+    child_clubs: [],
+  };
+}
+
+export function mockClubFilterOptions(): ClubFilterOptions {
+  const nations = new Map<number, string>();
+  for (const row of MOCK_CLUB_ROWS) {
+    if (row.nation_name) nations.set(row.nation_id, row.nation_name);
+  }
+  return {
+    nations: [...nations.entries()].map(([id, name]) => ({
+      id,
+      name,
+      count: MOCK_CLUB_ROWS.filter((row) => row.nation_id === id).length,
+    })),
+    genders: [{ id: 0, name: "Men", count: MOCK_CLUB_ROWS.length }],
+    min_reputation: Math.min(...MOCK_CLUB_ROWS.map((row) => row.reputation ?? 0)),
+    max_reputation: Math.max(...MOCK_CLUB_ROWS.map((row) => row.reputation ?? 0)),
+    min_balance: 10_000_000,
+    max_balance: 80_000_000,
+    min_transfer_budget: 1_000_000,
+    max_transfer_budget: 12_000_000,
+    min_wage_budget: 200_000,
+    max_wage_budget: 900_000,
+    clubs_with_finances: MOCK_CLUB_ROWS.filter((row) => row.finance_month != null).length,
+    clubs_with_stadiums: MOCK_CLUB_ROWS.filter((row) => row.stadium_count > 0).length,
+  };
+}
 
 function bandLabels<T>(values: T[], label: (value: T) => string, order: string[]): DistributionBand[] {
   const counts = new Map<string, number>();

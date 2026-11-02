@@ -112,16 +112,27 @@ CREATE INDEX IF NOT EXISTS contracts_end ON contracts(save_id, end_date);
 CREATE TABLE IF NOT EXISTS clubs (
   save_id         INTEGER NOT NULL,
   uid             INTEGER NOT NULL,
+  unique_id       INTEGER,
   name            TEXT,
   short_name      TEXT,
   nation_id       INTEGER,
   nation_name     TEXT,
   fa_nation_id    INTEGER,
   fa_nation_name  TEXT,
+  city_id         INTEGER,
   gender          INTEGER,
   reputation      INTEGER,
   last_league_position INTEGER,
   parent_club_uid INTEGER,
+  parent_club_name TEXT,
+  corporate_facilities INTEGER,
+  finance_month   TEXT,
+  balance         INTEGER,
+  transfer_budget_allocated INTEGER,
+  transfer_budget_remaining INTEGER,
+  wage_budget_weekly INTEGER,
+  wage_payroll_weekly INTEGER,
+  net             INTEGER,
   teams_json      TEXT,
   PRIMARY KEY (save_id, uid),
   FOREIGN KEY (save_id) REFERENCES saves(id) ON DELETE CASCADE
@@ -129,6 +140,55 @@ CREATE TABLE IF NOT EXISTS clubs (
 
 CREATE INDEX IF NOT EXISTS clubs_name ON clubs(save_id, name);
 CREATE INDEX IF NOT EXISTS clubs_nation ON clubs(save_id, nation_id);
+CREATE INDEX IF NOT EXISTS clubs_reputation ON clubs(save_id, reputation);
+CREATE INDEX IF NOT EXISTS clubs_finance ON clubs(save_id, finance_month);
+
+CREATE TABLE IF NOT EXISTS club_finances (
+  save_id         INTEGER NOT NULL,
+  club_uid        INTEGER NOT NULL,
+  month           TEXT NOT NULL,
+  balance         INTEGER,
+  transfer_budget_allocated INTEGER,
+  transfer_budget_remaining INTEGER,
+  wage_budget_weekly INTEGER,
+  wage_payroll_weekly INTEGER,
+  income_excluding_transfers INTEGER,
+  net_transfers   INTEGER,
+  wage_bill       INTEGER,
+  net             INTEGER,
+  expenditure_excluding_transfers INTEGER,
+  total_income    INTEGER,
+  total_expenditure INTEGER,
+  PRIMARY KEY (save_id, club_uid, month),
+  FOREIGN KEY (save_id) REFERENCES saves(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS club_finances_club
+  ON club_finances(save_id, club_uid, month);
+
+CREATE TABLE IF NOT EXISTS stadiums (
+  save_id         INTEGER NOT NULL,
+  uid             INTEGER NOT NULL,
+  name            TEXT,
+  all_seater_capacity INTEGER NOT NULL DEFAULT 0,
+  expansion_capacity INTEGER NOT NULL DEFAULT 0,
+  capacity        INTEGER,
+  owner_club_uid  INTEGER,
+  owner_club_name TEXT,
+  pitch_length_dm INTEGER NOT NULL DEFAULT 0,
+  pitch_width_dm  INTEGER NOT NULL DEFAULT 0,
+  pitch_min_length_dm INTEGER NOT NULL DEFAULT 0,
+  pitch_min_width_dm INTEGER NOT NULL DEFAULT 0,
+  pitch_max_length_dm INTEGER NOT NULL DEFAULT 0,
+  pitch_max_width_dm INTEGER NOT NULL DEFAULT 0,
+  built_date      TEXT,
+  rebuilt_date    TEXT,
+  PRIMARY KEY (save_id, uid),
+  FOREIGN KEY (save_id) REFERENCES saves(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS stadiums_owner
+  ON stadiums(save_id, owner_club_uid);
 
 -- Competitions are collected from the stage table. `database_id` is the key for
 -- the optional shared/competition-names.csv table; the save itself stores no name.

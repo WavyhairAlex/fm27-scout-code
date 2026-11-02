@@ -3,6 +3,7 @@
 //! The core is platform independent and shared by the CLI and the Tauri app.
 
 pub mod ability;
+pub mod club_editor;
 pub mod clubs;
 pub mod competitions;
 pub mod container;
@@ -10,6 +11,7 @@ pub mod contracts;
 pub mod editor;
 pub mod error;
 pub mod export;
+pub mod finances;
 pub mod injuries;
 pub mod layout;
 mod layout_tests;
@@ -22,12 +24,16 @@ pub mod persons;
 pub mod player_scan;
 pub mod reference;
 pub mod roles;
+pub mod stadiums;
 pub mod store;
 pub mod suspensions;
 
+pub use club_editor::{ClubEditRequest, ClubEditor, ClubFinanceEdit, StadiumCapacityEdit};
 pub use editor::{EditChange, PlayerEditor};
 pub use error::{Error, Result};
-pub use model::{Club, Contract, ParseReport, Player, SaveSummary};
+pub use model::{
+    Club, ClubDetail, ClubLink, Contract, FinanceMonth, ParseReport, Player, SaveSummary, Stadium,
+};
 pub use parse::{ParseProgress, ParsedSave, parse_save, parse_save_with_progress, parser_version};
 
 /// Open a save and return its container metadata without decompressing `game_db`.

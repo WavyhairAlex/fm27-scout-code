@@ -1,16 +1,19 @@
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import {
   getAnalysisOverview,
+  getClub,
+  getClubFilterOptions,
   getFilterOptions,
   getGrowthHistory,
   getPlayer,
   getPlayerRoles,
   getSquadAnalysis,
   listSaves,
+  queryClubs,
   queryPlayers,
 } from "./api";
-import type { PlayerQuery, SortRule } from "./types";
-import { useAppStore, type Filters } from "@/store/app";
+import type { ClubQuery, PlayerQuery, SortRule } from "./types";
+import { useAppStore, type ClubFilters, type Filters } from "@/store/app";
 
 export function buildPlayerQuery(
   saveId: number,
@@ -60,6 +63,39 @@ export function buildPlayerQuery(
   };
 }
 
+export function buildClubQuery(
+  saveId: number,
+  filters: ClubFilters,
+  sort: SortRule[],
+  page: number,
+  pageSize: number,
+): ClubQuery {
+  const primary = sort[0];
+  return {
+    save_id: saveId,
+    search: filters.search || null,
+    nation_ids: filters.nationIds,
+    genders: filters.genders,
+    reputation_min: filters.reputationMin,
+    reputation_max: filters.reputationMax,
+    has_finances: filters.hasFinances,
+    balance_min: filters.balanceMin,
+    balance_max: filters.balanceMax,
+    transfer_budget_min: filters.transferBudgetMin,
+    transfer_budget_max: filters.transferBudgetMax,
+    wage_budget_min: filters.wageBudgetMin,
+    wage_budget_max: filters.wageBudgetMax,
+    corporate_facilities_min: filters.corporateFacilitiesMin,
+    player_count_min: filters.playerCountMin,
+    has_stadium: filters.hasStadium,
+    sort,
+    sort_by: primary?.by ?? "reputation",
+    sort_dir: primary?.dir ?? "desc",
+    page,
+    page_size: pageSize,
+  };
+}
+
 export function useSaves() {
   return useQuery({
     queryKey: ["saves"],
@@ -84,6 +120,42 @@ export function usePlayerPage() {
     enabled: query != null,
     placeholderData: keepPreviousData,
     staleTime: 15_000,
+  });
+}
+
+export function useClubPage() {
+  const saveId = useAppStore((state) => state.saveId);
+  const filters = useAppStore((state) => state.clubFilters);
+  const sort = useAppStore((state) => state.clubSort);
+  const page = useAppStore((state) => state.clubPage);
+  const pageSize = useAppStore((state) => state.clubPageSize);
+  const query = saveId ? buildClubQuery(saveId, filters, sort, page, pageSize) : null;
+  return useQuery({
+    queryKey: ["clubs", query],
+    queryFn: () => queryClubs(query!),
+    enabled: query != null,
+    placeholderData: keepPreviousData,
+    staleTime: 15_000,
+  });
+}
+
+export function useClubDetail(uid: number | null) {
+  const saveId = useAppStore((state) => state.saveId);
+  return useQuery({
+    queryKey: ["club", saveId, uid],
+    queryFn: () => getClub(saveId!, uid!),
+    enabled: saveId != null && uid != null,
+    staleTime: 60_000,
+  });
+}
+
+export function useClubFilterOptions() {
+  const saveId = useAppStore((state) => state.saveId);
+  return useQuery({
+    queryKey: ["club-filter-options", saveId],
+    queryFn: () => getClubFilterOptions(saveId!),
+    enabled: saveId != null,
+    staleTime: 60_000,
   });
 }
 

@@ -11,7 +11,7 @@ pub const GAME_DB_SCHEMA: u32 = 4000;
 /// injury windows were read from the stride-14 arrays.
 pub const PARSER_VERSION: &str = concat!(
     env!("CARGO_PKG_VERSION"),
-    "+nation-names+listing+injury-windows"
+    "+nation-names+listing+injury-windows+club-finance+stadiums"
 );
 pub const EARLIEST_YEAR: i32 = 1901;
 pub const LATEST_YEAR: i32 = 2200;
@@ -343,6 +343,76 @@ impl ClubLayout {
     pub const GENDER_OFFSET_FROM_TEAM_COUNT: i32 = -1;
 }
 
+/// Monthly finance snapshots and the corporate-facilities byte live inside each
+/// club record. The row layout is shared with FM26; FM27 changes only the club
+/// record framing that surrounds it.
+#[derive(Debug, Clone, Copy)]
+pub struct FinanceLayout;
+
+impl FinanceLayout {
+    pub const ROW_BYTES: usize = 49;
+    pub const TAG: u8 = 0x01;
+    pub const COUNT_OFFSET: i32 = -4;
+    pub const COUNT_RANGE: (u32, u32) = (3, 1_000);
+    pub const SHORT_COUNT_RANGE: (u32, u32) = (1, 2);
+    pub const BALANCE_RANGE: (i32, i32) = (-400_000_000, 2_000_000_000);
+    pub const WEEKLY_MAXIMUM: u32 = 20_000_000;
+    pub const BALANCE_OFFSET: usize = 1;
+    pub const TRANSFER_ALLOCATED_OFFSET: usize = 5;
+    pub const TRANSFER_REMAINING_OFFSET: usize = 9;
+    pub const WAGE_BUDGET_OFFSET: usize = 13;
+    pub const WAGE_PAYROLL_OFFSET: usize = 17;
+    pub const INCOME_EXCLUDING_TRANSFERS_OFFSET: usize = 21;
+    pub const NET_TRANSFERS_OFFSET: usize = 25;
+    pub const WAGE_BILL_OFFSET: usize = 29;
+    pub const NET_OFFSET: usize = 33;
+    pub const EXPENDITURE_EXCLUDING_TRANSFERS_OFFSET: usize = 37;
+    pub const TOTAL_INCOME_OFFSET: usize = 41;
+    pub const TOTAL_EXPENDITURE_OFFSET: usize = 45;
+    /// Records shorter than this never hold a finance chain on the saves
+    /// measured, so skipping them keeps the per-club search cheap.
+    pub const MINIMUM_RECORD_BYTES: usize = 1_500;
+    /// Corporate facilities sit this many bytes past the end of the chain.
+    pub const FACILITY_OFFSET_AFTER_CHAIN: usize = 50;
+    pub const FACILITY_RANGE: (u8, u8) = (1, 20);
+}
+
+/// The stadium table in `game_db`. The table is found by its own first rows;
+/// rows are 181 bytes unless an inline-name flag adds a counted UTF-8 name.
+#[derive(Debug, Clone, Copy)]
+pub struct StadiumLayout;
+
+impl StadiumLayout {
+    pub const ROW_BYTES: usize = 181;
+    pub const ORDINAL_OFFSET: usize = 0;
+    pub const UID_OFFSET: usize = 4;
+    pub const UID_COPY_OFFSET: usize = 8;
+    pub const ZERO_BYTE_OFFSET: usize = 12;
+    pub const ALL_SEATER_OFFSET: usize = 13;
+    pub const EXPANSION_OFFSET: usize = 21;
+    pub const OWNER_OFFSET: usize = 29;
+    pub const CAPACITY_OFFSET: usize = 34;
+    pub const PITCH_LENGTH_OFFSET: usize = 38;
+    pub const PITCH_WIDTH_OFFSET: usize = 40;
+    pub const BUILT_OFFSET: usize = 50;
+    pub const REBUILT_OFFSET: usize = 54;
+    pub const PITCH_MIN_LENGTH_OFFSET: usize = 67;
+    pub const PITCH_MIN_WIDTH_OFFSET: usize = 69;
+    pub const PITCH_MAX_LENGTH_OFFSET: usize = 71;
+    pub const PITCH_MAX_WIDTH_OFFSET: usize = 73;
+    pub const FLAGS_OFFSET: usize = 156;
+    pub const INLINE_NAME_FLAG: u8 = 0x10;
+    pub const NAME_LENGTH_OFFSET: usize = 158;
+    pub const NAME_OFFSET: usize = 162;
+    pub const NAMED_ROW_EXTRA_BYTES: usize = 4;
+    pub const NAME_LENGTH_RANGE: (u32, u32) = (1, 256);
+    pub const LOCATOR_ROWS: usize = 12;
+    pub const PITCH_LENGTH_RANGE: (u16, u16) = (900, 1_300);
+    pub const CLOSING_MARKER_OFFSET: usize = 12;
+    pub const CLOSING_MARKER: [u8; 5] = [0, 0, 0, 0, 1];
+    pub const CLOSING_UID_OFFSET: usize = 17;
+}
+
 #[derive(Debug, Clone, Copy)]
 pub struct ContractLayout;
 
@@ -445,6 +515,10 @@ pub fn read_u32(bytes: &[u8], offset: usize) -> Option<u32> {
 
 pub fn read_i16(bytes: &[u8], offset: usize) -> Option<i16> {
     Some(i16::from_le_bytes(*read_slice::<2>(bytes, offset)?))
+}
+
+pub fn read_i32(bytes: &[u8], offset: usize) -> Option<i32> {
+    Some(i32::from_le_bytes(*read_slice::<4>(bytes, offset)?))
 }
 
 pub fn read_u64(bytes: &[u8], offset: usize) -> Option<u64> {

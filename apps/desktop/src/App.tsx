@@ -2,6 +2,7 @@ import { useEffect } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { FilterSidebar } from "./components/FilterSidebar";
 import { PlayerTable } from "./components/PlayerTable";
+import { ClubsView } from "./components/ClubsView";
 import { Inspector } from "./components/Inspector";
 import { Toolbar } from "./components/Toolbar";
 import { Onboarding } from "./components/Onboarding";
@@ -27,6 +28,7 @@ import { useAppStore } from "./store/app";
 
 export default function App() {
   const saveId = useAppStore((state) => state.saveId);
+  const viewMode = useAppStore((state) => state.viewMode);
   const sidebarOpen = useAppStore((state) => state.sidebarOpen);
   const inspectorOpen = useAppStore((state) => state.inspectorOpen);
   const selectedUid = useAppStore((state) => state.selectedUid);
@@ -81,7 +83,9 @@ export default function App() {
       }
       if (meta && event.key.toLowerCase() === "f") {
         event.preventDefault();
-        document.getElementById("global-search")?.focus();
+        document
+          .getElementById(viewMode === "clubs" ? "club-search" : "global-search")
+          ?.focus();
         return;
       }
       if (meta && event.key.toLowerCase() === "e") {
@@ -122,6 +126,7 @@ export default function App() {
     setSelectedUid,
     setSettingsOpen,
     settingsOpen,
+    viewMode,
   ]);
 
   useEffect(() => {
@@ -227,6 +232,8 @@ export default function App() {
       <div className="flex min-h-0 flex-1">
         {saveId == null ? (
           <Onboarding />
+        ) : viewMode === "clubs" ? (
+          <ClubsView />
         ) : (
           <>
             {sidebarOpen && <FilterSidebar />}

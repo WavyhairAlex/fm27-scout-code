@@ -6,8 +6,14 @@
 use std::collections::HashMap;
 
 use crate::error::{Error, Result};
-use crate::layout::{ClubLayout, read_u8, read_u16, read_u32};
+use crate::layout::{ClubLayout, MISSING_U32, read_u8, read_u16, read_u32};
 use crate::model::Club;
+
+#[derive(Debug, Clone, Copy, Default)]
+pub struct ClubRecordSpan {
+    pub record_start: usize,
+    pub record_end: usize,
+}
 
 #[derive(Debug, Clone, Default)]
 pub struct ClubIndex {
@@ -18,6 +24,8 @@ pub struct ClubIndex {
     pub team_to_club: HashMap<u32, (u32, u8)>,
     pub affiliate_team_to_club: HashMap<u32, (u32, u8)>,
     pub fielding_team_to_club: HashMap<u32, (u32, u8)>,
+    pub record_spans: HashMap<u32, ClubRecordSpan>,
+    pub status_offsets: HashMap<u32, usize>,
 }
 
 #[derive(Debug, Clone)]
@@ -27,10 +35,20 @@ struct ClubRecord {
     team_counts_start: Option<usize>,
     club_index: u32,
     uid: u32,
+    unique_id: Option<u32>,
     nation_id: u32,
     fa_nation_id: u32,
+    city_id: Option<u32>,
     name: String,
     short_name: String,
+}
+
+#[derive(Debug, Clone, Copy, Default)]
+struct ClubStatus {
+    reputation: Option<u16>,
+    last_league_position: Option<u8>,
+    /// Offset of the reputation word in the status table, when the row carries one.
+    reputation_offset: Option<usize>,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -254,6 +272,8 @@ impl ClubIndex {
         let mut clubs = Vec::with_capacity(records.len());
         let mut uid_by_index = HashMap::with_capacity(records.len());
         let mut name_by_uid = HashMap::with_capacity(records.len());
+        let mut status_offsets = HashMap::new();
+        let mut record_spans = HashMap::with_capacity(records.len());
         let mut team_to_club = HashMap::new();
         let mut affiliate_lists: Vec<Vec<u32>> = Vec::with_capacity(records.len());
 
@@ -298,20 +318,33 @@ impl ClubIndex {
                     )));
                 }
             }
-            let (reputation, last_league_position) =
-                statuses.get(position).copied().unwrap_or((None, None));
+            let status = statuses.get(position).copied().unwrap_or_default();
+            if let Some(offset) = status.reputation_offset {
+                status_offsets.insert(record.uid, offset);
+            }
+            record_spans.insert(
+                record.uid,
+                ClubRecordSpan {
+                    record_start: record.record_start,
+                    record_end: record.record_end,
+                },
+            );
             clubs.push(Club {
                 uid: record.uid,
+                unique_id: record.unique_id,
                 name: record.name.clone(),
                 short_name: record.short_name.clone(),
                 nation_id: record.nation_id,
                 nation_name: None,
                 fa_nation_id: record.fa_nation_id,
                 fa_nation_name: None,
+                city_id: record.city_id,
                 gender: team_list.gender,
-                reputation,
-                last_league_position,
+                reputation: status.reputation,
+                last_league_position: status.last_league_position,
                 parent_club_uid: None,
+                parent_club_name: None,
+                corporate_facilities: None,
                 teams: team_list.team_ids,
             });
         }
@@ -345,6 +378,30 @@ impl ClubIndex {
             }
         }
 
+        // An affiliate team is a team of the controlled club. Resolve it back to that
+        // club so the detail view can show the parent relationship.
+        let position_by_uid: HashMap<u32, usize> = clubs
+            .iter()
+            .enumerate()
+            .map(|(position, club)| (club.uid, position))
+            .collect();
+        for (team_id, (parent_uid, _)) in &affiliate_team_to_club {
+            let Some((child_uid, _)) = team_to_club.get(team_id) else {
+                continue;
+            };
+            if child_uid == parent_uid {
+                continue;
+            }
+            let Some(position) = position_by_uid.get(child_uid).copied() else {
+                continue;
+            };
+            let child = &mut clubs[position];
+            if child.parent_club_uid.is_none() {
+                child.parent_club_uid = Some(*parent_uid);
+                child.parent_club_name = name_by_uid.get(parent_uid).cloned();
+            }
+        }
+
         let mut fielding_team_to_club = team_to_club.clone();
         fielding_team_to_club.extend(affiliate_team_to_club.iter().map(|(k, v)| (*k, *v)));
 
@@ -362,7 +419,19 @@ impl ClubIndex {
             team_to_club,
             affiliate_team_to_club,
             fielding_team_to_club,
+            record_spans,
+            status_offsets,
         })
+    }
+
+    pub fn club(&self, uid: u32) -> Option<&Club> {
+        self.club_by_uid
+            .get(&uid)
+            .and_then(|position| self.clubs.get(*position))
+    }
+
+    pub fn record_span(&self, uid: u32) -> Option<ClubRecordSpan> {
+        self.record_spans.get(&uid).copied()
     }
 
     pub fn team_fields(&self, team_id: u32) -> Option<(u32, &Club, u8)> {
@@ -442,11 +511,18 @@ fn read_counted_table(game_db: &[u8], anchor_records: &[ClubRecord]) -> Option<V
         return None;
     }
     let rows = tables.pop()?;
+    let table_end = rows.last()?.footer_start + 12;
+    let starts: Vec<usize> = rows
+        .iter()
+        .map(|row| {
+            let extra = usize::from(game_db.get(row.body_start) == Some(&12)) * 4;
+            row.body_start + extra - ClubLayout::ZERO_BYTE_OFFSET
+        })
+        .collect();
 
     let mut records = Vec::with_capacity(rows.len());
     for (ordinal, row) in rows.iter().enumerate() {
-        let extra = usize::from(game_db.get(row.body_start) == Some(&12)) * 4;
-        let start = row.body_start + extra - ClubLayout::ZERO_BYTE_OFFSET;
+        let start = starts[ordinal];
         if ordinal > 0
             && !game_db
                 .get(start + ClubLayout::ANCHOR_OFFSET..start + ClubLayout::ANCHOR_OFFSET + 4)
@@ -459,13 +535,15 @@ fn read_counted_table(game_db: &[u8], anchor_records: &[ClubRecord]) -> Option<V
         } else {
             rows[ordinal - 1].unique_id + 1
         };
+        let record_end = starts.get(ordinal + 1).copied().unwrap_or(table_end);
         let Some(record) = accept_table_record(
             game_db,
             start,
-            row.footer_start,
+            record_end,
             row.team_counts_start,
             ordinal as u32,
             uid,
+            Some(row.unique_id),
         ) else {
             if ordinal == 0 {
                 return None;
@@ -578,6 +656,7 @@ fn accept_table_record(
     team_counts_start: usize,
     club_index: u32,
     uid: u32,
+    unique_id: Option<u32>,
 ) -> Option<ClubRecord> {
     let nation_id = read_u32(game_db, record_start + ClubLayout::NATION_OFFSET)?;
     let fa_nation_id = read_u32(game_db, record_start + ClubLayout::FA_NATION_OFFSET)?;
@@ -589,6 +668,8 @@ fn accept_table_record(
     {
         return None;
     }
+    let city_id = read_u32(game_db, record_start + ClubLayout::CITY_OFFSET)
+        .filter(|value| *value != MISSING_U32);
     let (name, short_name) = read_club_names(game_db, record_start)?;
     Some(ClubRecord {
         record_start,
@@ -596,8 +677,10 @@ fn accept_table_record(
         team_counts_start: Some(team_counts_start),
         club_index,
         uid,
+        unique_id,
         nation_id,
         fa_nation_id,
+        city_id,
         name,
         short_name,
     })
@@ -762,8 +845,11 @@ fn find_initial_club(game_db: &[u8], records: &[ClubRecord]) -> Option<ClubRecor
             team_counts_start: None,
             club_index: 0,
             uid: 0,
+            unique_id: None,
             nation_id,
             fa_nation_id,
+            city_id: read_u32(game_db, start + ClubLayout::CITY_OFFSET)
+                .filter(|value| *value != MISSING_U32),
             name,
             short_name,
         });
@@ -825,8 +911,11 @@ fn accept_club_record(game_db: &[u8], record_start: usize) -> Option<ClubRecord>
         team_counts_start: None,
         club_index,
         uid: uid + 1,
+        unique_id: None,
         nation_id,
         fa_nation_id,
+        city_id: read_u32(game_db, record_start + ClubLayout::CITY_OFFSET)
+            .filter(|value| *value != MISSING_U32),
         name,
         short_name,
     })
@@ -851,10 +940,10 @@ fn read_club_names(game_db: &[u8], record_start: usize) -> Option<(String, Strin
     Some((name.to_owned(), short_name.to_owned()))
 }
 
-fn read_statuses(game_db: &[u8], records: &[ClubRecord]) -> Vec<(Option<u16>, Option<u8>)> {
+fn read_statuses(game_db: &[u8], records: &[ClubRecord]) -> Vec<ClubStatus> {
     let mut order: Vec<usize> = (0..records.len()).collect();
     order.sort_by_key(|index| records[*index].club_index);
-    let mut statuses: Vec<(Option<u16>, Option<u8>)> = vec![(None, None); records.len()];
+    let mut statuses: Vec<ClubStatus> = vec![ClubStatus::default(); records.len()];
     let mut cursor = 0usize;
     let mut previous_ordinal: u32 = 0;
     let mut found_first = false;
@@ -899,7 +988,11 @@ fn read_statuses(game_db: &[u8], records: &[ClubRecord]) -> Vec<(Option<u16>, Op
                     let position = read_u8(game_db, hit + 10);
                     let reputation =
                         read_u16(game_db, hit + 11).filter(|value| (1..=10_000).contains(value));
-                    statuses[index] = (reputation, position);
+                    statuses[index] = ClubStatus {
+                        reputation,
+                        last_league_position: position,
+                        reputation_offset: reputation.map(|_| hit + 11),
+                    };
                 }
                 break;
             }

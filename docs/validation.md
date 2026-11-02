@@ -97,3 +97,45 @@ The ignored tests check the counts, Modrić's fields, nation names, gender split
 suspensions, injury history, SQLite query/filter behavior, facet counts, multi-column sorting,
 growth snapshots, analysis overview, squad depth, wonderkid filtering, full 46,273-row export,
 CSV and JSON export.
+
+## Club finance, stadium and edit validation
+
+The club pass was checked against the experimental FM27 fmsave reader on
+`BB KING - Parma Calcio.fm` (game date 2026-10-23):
+
+```text
+clubs                           26,138
+clubs with monthly finance         122
+finance rows                       488
+corporate facilities rows          122
+stadium rows                    27,042
+parse time (release)             1.53 s
+```
+
+The development oracle comparison uses:
+
+```bash
+.venv/bin/python scripts/oracle_clubs.py "/path/to/save.fm" --output /tmp/oracle_clubs.json
+./target/release/fm27scout clubs "/path/to/save.fm" --details --output /tmp/rust_clubs.json
+.venv/bin/python scripts/compare_clubs.py /tmp/oracle_clubs.json /tmp/rust_clubs.json
+```
+
+```text
+clubs: oracle=26138 rust=26138 missing=0 extra=0
+club_finances: oracle=488 rust=488 missing=0 extra=0
+club_facilities: oracle=122 rust=122
+stadiums: oracle=27042 rust=27042 missing=0 extra=0
+mismatches: 0
+```
+
+A controlled club edit on Parma (uid 1155) changed reputation, balance, transfer
+budget, weekly wage budget, corporate facilities, all-seater capacity and
+expansion capacity. Re-parsing the output and fmsave both read the new values;
+the club's last league position and all other finance fields remained unchanged.
+
+The ignored `club_real_save.rs` tests cover:
+
+- finance, facilities and stadium counts,
+- club search and detail retrieval through SQLite,
+- owned-stadium capacity edits,
+- re-parsing and field-by-field verification of an edited save copy.

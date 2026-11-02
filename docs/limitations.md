@@ -30,6 +30,15 @@
   windows, so it no longer depends on the typed array being populated.
 - Contract clauses, loans and contract chains are parsed; a few unobserved
   fallback structures are explicitly left blank.
+- Monthly club finances and corporate facilities exist only for the league
+  nations the save tracks. In the reference FM27 save that is 122 clubs out of
+  more than 26,000; other clubs show their basic profile, squad and owned
+  stadiums but no finance series.
+- The stadium table stores ownership but no direct club -> ground pointer.
+  Home-ground use would require the fixture calendar and is not implemented yet.
+- Club editing is limited to fixed-width, low-risk fields: reputation, the
+  latest finance snapshot, corporate facilities and owned-stadium capacities.
+  It does not edit names, nations, team lists, affiliations or stadium owners.
 - Windows/Linux builds are not available yet.
 - CI publishes an unsigned DMG; on first launch, use
   **System Settings → Privacy & Security → Open Anyway**. Developer ID

@@ -14,6 +14,13 @@ export function formatValue(value: number | null | undefined): string {
   return value.toLocaleString("en-US");
 }
 
+export function formatMoney(value: number | null | undefined): string {
+  if (value == null) return "—";
+  if (value === 0) return "0";
+  const sign = value < 0 ? "-" : "";
+  return `${sign}${formatValue(Math.abs(value))}`;
+}
+
 export function formatWage(value: number | null | undefined, locale: Locale = "en"): string {
   if (value == null) return "—";
   return `${value.toLocaleString(locale === "zh-CN" ? "zh-CN" : "en-US")}${translate(locale, "common.perWeek")}`;

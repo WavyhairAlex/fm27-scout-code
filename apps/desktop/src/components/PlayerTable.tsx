@@ -43,6 +43,8 @@ export function PlayerTable() {
   const setSort = useAppStore((state) => state.setSort);
   const selectedUid = useAppStore((state) => state.selectedUid);
   const setSelectedUid = useAppStore((state) => state.setSelectedUid);
+  const setViewMode = useAppStore((state) => state.setViewMode);
+  const setSelectedClubUid = useAppStore((state) => state.setSelectedClubUid);
   const compareUids = useAppStore((state) => state.compareUids);
   const toggleCompare = useAppStore((state) => state.toggleCompare);
   const currentPage = useAppStore((state) => state.page);
@@ -126,18 +128,38 @@ export function PlayerTable() {
         accessorFn: (row) => row.club_name,
         header: t("table.club"),
         size: 154,
-        cell: ({ row }) => (
-          <div className="min-w-0">
-            <div className="truncate text-[11px] font-medium text-[var(--ink)]">
-              {row.original.club_name ?? t("common.freeAgent")}
+        cell: ({ row }) =>
+          row.original.club_uid != null ? (
+            <button
+              type="button"
+              className="min-w-0 text-left"
+              onClick={(event) => {
+                event.stopPropagation();
+                setSelectedClubUid(row.original.club_uid);
+                setViewMode("clubs");
+              }}
+            >
+              <div className="truncate text-[11px] font-medium text-[var(--ink)] hover:text-[var(--accent-strong)] hover:underline">
+                {row.original.club_name ?? t("common.freeAgent")}
+              </div>
+              {row.original.on_loan && (
+                <span className="mt-0.5 inline-flex items-center rounded-full bg-[var(--blue-soft)] px-1.5 py-px text-[9px] font-semibold text-[var(--blue)]">
+                  {t("table.onLoan")}
+                </span>
+              )}
+            </button>
+          ) : (
+            <div className="min-w-0">
+              <div className="truncate text-[11px] font-medium text-[var(--ink)]">
+                {row.original.club_name ?? t("common.freeAgent")}
+              </div>
+              {row.original.on_loan && (
+                <span className="mt-0.5 inline-flex items-center rounded-full bg-[var(--blue-soft)] px-1.5 py-px text-[9px] font-semibold text-[var(--blue)]">
+                  {t("table.onLoan")}
+                </span>
+              )}
             </div>
-            {row.original.on_loan && (
-              <span className="mt-0.5 inline-flex items-center rounded-full bg-[var(--blue-soft)] px-1.5 py-px text-[9px] font-semibold text-[var(--blue)]">
-                {t("table.onLoan")}
-              </span>
-            )}
-          </div>
-        ),
+          ),
       },
       {
         id: "status",

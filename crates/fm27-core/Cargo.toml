@@ -4,7 +4,7 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 rust-version.workspace = true
-description = "Parser, SQLite store and player editor for Football Manager 27 saves"
+description = "Parser, SQLite store and player/club editor for Football Manager 27 saves"
 
 [dependencies]
 chrono.workspace = true

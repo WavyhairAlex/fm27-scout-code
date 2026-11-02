@@ -31,6 +31,19 @@ as many players as needed; pending players show a count in the toolbar. Open
 writes every staged player in one batch through a native Save dialog. The batch is
 verified by re-parsing the new save, and the source save is never overwritten.
 
+## Club edits
+
+The club profile's **Edit club** dialog exposes a small, low-risk set of fields:
+
+- club reputation (1–10000),
+- latest-month balance, transfer budget remaining and weekly wage budget,
+- corporate facilities (1–20; only for clubs with a monthly finance chain),
+- all-seater and expansion capacity for each stadium the club owns.
+
+The dialog writes one new save copy, re-parses it, and verifies every changed
+field. Attribution and stadium ownership are not editable; the source save is
+never modified.
+
 ## CLI usage
 
 ```bash
@@ -43,6 +56,13 @@ verified by re-parsing the new save, and the source save is never overwritten.
 ./target/release/fm27scout edit "/path/to/save.fm" --uid 228 \
   --ca 150 --pa 199 --attr crossing=100 --attr consistency=100 \
   --personality professionalism=20 --trait 11 --output edited.fm
+
+# Low-risk club edit
+./target/release/fm27scout edit-club "/path/to/save.fm" --club-uid 1155 \
+  --reputation 6500 --corporate-facilities 8 \
+  --balance 30000000 --transfer-budget 6000000 --wage-budget 600000 \
+  --stadium-uid 43156154 --all-seater 1300 --expansion 6000 \
+  --output club-edited.fm
 ```
 
 By default the output is `<save stem>.edited.fm` in the same directory. Use

@@ -8,8 +8,17 @@
   copied before parsing so a save in progress cannot be read half-written.
 - Players: 46,273 records with attributes, hidden attributes, CA/PA, positions,
   personality, traits, contracts, value and status.
-- Clubs: 26,214 records with team mapping, reputation and last season's league
-  position.
+- Clubs: more than 26,000 records with team mapping, reputation and last
+  season's league position.
+- Club finances: monthly snapshots (balance, transfer budget, wage budget,
+  payroll, income/expenditure and net) plus corporate facilities, read from each
+  club record. Only the league nations the save tracks keep these rows.
+- Stadiums: the save's ground table with capacities, pitch dimensions, dates and
+  owner club. The save stores no direct club -> ground pointer, so home-ground
+  use is not derived yet.
+- Club search: full club table with nation, reputation, finance, facilities and
+  stadium filters, plus a club profile with squad, finance history and owned
+  stadiums.
 - Competitions: 1,724 competitions and 3,459 stage rows from the save's stage
   table; 1,586 carry an editor database id, which links to the optional user name
   CSV.
@@ -30,6 +39,8 @@
 ## Desktop UI
 
 - Filters, multi-column sorting and player profiles.
+- Separate club workspace with searchable club table, overview, squad, finance
+  history and owned-stadium/company-facilities panels.
 - 2–4 player comparison.
 - CSV/JSON export.
 - Hidden-attribute toggle, off by default.
@@ -52,6 +63,9 @@
 - CA rebalancing warnings before writing.
 - CA budget estimator: live estimate from edited attributes using community FM
   position weights, with over/under-budget guidance and position selection.
+- Low-risk club edits: reputation, latest-month balance, transfer budget
+  remaining, weekly wage budget, corporate facilities and owned-stadium
+  capacities. Club edits write one new save copy and verify every changed field.
 - The source save is never modified; existing output files are not overwritten;
   the result is verified by re-parsing it.
 - See [editor.md](editor.md) for the workflow and safety notes.
