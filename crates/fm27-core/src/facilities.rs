@@ -13,7 +13,7 @@
 use std::collections::{HashMap, HashSet};
 
 use crate::clubs::ClubIndex;
-use crate::layout::{read_u8, read_u32};
+use crate::layout::read_u32;
 
 #[derive(Debug, Clone, Copy, Default)]
 pub struct ClubFacilities {
@@ -28,6 +28,18 @@ pub struct ClubFacilities {
 pub struct FacilityRowOffsets {
     pub row_start: usize,
     pub info_start: usize,
+}
+
+#[derive(Debug, Clone, Copy)]
+struct FacilityCandidate {
+    row_start: usize,
+    info_start: usize,
+    key: u32,
+    uid: u32,
+    training: u8,
+    youth: u8,
+    junior_coaching: u8,
+    youth_recruitment: u8,
 }
 
 impl FacilityRowOffsets {
@@ -54,6 +66,56 @@ pub fn read_club_facilities(
     club_index: &ClubIndex,
     tracked_clubs: &HashSet<u32>,
 ) -> HashMap<u32, ClubFacilities> {
+    selected_rows(game_db, club_index, tracked_clubs)
+        .into_iter()
+        .map(|row| {
+            (
+                row.uid,
+                ClubFacilities {
+                    training: Some(row.training),
+                    youth: Some(row.youth),
+                    junior_coaching: Some(row.junior_coaching),
+                    youth_recruitment: Some(row.youth_recruitment),
+                },
+            )
+        })
+        .collect()
+}
+
+/// Locate the facility row that belongs to one club, for in-place editing.
+///
+/// The row key is the stored club index plus one, matching
+/// [`read_club_facilities`]. The same sorted-table selection as the read pass is
+/// used so a key that merely occurs inside another record cannot be mistaken for
+/// the club's own row.
+pub fn locate_facility_row(
+    game_db: &[u8],
+    club_index: &ClubIndex,
+    club_uid: u32,
+    tracked_clubs: &HashSet<u32>,
+) -> Option<FacilityRowOffsets> {
+    selected_rows(game_db, club_index, tracked_clubs)
+        .into_iter()
+        .find(|row| row.uid == club_uid)
+        .map(|row| FacilityRowOffsets {
+            row_start: row.row_start,
+            info_start: row.info_start,
+        })
+}
+
+/// Collect every plausible facility row and keep the longest sequence ordered by
+/// club index. The facility table is sorted by club key; a key can also occur
+/// inside another table's record, and those matches are not in key order with
+/// their neighbours. Picking the longest increasing sequence discards them
+/// without relying on the first byte match.
+fn selected_rows(
+    game_db: &[u8],
+    club_index: &ClubIndex,
+    tracked_clubs: &HashSet<u32>,
+) -> Vec<FacilityCandidate> {
+    if game_db.len() < 500 {
+        return Vec::new();
+    }
     let mut index_to_uid = HashMap::with_capacity(tracked_clubs.len());
     for (&uid, span) in &club_index.record_spans {
         if !tracked_clubs.contains(&uid) {
@@ -68,11 +130,7 @@ pub fn read_club_facilities(
         index_to_uid.insert(key, uid);
     }
 
-    let mut facilities = HashMap::with_capacity(index_to_uid.len());
-    let mut used_rows = HashSet::new();
-    if game_db.len() < 500 {
-        return facilities;
-    }
+    let mut candidates = Vec::new();
     for start in 0..game_db.len() - 500 {
         let training = game_db[start + 4];
         if !(1..=20).contains(&training) {
@@ -84,79 +142,52 @@ pub fn read_club_facilities(
         let Some(&uid) = index_to_uid.get(&key) else {
             continue;
         };
-        if facilities.contains_key(&uid) {
-            continue;
-        }
-        let Some(info) = locate_info_row(game_db, start) else {
+        let Some(info_start) = locate_info_row(game_db, start) else {
             continue;
         };
-        if !used_rows.insert(info) {
-            continue;
-        }
-        let youth = game_db[info + 63];
-        let junior_coaching = game_db[info + 64];
-        let youth_recruitment = game_db[info + 65];
-        if !(1..=20).contains(&youth)
-            || !(1..=20).contains(&junior_coaching)
-            || !(1..=20).contains(&youth_recruitment)
-        {
-            continue;
-        }
-        facilities.insert(
-            uid,
-            ClubFacilities {
-                training: Some(training),
-                youth: Some(youth),
-                junior_coaching: Some(junior_coaching),
-                youth_recruitment: Some(youth_recruitment),
-            },
-        );
-    }
-    facilities
-}
-
-/// Locate the facility row that belongs to one club, for in-place editing.
-///
-/// The row key is the stored club index plus one, matching
-/// [`read_club_facilities`]. The first row that passes the same validation as
-/// the read pass is returned.
-pub fn locate_facility_row(
-    game_db: &[u8],
-    club_index: &ClubIndex,
-    club_uid: u32,
-) -> Option<FacilityRowOffsets> {
-    let span = club_index.record_span(club_uid)?;
-    let stored = read_u32(game_db, span.record_start)?;
-    let key = stored.checked_add(1)?;
-    let key_bytes = key.to_le_bytes();
-    let mut search_from = 0usize;
-    while let Some(relative) = find_bytes(game_db.get(search_from..)?, &key_bytes) {
-        let row_start = search_from + relative;
-        search_from = row_start + 1;
-        let Some(training) = read_u8(game_db, row_start + 4) else {
-            continue;
-        };
-        if !(1..=20).contains(&training) {
-            continue;
-        }
-        let Some(info_start) = locate_info_row(game_db, row_start) else {
-            continue;
-        };
-        return Some(FacilityRowOffsets {
-            row_start,
+        let youth = game_db[info_start + 63];
+        let junior_coaching = game_db[info_start + 64];
+        let youth_recruitment = game_db[info_start + 65];
+        candidates.push(FacilityCandidate {
+            row_start: start,
             info_start,
+            key,
+            uid,
+            training,
+            youth,
+            junior_coaching,
+            youth_recruitment,
         });
     }
-    None
+    longest_key_ordered(candidates)
 }
 
-fn find_bytes(haystack: &[u8], needle: &[u8]) -> Option<usize> {
-    if needle.is_empty() {
-        return Some(0);
+fn longest_key_ordered(candidates: Vec<FacilityCandidate>) -> Vec<FacilityCandidate> {
+    if candidates.is_empty() {
+        return candidates;
     }
-    haystack
-        .windows(needle.len())
-        .position(|window| window == needle)
+    let mut tails: Vec<usize> = Vec::new();
+    let mut previous = vec![None; candidates.len()];
+    for (index, candidate) in candidates.iter().enumerate() {
+        let position = tails.partition_point(|&tail| candidates[tail].key < candidate.key);
+        if position > 0 {
+            previous[index] = Some(tails[position - 1]);
+        }
+        if position == tails.len() {
+            tails.push(index);
+        } else {
+            tails[position] = index;
+        }
+    }
+
+    let mut selected = Vec::with_capacity(tails.len());
+    let mut current = tails.last().copied();
+    while let Some(index) = current {
+        selected.push(candidates[index]);
+        current = previous[index];
+    }
+    selected.reverse();
+    selected
 }
 
 /// Find the supporter-share block that belongs to the row starting at `start`.
@@ -233,7 +264,8 @@ mod tests {
         assert_eq!(row.junior_coaching, Some(10));
         assert_eq!(row.youth_recruitment, Some(10));
 
-        let offsets = locate_facility_row(&game_db, &club_index, 100).expect("facility offsets");
+        let offsets =
+            locate_facility_row(&game_db, &club_index, 100, &tracked).expect("facility offsets");
         assert_eq!(offsets.training_offset(), start + 4);
         assert_eq!(offsets.youth_offset(), info + 63);
         assert_eq!(offsets.junior_coaching_offset(), info + 64);
@@ -246,5 +278,32 @@ mod tests {
         let club_index = ClubIndex::default();
         let facilities = read_club_facilities(&game_db, &club_index, &HashSet::new());
         assert!(facilities.is_empty());
+    }
+
+    #[test]
+    fn a_key_inside_another_record_is_not_the_club_row() {
+        let candidate = |row_start, key| FacilityCandidate {
+            row_start,
+            info_start: row_start + 100,
+            key,
+            uid: key,
+            training: 10,
+            youth: 10,
+            junior_coaching: 10,
+            youth_recruitment: 10,
+        };
+        let selected = longest_key_ordered(vec![
+            candidate(100, 30),
+            candidate(200, 10),
+            candidate(300, 20),
+            candidate(400, 30),
+        ]);
+        assert_eq!(
+            selected
+                .iter()
+                .map(|row| (row.row_start, row.key))
+                .collect::<Vec<_>>(),
+            vec![(200, 10), (300, 20), (400, 30)]
+        );
     }
 }

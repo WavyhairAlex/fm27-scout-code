@@ -8,7 +8,6 @@ use fm27_core::{
     container::SaveFile,
     editor::{AttributeEdit, PlayerEditRequest, PlayerEditor},
     inspect_save,
-    layout::BUILD,
     metadata::read_metadata,
     parse_save,
     store::Store,
@@ -326,12 +325,6 @@ fn main() -> Result<()> {
             let save_file =
                 SaveFile::open(&save).with_context(|| format!("open {}", save.display()))?;
             let metadata = read_metadata(&save_file).context("read save metadata")?;
-            if metadata.build != BUILD {
-                bail!(
-                    "editing supports build {BUILD}; this save was written by {}",
-                    metadata.build
-                );
-            }
             let mut editor =
                 PlayerEditor::open(&save_file, &metadata).context("open player editor")?;
 

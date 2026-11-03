@@ -9,10 +9,11 @@ refuse to overwrite the source file.
 
 ## Supported saves
 
-- FM27 build `27.0.0+2486695`
+- FM27 builds `27.0.0+2486695` and `27.0.0+2493426`
 - `game_db` schema 4000
 
-The editor refuses other builds and schemas instead of guessing field offsets.
+Both builds share the same save layout. The editor refuses other builds and
+schemas instead of guessing field offsets.
 
 ## Desktop UI
 

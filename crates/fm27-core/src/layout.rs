@@ -1,11 +1,23 @@
-//! FM27 27.0.0+2486695 layout constants, ported from the verified fmsave reference
-//! implementation and checked against a real career save.
+//! FM27 layout constants, ported from the verified fmsave reference implementation
+//! and checked against real career saves.
 
 use chrono::NaiveDate;
 
 pub const GAME: &str = "FM27";
-pub const BUILD: &str = "27.0.0+2486695";
+/// Latest FM27 build whose save layout has been verified.
+pub const BUILD: &str = "27.0.0+2493426";
+/// Builds that share the verified FM27 save layout. Editing is limited to these
+/// exact builds so a layout change fails closed instead of guessing offsets.
+pub const EDITABLE_BUILDS: &[&str] = &["27.0.0+2486695", BUILD];
 pub const GAME_DB_SCHEMA: u32 = 4000;
+
+pub fn is_editable_build(build: &str) -> bool {
+    EDITABLE_BUILDS.contains(&build)
+}
+
+pub fn editable_builds() -> String {
+    EDITABLE_BUILDS.join(", ")
+}
 /// Cache/parser revision. This is intentionally independent of the app version:
 /// bump the leading version and/or the suffix only when parsing behavior or the
 /// cached data shape changes. The suffix invalidates caches written before the
@@ -554,4 +566,18 @@ pub fn stored_attribute_index(key: &str) -> Option<usize> {
                 index + 2
             }
         })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn editing_accepts_only_verified_builds() {
+        assert!(is_editable_build(BUILD));
+        assert!(is_editable_build("27.0.0+2486695"));
+        assert!(!is_editable_build("27.0.0+9999999"));
+        assert!(!is_editable_build("27.0.1+2493426"));
+        assert_eq!(editable_builds(), "27.0.0+2486695, 27.0.0+2493426");
+    }
 }

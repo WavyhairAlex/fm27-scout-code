@@ -89,8 +89,8 @@ cargo build --release -p fm27-cli
   --output club-edited.fm
 ```
 
-The `edit` subcommand is documented in [editor.md](editor.md). It only supports
-build `27.0.0+2486695` and always writes a separate output file. CA is the
+The `edit` subcommand is documented in [editor.md](editor.md). It supports builds
+`27.0.0+2486695` and `27.0.0+2493426`, and always writes a separate output file. CA is the
 attribute budget: FM rebalances CA-weighted visible attributes over roughly a
 month, while hidden attributes, determination, natural fitness, flair, aggression,
 personality and traits stay stable. Visible attributes alone are unstable; CA plus

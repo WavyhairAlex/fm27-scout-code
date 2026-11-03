@@ -1,6 +1,7 @@
 # FM27 layout quick reference
 
-Build `27.0.0+2486695`, `game_db` schema 4000. Offsets are decimal bytes unless noted.
+Builds `27.0.0+2486695` and `27.0.0+2493426`, `game_db` schema 4000. Both builds
+share the layout below. Offsets are decimal bytes unless noted.
 
 ## Save container
 
@@ -116,8 +117,10 @@ youth recruitment      +65  u8 (1–20)
 ```
 
 Rows are not contiguous and only the tracked clubs (those with a finance chain)
-have one. Locate a row by its club-index key, then verify the share block; do not
-walk the rows sequentially.
+have one. A club's key can also occur inside another record, so locate every
+plausible row by its club-index key and share block, then keep the longest
+sequence ordered by club index: the real facility table is sorted by that key.
+Do not simply take the first byte match or walk the rows sequentially.
 
 English Youth Level is not stored in this row or in the save. It comes from the
 game's `eng_youth_grades.edt` file, which maps club Unique IDs to EPPP categories

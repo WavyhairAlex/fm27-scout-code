@@ -4,6 +4,7 @@
 //! caller hands the result to [`SaveFile::write_with_replacements`], which writes a
 //! new save file.
 
+use std::collections::HashSet;
 use std::path::Path;
 
 use chrono::NaiveDate;
@@ -13,9 +14,10 @@ use crate::clubs::ClubIndex;
 use crate::container::{SaveFile, SaveWriteReport};
 use crate::editor::EditChange;
 use crate::error::{Error, Result};
-use crate::finances::locate_finance_chain;
+use crate::finances::{locate_finance_chain, read_club_finances};
 use crate::layout::{
-    BUILD, FinanceLayout, GAME_DB_SCHEMA, StadiumLayout, read_i32, read_u8, read_u16, read_u32,
+    FinanceLayout, GAME_DB_SCHEMA, StadiumLayout, editable_builds, is_editable_build, read_i32,
+    read_u8, read_u16, read_u32,
 };
 use crate::metadata::SaveMetadata;
 use crate::parse::ParsedSave;
@@ -291,9 +293,10 @@ pub struct ClubEditor {
 
 impl ClubEditor {
     pub fn open(save: &SaveFile, metadata: &SaveMetadata) -> Result<Self> {
-        if metadata.build != BUILD {
+        if !is_editable_build(&metadata.build) {
             return Err(Error::Unsupported(format!(
-                "club editing supports build {BUILD}; this save was written by {}",
+                "club editing supports builds {}; this save was written by {}",
+                editable_builds(),
                 metadata.build
             )));
         }
@@ -384,12 +387,21 @@ impl ClubEditor {
         if edit.is_empty() {
             return Ok(());
         }
-        let row = crate::facilities::locate_facility_row(&self.game_db, &self.club_index, club_uid)
-            .ok_or_else(|| {
-                Error::Unsupported(format!(
-                    "club uid {club_uid} has no stored facility row to edit"
-                ))
-            })?;
+        let tracked: HashSet<u32> = read_club_finances(&self.game_db, &self.club_index, None)
+            .corporate_facilities
+            .into_keys()
+            .collect();
+        let row = crate::facilities::locate_facility_row(
+            &self.game_db,
+            &self.club_index,
+            club_uid,
+            &tracked,
+        )
+        .ok_or_else(|| {
+            Error::Unsupported(format!(
+                "club uid {club_uid} has no stored facility row to edit"
+            ))
+        })?;
         if let Some(value) = edit.training_facilities {
             self.write_facility_byte(row.training_offset(), "training_facilities", value)?;
         }

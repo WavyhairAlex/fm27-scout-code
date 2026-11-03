@@ -2,8 +2,8 @@
 
 ## Save parsing
 
-- Reads FM27 `27.0.0+2486695` saves directly; the container, zstd frames and
-  section directories are parsed in Rust.
+- Reads FM27 `27.0.0+2486695` and `27.0.0+2493426` saves directly; the container,
+  zstd frames and section directories are parsed in Rust.
 - Finder double-click and drag-and-drop open `.fm` files. A read-only snapshot is
   copied before parsing so a save in progress cannot be read half-written.
 - Players: 46,273 records with attributes, hidden attributes, CA/PA, positions,

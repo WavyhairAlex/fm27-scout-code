@@ -13,9 +13,9 @@ use serde::{Deserialize, Serialize};
 use crate::container::{SaveFile, SaveWriteReport};
 use crate::error::{Error, Result};
 use crate::layout::{
-    ATTRIBUTE_KEYS, BUILD, GAME_DB_SCHEMA, PERSONALITY_KEYS, PersonLayout, PlayerLayout,
-    is_ca_exempt_attribute, read_i16, read_u8, read_u16, read_u64, stored_attribute_index,
-    trait_name,
+    ATTRIBUTE_KEYS, GAME_DB_SCHEMA, PERSONALITY_KEYS, PersonLayout, PlayerLayout, editable_builds,
+    is_ca_exempt_attribute, is_editable_build, read_i16, read_u8, read_u16, read_u64,
+    stored_attribute_index, trait_name,
 };
 use crate::metadata::SaveMetadata;
 use crate::model::Player;
@@ -200,9 +200,10 @@ impl PlayerEditor {
     /// Open a save for editing. The build and `game_db` schema are checked so a
     /// future FM27 build with different offsets fails instead of guessing.
     pub fn open(save: &SaveFile, metadata: &SaveMetadata) -> Result<Self> {
-        if metadata.build != BUILD {
+        if !is_editable_build(&metadata.build) {
             return Err(Error::Unsupported(format!(
-                "editing supports build {BUILD}; this save was written by {}",
+                "editing supports builds {}; this save was written by {}",
+                editable_builds(),
                 metadata.build
             )));
         }
