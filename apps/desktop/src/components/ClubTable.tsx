@@ -90,11 +90,17 @@ export function ClubTable() {
             description={t("clubs.searchPlaceholder")}
           />
         ) : (
-          <table className="w-full min-w-[760px] border-collapse 2xl:min-w-[1180px]">
+          <table className="w-full min-w-[860px] border-collapse 2xl:min-w-[1280px]">
             <thead>
               <tr>
                 {header("name", t("clubs.table.club"))}
                 {header("nation", t("clubs.table.nation"))}
+                {header(
+                  "league",
+                  t("clubs.table.league"),
+                  "left",
+                  "hidden xl:table-cell",
+                )}
                 {header("reputation", t("clubs.table.reputation"), "right")}
                 {header(
                   "last_position",
@@ -163,6 +169,9 @@ export function ClubTable() {
                     </td>
                     <td className="max-w-[130px] truncate px-2 py-1.5 text-[var(--muted)]">
                       {nationLabel(club.nation_name, locale) ?? `#${club.nation_id}`}
+                    </td>
+                    <td className="hidden max-w-[180px] truncate px-2 py-1.5 text-[10px] text-[var(--muted)] xl:table-cell">
+                      {club.league_name ?? "—"}
                     </td>
                     <td className="px-2 py-1.5 text-right font-mono text-[var(--muted)]">
                       {club.reputation ?? "—"}

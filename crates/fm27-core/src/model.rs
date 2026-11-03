@@ -240,6 +240,11 @@ pub struct Player {
     pub club_fa_nation_id: Option<u32>,
     pub club_reputation: Option<u16>,
     pub club_last_league_position: Option<u8>,
+    /// Current league of the player's club, when the save lets us resolve it.
+    #[serde(default)]
+    pub league_competition_id: Option<u32>,
+    #[serde(default)]
+    pub league_name: Option<String>,
     pub team_id: Option<u32>,
     pub team_slot: Option<u8>,
     pub club_join_date: Option<String>,
@@ -303,6 +308,11 @@ pub struct Club {
     pub gender: Option<u8>,
     pub reputation: Option<u16>,
     pub last_league_position: Option<u8>,
+    /// Current league, when the save's club record carries a resolvable competition entry.
+    #[serde(default)]
+    pub league_competition_id: Option<u32>,
+    #[serde(default)]
+    pub league_name: Option<String>,
     pub parent_club_uid: Option<u32>,
     #[serde(default)]
     pub parent_club_name: Option<String>,

@@ -21,9 +21,15 @@
 
 - Only build `27.0.0+2486695` has been fully verified; other FM27 builds are read
   in degraded mode with a warning, and missing fields are never guessed.
-- Country names are bundled; competition names are not stored in the save, so
-  `shared/competition-names.csv` must supply them keyed by the editor
-  `database_id` (the competition/stage index itself is parsed and cached).
+- Club leagues are resolved from the competition entries in a full club record. The
+  current resolver covers the top divisions of England, Italy, Spain, Germany,
+  France, the Netherlands and Portugal; lower divisions and other nations stay
+  blank rather than showing a guessed league.
+- Country names are bundled; competition names are not stored in the save.
+  `shared/competition-names.csv` maps the editor `database_id` to a name and is
+  populated for the local save; competitions without a database id, a
+  conflicting id, or a CSV row still fall back to `Competition #id` (the
+  competition/stage index itself is parsed and cached).
 - Injury data comes from the `injury_manager` section: FM27 keeps current
   expected-return windows in the two stride-14 arrays, while the log array holds
   the rolling injury history. "Injured" is derived from those expected-return

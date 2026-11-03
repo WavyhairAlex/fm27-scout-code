@@ -159,6 +159,16 @@ pub fn parse_save_with_progress(
         }
     };
 
+    let club_leagues =
+        crate::leagues::resolve_club_leagues(&game_db, &clubs, &competitions, &nations);
+    for club in &mut clubs.clubs {
+        let Some(competition_id) = club_leagues.get(&club.uid).copied() else {
+            continue;
+        };
+        club.league_competition_id = Some(competition_id);
+        club.league_name = competitions.name_for(competition_id).map(str::to_owned);
+    }
+
     let mut injuries = if save.sections.contains_key("injury_manager") {
         save.read_section("injury_manager")
             .ok()
@@ -228,6 +238,8 @@ pub fn parse_save_with_progress(
             club_fa_nation_id,
             club_reputation,
             club_last_league_position,
+            club_league_competition_id,
+            club_league_name,
             team_slot,
             gender,
         ) = match team_fields {
@@ -240,10 +252,14 @@ pub fn parse_save_with_progress(
                 Some(club.fa_nation_id),
                 club.reputation,
                 club.last_league_position,
+                club.league_competition_id,
+                club.league_name.clone(),
                 Some(slot),
                 club.gender,
             ),
-            None => (None, None, None, None, None, None, None, None, None, None),
+            None => (
+                None, None, None, None, None, None, None, None, None, None, None, None,
+            ),
         };
 
         let closing = closing_person_header(
@@ -442,6 +458,8 @@ pub fn parse_save_with_progress(
             club_fa_nation_id,
             club_reputation,
             club_last_league_position,
+            league_competition_id: club_league_competition_id,
+            league_name: club_league_name,
             team_id,
             team_slot,
             club_join_date: club_join_date.map(|date| date.to_string()),

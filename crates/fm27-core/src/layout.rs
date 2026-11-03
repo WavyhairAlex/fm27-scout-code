@@ -9,11 +9,13 @@ pub const GAME_DB_SCHEMA: u32 = 4000;
 /// Cache/parser revision. This is intentionally independent of the app version:
 /// bump the leading version and/or the suffix only when parsing behavior or the
 /// cached data shape changes. The suffix invalidates caches written before the
-/// complete player-trait and nation-name tables landed, and before the current
-/// injury windows were read from the stride-14 arrays.
+/// complete player-trait and nation-name tables landed, before the current
+/// injury windows were read from the stride-14 arrays, before the bundled
+/// competition name table was populated, and before club leagues were resolved.
 pub const PARSER_VERSION: &str = concat!(
     "1.1.0",
-    "+nation-names+listing+injury-windows+club-finance+stadiums+club-facilities+youth-level-edt"
+    "+nation-names+listing+injury-windows+club-finance+stadiums+club-facilities+youth-level-edt",
+    "+competition-names+club-leagues"
 );
 pub const EARLIEST_YEAR: i32 = 1901;
 pub const LATEST_YEAR: i32 = 2200;

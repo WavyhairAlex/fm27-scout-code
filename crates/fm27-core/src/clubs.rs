@@ -342,6 +342,8 @@ impl ClubIndex {
                 gender: team_list.gender,
                 reputation: status.reputation,
                 last_league_position: status.last_league_position,
+                league_competition_id: None,
+                league_name: None,
                 parent_club_uid: None,
                 parent_club_name: None,
                 corporate_facilities: None,

@@ -105,6 +105,7 @@ const en = {
   "clubs.noSelection": "Select a club",
   "clubs.noSelectionHint": "Choose a club in the table to open its profile.",
   "clubs.table.club": "Club",
+  "clubs.table.league": "League",
   "clubs.table.nation": "Nation",
   "clubs.table.reputation": "Reputation",
   "clubs.table.lastPosition": "Last pos.",
@@ -259,6 +260,7 @@ const en = {
   // Player table
   "table.player": "Player",
   "table.club": "Club",
+  "table.league": "League",
   "table.status": "Status",
   "table.positions": "Positions",
   "table.bestRole": "Best role",
@@ -545,9 +547,9 @@ const en = {
     "The cache is stored only in the local application data directory. Deleting it does not affect the original save; it will be parsed again next time.",
   "settings.nameTables": "Name tables",
   "settings.nationNames": "Country / region names",
-  "settings.competitionNames": "Competition names (user CSV)",
+  "settings.competitionNames": "Competition names (bundled CSV)",
   "settings.nameTableNote":
-    "Country names are bundled with the app. Competition names are not stored in the cache; add them from `shared/competition-names.csv` keyed by database_id to avoid shipping copyrighted game data.",
+    "Country and competition names are bundled with the app. `shared/competition-names.csv` maps the editor database_id to a name; competitions without a database id or CSV row fall back to `Competition #id`.",
   "settings.updates": "Updates",
   "settings.updateVersion": "FM27 Scout {version}",
   "settings.updateDescription":
@@ -815,6 +817,7 @@ const zhCN: Record<TranslationKey, string> = {
   "clubs.noSelection": "选择一个俱乐部",
   "clubs.noSelectionHint": "在表格中选择俱乐部以打开档案。",
   "clubs.table.club": "俱乐部",
+  "clubs.table.league": "联赛",
   "clubs.table.nation": "国家",
   "clubs.table.reputation": "声望",
   "clubs.table.lastPosition": "上季排名",
@@ -966,6 +969,7 @@ const zhCN: Record<TranslationKey, string> = {
 
   "table.player": "球员",
   "table.club": "俱乐部",
+  "table.league": "联赛",
   "table.status": "状态",
   "table.positions": "位置",
   "table.bestRole": "最佳角色",
@@ -1243,9 +1247,9 @@ const zhCN: Record<TranslationKey, string> = {
     "缓存只保存在本机应用数据目录。删除缓存不会影响原存档，下次打开时会重新解析。",
   "settings.nameTables": "名称表",
   "settings.nationNames": "国家 / 地区名称",
-  "settings.competitionNames": "赛事名称（用户 CSV）",
+  "settings.competitionNames": "赛事名称（内置 CSV）",
   "settings.nameTableNote":
-    "国家名称随应用内置；赛事名称不入库，可由 `shared/competition-names.csv` 以 database_id 为键补充，避免打包游戏受版权保护的数据。",
+    "国家与赛事名称随应用内置。`shared/competition-names.csv` 以编辑器 database_id 为键；没有 database ID 或 CSV 条目的赛事会回退显示 `Competition #id`。",
   "settings.updates": "更新",
   "settings.updateVersion": "FM27 Scout {version}",
   "settings.updateDescription": "从 GitHub Releases 检查带签名的更新；安装前会验证签名。",

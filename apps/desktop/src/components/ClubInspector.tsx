@@ -132,6 +132,7 @@ export function ClubInspector() {
               {club.city_id != null && <span> · {t("clubs.inspector.city")} {club.city_id}</span>}
             </div>
             <div className="mt-1 flex flex-wrap items-center gap-1.5">
+              {club.league_name && <Badge tone="outline">{club.league_name}</Badge>}
               {club.reputation != null && (
                 <Badge tone="outline">
                   {t("clubs.table.reputation")} {club.reputation}
@@ -444,7 +445,8 @@ function FinancesTab({ detail }: { detail: import("@/lib/types").ClubDetail }) {
     );
   }
   const latest = months.at(-1)!;
-  const maxBalance = Math.max(1, ...months.map((month) => Math.abs(month.balance)));
+  const history = months.slice(-12).reverse();
+  const maxBalance = Math.max(1, ...history.map((month) => Math.abs(month.balance)));
   return (
     <div className="space-y-3">
       <div className="grid grid-cols-2 gap-1.5">
@@ -512,7 +514,7 @@ function FinancesTab({ detail }: { detail: import("@/lib/types").ClubDetail }) {
           {t("clubs.inspector.history")}
         </div>
         <div className="mt-2 space-y-1.5">
-          {months.map((month) => (
+          {history.map((month) => (
             <div key={month.month} className="flex items-center gap-2">
               <span className="w-[72px] shrink-0 font-mono text-[9px] text-[var(--muted)]">
                 {month.month}

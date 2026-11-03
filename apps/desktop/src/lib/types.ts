@@ -226,6 +226,8 @@ export interface Player {
   club_fa_nation_id: number | null;
   club_reputation: number | null;
   club_last_league_position: number | null;
+  league_competition_id: number | null;
+  league_name: string | null;
   team_id: number | null;
   team_slot: number | null;
   club_join_date: string | null;
@@ -264,6 +266,8 @@ export interface PlayerRow {
   age: number | null;
   club_uid: number | null;
   club_name: string | null;
+  league_competition_id: number | null;
+  league_name: string | null;
   nation_id: number | null;
   nation_name: string | null;
   gender: number | null;
@@ -355,6 +359,8 @@ export interface Club {
   gender: number | null;
   reputation: number | null;
   last_league_position: number | null;
+  league_competition_id: number | null;
+  league_name: string | null;
   parent_club_uid: number | null;
   parent_club_name: string | null;
   corporate_facilities: number | null;
@@ -429,6 +435,8 @@ export interface ClubRow {
   gender: number | null;
   reputation: number | null;
   last_league_position: number | null;
+  league_competition_id: number | null;
+  league_name: string | null;
   parent_club_uid: number | null;
   parent_club_name: string | null;
   corporate_facilities: number | null;

@@ -9,8 +9,9 @@
 - Players: 46,273 records with attributes, hidden attributes, CA/PA, positions,
   personality, traits, contracts, value and status.
 - Clubs: more than 26,000 records with team mapping, reputation, last season's
-  league position and, for tracked clubs, training, youth, junior-coaching and
-  youth-recruitment facility ratings. English Youth Level (EPPP category 1–4) is
+  league position, the current league for the top divisions the resolver covers,
+  and, for tracked clubs, training, youth, junior-coaching and youth-recruitment
+  facility ratings. English Youth Level (EPPP category 1–4) is
   read from the game's `eng_youth_grades.edt` file.
 - Club finances: monthly snapshots (balance, transfer budget, wage budget,
   payroll, income/expenditure and net) plus corporate facilities, read from each

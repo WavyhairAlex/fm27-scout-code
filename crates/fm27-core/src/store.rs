@@ -105,6 +105,8 @@ pub struct PlayerRow {
     pub age: Option<i32>,
     pub club_uid: Option<u32>,
     pub club_name: Option<String>,
+    pub league_competition_id: Option<u32>,
+    pub league_name: Option<String>,
     pub nation_id: Option<u16>,
     pub nation_name: Option<String>,
     pub gender: Option<u8>,
@@ -201,6 +203,8 @@ pub struct ClubRow {
     pub gender: Option<u8>,
     pub reputation: Option<u16>,
     pub last_league_position: Option<u8>,
+    pub league_competition_id: Option<u32>,
+    pub league_name: Option<String>,
     pub parent_club_uid: Option<u32>,
     pub parent_club_name: Option<String>,
     pub corporate_facilities: Option<u8>,
@@ -413,10 +417,10 @@ impl Store {
                   raw_attributes_json, best_role_id, best_role_name, best_role_score,
                   best_role_position, injury_status, injury_until, recent_injury,
                   suspension_count, injuries_json, suspensions_json, contract_end, wage, on_loan,
-                  transfer_listed, loan_listed, data_json)
+                  transfer_listed, loan_listed, league_competition_id, league_name, data_json)
                  VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18,?19,
                          ?20,?21,?22,?23,?24,?25,?26,?27,?28,?29,?30,?31,?32,?33,?34,?35,?36,
-                         ?37,?38,?39,?40,?41,?42,?43,?44)",
+                         ?37,?38,?39,?40,?41,?42,?43,?44,?45,?46)",
             )?;
             let mut snapshot_stmt = transaction.prepare(
                 "INSERT INTO player_snapshots
@@ -508,6 +512,8 @@ impl Store {
                     on_loan,
                     player.transfer_listed,
                     player.loan_listed,
+                    player.league_competition_id,
+                    player.league_name,
                     serde_json::to_string(player)?,
                 ])?;
 
@@ -569,9 +575,10 @@ impl Store {
                   parent_club_uid, parent_club_name, corporate_facilities, training_facilities,
                   youth_facilities, junior_coaching, youth_recruitment, youth_level,
                   finance_month, balance, transfer_budget_allocated, transfer_budget_remaining,
-                  wage_budget_weekly, wage_payroll_weekly, net, teams_json)
+                  wage_budget_weekly, wage_payroll_weekly, net, league_competition_id, league_name,
+                  teams_json)
                  VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18,
-                         ?19,?20,?21,?22,?23,?24,?25,?26,?27,?28,?29)",
+                         ?19,?20,?21,?22,?23,?24,?25,?26,?27,?28,?29,?30,?31)",
             )?;
             for club in &parsed.clubs {
                 let finance = latest_finance.get(&club.uid);
@@ -604,6 +611,8 @@ impl Store {
                     finance.map(|row| row.wage_budget_weekly),
                     finance.map(|row| row.wage_payroll_weekly),
                     finance.map(|row| row.net),
+                    club.league_competition_id,
+                    club.league_name,
                     serde_json::to_string(&club.teams)?,
                 ])?;
             }
@@ -777,7 +786,8 @@ impl Store {
         let page_size = query.page_size.unwrap_or(150).clamp(1, 500);
         let order = order_by(query);
         let sql = format!(
-            "SELECT p.uid, p.name, p.age, p.club_uid, p.club_name, p.nation_id, p.ca, p.pa,
+            "SELECT p.uid, p.name, p.age, p.club_uid, p.club_name, p.league_competition_id,
+                    p.league_name, p.nation_id, p.ca, p.pa,
                     p.pa_range_code, p.positions_text, p.positions_json, p.attributes_json,
                     p.personality_json, p.transfer_value, p.transfer_value_state, c.wage,
                     c.end_date, p.height_cm, p.left_foot, p.right_foot, c.on_loan, p.traits_json,
@@ -801,43 +811,45 @@ impl Store {
                 age: row.get(2)?,
                 club_uid: row.get(3)?,
                 club_name: row.get(4)?,
-                nation_id: row.get(5)?,
-                ca: row.get(6)?,
-                pa: row.get(7)?,
-                pa_range_code: row.get(8)?,
-                positions_text: row.get(9)?,
-                positions: parse_json_column(row.get::<_, String>(10)?, "positions"),
-                attributes: parse_json_column(row.get::<_, String>(11)?, "attributes"),
+                league_competition_id: row.get(5)?,
+                league_name: row.get(6)?,
+                nation_id: row.get(7)?,
+                ca: row.get(8)?,
+                pa: row.get(9)?,
+                pa_range_code: row.get(10)?,
+                positions_text: row.get(11)?,
+                positions: parse_json_column(row.get::<_, String>(12)?, "positions"),
+                attributes: parse_json_column(row.get::<_, String>(13)?, "attributes"),
                 personality: row
-                    .get::<_, Option<String>>(12)?
-                    .and_then(|text| serde_json::from_str::<Personality>(&text).ok()),
-                transfer_value: row.get(13)?,
-                transfer_value_state: row
                     .get::<_, Option<String>>(14)?
+                    .and_then(|text| serde_json::from_str::<Personality>(&text).ok()),
+                transfer_value: row.get(15)?,
+                transfer_value_state: row
+                    .get::<_, Option<String>>(16)?
                     .and_then(|text| serde_json::from_str::<String>(&text).ok())
                     .unwrap_or_else(|| "ok".to_owned()),
-                wage: row.get(15)?,
-                contract_end: row.get(16)?,
-                height_cm: row.get(17)?,
-                left_foot: row.get(18)?,
-                right_foot: row.get(19)?,
-                on_loan: row.get(20)?,
+                wage: row.get(17)?,
+                contract_end: row.get(18)?,
+                height_cm: row.get(19)?,
+                left_foot: row.get(20)?,
+                right_foot: row.get(21)?,
+                on_loan: row.get(22)?,
                 traits: row
-                    .get::<_, Option<String>>(21)?
+                    .get::<_, Option<String>>(23)?
                     .and_then(|text| serde_json::from_str::<Vec<Trait>>(&text).ok())
                     .unwrap_or_default(),
-                nation_name: row.get(22)?,
-                gender: row.get(23)?,
-                best_role_id: row.get(24)?,
-                best_role_name: row.get(25)?,
-                best_role_score: row.get(26)?,
-                best_role_position: row.get(27)?,
-                injury_status: row.get(28)?,
-                injury_until: row.get(29)?,
-                recent_injury: row.get(30)?,
-                suspension_count: row.get(31)?,
-                transfer_listed: row.get(32)?,
-                loan_listed: row.get(33)?,
+                nation_name: row.get(24)?,
+                gender: row.get(25)?,
+                best_role_id: row.get(26)?,
+                best_role_name: row.get(27)?,
+                best_role_score: row.get(28)?,
+                best_role_position: row.get(29)?,
+                injury_status: row.get(30)?,
+                injury_until: row.get(31)?,
+                recent_injury: row.get(32)?,
+                suspension_count: row.get(33)?,
+                transfer_listed: row.get(34)?,
+                loan_listed: row.get(35)?,
             })
         })?;
         let mut rows = rows.collect::<std::result::Result<Vec<_>, _>>()?;
@@ -1235,8 +1247,9 @@ impl Store {
         let sql = format!(
             "{} SELECT c.uid, c.unique_id, COALESCE(c.name, ''), COALESCE(c.short_name, ''),
                     c.nation_id, c.nation_name, c.fa_nation_id, c.fa_nation_name, c.city_id,
-                    c.gender, c.reputation, c.last_league_position, c.parent_club_uid,
-                    c.parent_club_name, c.corporate_facilities, c.finance_month, c.balance,
+                    c.gender, c.reputation, c.last_league_position, c.league_competition_id,
+                    c.league_name, c.parent_club_uid, c.parent_club_name, c.corporate_facilities,
+                    c.finance_month, c.balance,
                     c.transfer_budget_allocated, c.transfer_budget_remaining,
                     c.wage_budget_weekly, c.wage_payroll_weekly, c.net,
                     COALESCE(s.player_count, 0), s.average_age, s.average_ca, s.total_value,
@@ -1267,23 +1280,25 @@ impl Store {
                 gender: row.get(9)?,
                 reputation: row.get(10)?,
                 last_league_position: row.get(11)?,
-                parent_club_uid: row.get(12)?,
-                parent_club_name: row.get(13)?,
-                corporate_facilities: row.get(14)?,
-                finance_month: row.get(15)?,
-                balance: row.get(16)?,
-                transfer_budget_allocated: row.get(17)?,
-                transfer_budget_remaining: row.get(18)?,
-                wage_budget_weekly: row.get(19)?,
-                wage_payroll_weekly: row.get(20)?,
-                net: row.get(21)?,
-                player_count: row.get::<_, i64>(22)? as u64,
-                average_age: row.get(23)?,
-                average_ca: row.get(24)?,
-                total_value: row.get(25)?,
-                total_wage: row.get(26)?,
-                stadium_count: row.get::<_, i64>(27)? as u64,
-                stadium_capacity: row.get(28)?,
+                league_competition_id: row.get(12)?,
+                league_name: row.get(13)?,
+                parent_club_uid: row.get(14)?,
+                parent_club_name: row.get(15)?,
+                corporate_facilities: row.get(16)?,
+                finance_month: row.get(17)?,
+                balance: row.get(18)?,
+                transfer_budget_allocated: row.get(19)?,
+                transfer_budget_remaining: row.get(20)?,
+                wage_budget_weekly: row.get(21)?,
+                wage_payroll_weekly: row.get(22)?,
+                net: row.get(23)?,
+                player_count: row.get::<_, i64>(24)? as u64,
+                average_age: row.get(25)?,
+                average_ca: row.get(26)?,
+                total_value: row.get(27)?,
+                total_wage: row.get(28)?,
+                stadium_count: row.get::<_, i64>(29)? as u64,
+                stadium_capacity: row.get(30)?,
             })
         })?;
         let rows = rows.collect::<std::result::Result<Vec<_>, _>>()?;
@@ -1301,9 +1316,10 @@ impl Store {
             .query_row(
                 "SELECT uid, unique_id, COALESCE(name, ''), COALESCE(short_name, ''),
                         nation_id, nation_name, fa_nation_id, fa_nation_name, city_id, gender,
-                        reputation, last_league_position, parent_club_uid, parent_club_name,
-                        corporate_facilities, training_facilities, youth_facilities,
-                        junior_coaching, youth_recruitment, youth_level, teams_json
+                        reputation, last_league_position, league_competition_id, league_name,
+                        parent_club_uid, parent_club_name, corporate_facilities,
+                        training_facilities, youth_facilities, junior_coaching, youth_recruitment,
+                        youth_level, teams_json
                  FROM clubs WHERE save_id = ?1 AND uid = ?2",
                 params![save_id, uid],
                 |row| {
@@ -1322,13 +1338,15 @@ impl Store {
                         row.get::<_, Option<u8>>(11)?,
                         row.get::<_, Option<u32>>(12)?,
                         row.get::<_, Option<String>>(13)?,
-                        row.get::<_, Option<u8>>(14)?,
-                        row.get::<_, Option<u8>>(15)?,
+                        row.get::<_, Option<u32>>(14)?,
+                        row.get::<_, Option<String>>(15)?,
                         row.get::<_, Option<u8>>(16)?,
                         row.get::<_, Option<u8>>(17)?,
                         row.get::<_, Option<u8>>(18)?,
                         row.get::<_, Option<u8>>(19)?,
-                        row.get::<_, Option<String>>(20)?,
+                        row.get::<_, Option<u8>>(20)?,
+                        row.get::<_, Option<u8>>(21)?,
+                        row.get::<_, Option<String>>(22)?,
                     ))
                 },
             )
@@ -1346,6 +1364,8 @@ impl Store {
             gender,
             reputation,
             last_league_position,
+            league_competition_id,
+            league_name,
             parent_club_uid,
             parent_club_name,
             corporate_facilities,
@@ -1372,6 +1392,8 @@ impl Store {
             gender,
             reputation,
             last_league_position,
+            league_competition_id,
+            league_name,
             parent_club_uid,
             parent_club_name,
             corporate_facilities,
@@ -1789,6 +1811,8 @@ fn migrate(conn: &Connection) -> Result<()> {
         ("saves", "save_name", "TEXT NOT NULL DEFAULT ''"),
         ("saves", "career_key", "TEXT NOT NULL DEFAULT ''"),
         ("players", "nation_name", "TEXT"),
+        ("players", "league_competition_id", "INTEGER"),
+        ("players", "league_name", "TEXT"),
         ("players", "gender", "INTEGER"),
         ("players", "best_role_id", "TEXT"),
         ("players", "best_role_name", "TEXT"),
@@ -1803,6 +1827,8 @@ fn migrate(conn: &Connection) -> Result<()> {
         ("players", "transfer_listed", "INTEGER NOT NULL DEFAULT 0"),
         ("players", "loan_listed", "INTEGER NOT NULL DEFAULT 0"),
         ("clubs", "nation_name", "TEXT"),
+        ("clubs", "league_competition_id", "INTEGER"),
+        ("clubs", "league_name", "TEXT"),
         ("clubs", "fa_nation_name", "TEXT"),
         ("clubs", "gender", "INTEGER"),
         ("clubs", "unique_id", "INTEGER"),
@@ -2041,6 +2067,7 @@ fn club_sort_expression(by: &str) -> String {
         "name" => "c.name".to_owned(),
         "short_name" => "c.short_name".to_owned(),
         "nation" | "nation_id" => "c.nation_id".to_owned(),
+        "league" | "league_name" => "c.league_name".to_owned(),
         "reputation" => "c.reputation".to_owned(),
         "last_position" | "last_league_position" => "c.last_league_position".to_owned(),
         "balance" => "c.balance".to_owned(),
@@ -2285,6 +2312,7 @@ fn sort_expression(by: &str) -> String {
         "name" => "p.name".to_owned(),
         "age" => "p.age".to_owned(),
         "club" | "club_name" => "p.club_name".to_owned(),
+        "league" | "league_name" => "p.league_name".to_owned(),
         "nation" | "nation_id" => "p.nation_id".to_owned(),
         "nation_name" => "p.nation_name".to_owned(),
         "gender" => "p.gender".to_owned(),

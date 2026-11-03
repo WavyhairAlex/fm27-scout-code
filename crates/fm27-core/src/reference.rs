@@ -2,8 +2,9 @@
 //!
 //! A save stores competition database ids but no competition names; the game renders those
 //! from its installed database. `shared/competition-names.csv` is the editable two-column table
-//! (`database_id,name`) that names the competition index and suspension scopes. It ships empty,
-//! so no SI/SEGA database text is bundled.
+//! (`database_id,name`) that names the competition index and suspension scopes. It is populated
+//! from the installed FM27 database for the local save; add rows for other databases and rebuild
+//! to extend it.
 
 use std::collections::HashMap;
 use std::sync::OnceLock;

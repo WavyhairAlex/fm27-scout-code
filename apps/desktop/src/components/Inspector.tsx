@@ -203,6 +203,11 @@ export function Inspector() {
                       {player.club_name ?? t("common.freeAgent")}
                     </div>
                   )}
+                  {player.league_name && (
+                    <div className="mt-0.5 truncate text-[10px] text-[var(--muted)]">
+                      {player.league_name}
+                    </div>
+                  )}
                   <div className="mt-0.5 flex items-center gap-1.5 text-[11px] text-[var(--muted)]">
                     <span>{t("common.yearsOld", { age: player.age ?? "?" })}</span>
                     <span className="text-[var(--line-strong)]">·</span>

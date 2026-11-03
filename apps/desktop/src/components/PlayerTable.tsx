@@ -162,6 +162,17 @@ export function PlayerTable() {
           ),
       },
       {
+        id: "league",
+        accessorFn: (row) => row.league_name,
+        header: t("table.league"),
+        size: 140,
+        cell: ({ row }) => (
+          <div className="max-w-[140px] truncate text-[10px] text-[var(--muted)]">
+            {row.original.league_name ?? "—"}
+          </div>
+        ),
+      },
+      {
         id: "status",
         accessorFn: (row) =>
           row.injury_status === "injured"
