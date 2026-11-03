@@ -206,38 +206,38 @@ export function Toolbar() {
       </div>
 
       {viewMode === "players" && (
-      <div className="no-drag mx-auto flex w-full max-w-[560px] items-center">
-        <div className="relative w-full">
-          <Search
-            size={14}
-            className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-[var(--muted)]"
-          />
-          <Input
-            id="global-search"
-            value={search}
-            onChange={(event) => updateSearch(event.target.value)}
-            placeholder={t("toolbar.searchPlaceholder")}
-            className="h-8 pl-8 pr-16"
-          />
-          <div className="pointer-events-none absolute right-2 top-1/2 flex -translate-y-1/2 items-center gap-1">
-            {search ? (
-              <button
-                type="button"
-                className="pointer-events-auto rounded p-0.5 text-[var(--muted)] hover:text-[var(--ink)]"
-                onClick={() => updateSearch("")}
-                aria-label={t("toolbar.clearSearch")}
-              >
-                <X size={12} />
-              </button>
-            ) : (
-              <span className="kbd">⌘F</span>
-            )}
+        <div className="no-drag flex min-w-0 flex-1 items-center justify-center">
+          <div className="relative w-full max-w-[560px]">
+            <Search
+              size={14}
+              className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-[var(--muted)]"
+            />
+            <Input
+              id="global-search"
+              value={search}
+              onChange={(event) => updateSearch(event.target.value)}
+              placeholder={t("toolbar.searchPlaceholder")}
+              className="h-8 pl-8 pr-16"
+            />
+            <div className="pointer-events-none absolute right-2 top-1/2 flex -translate-y-1/2 items-center gap-1">
+              {search ? (
+                <button
+                  type="button"
+                  className="pointer-events-auto rounded p-0.5 text-[var(--muted)] hover:text-[var(--ink)]"
+                  onClick={() => updateSearch("")}
+                  aria-label={t("toolbar.clearSearch")}
+                >
+                  <X size={12} />
+                </button>
+              ) : (
+                <span className="kbd">⌘F</span>
+              )}
+            </div>
           </div>
         </div>
-      </div>
       )}
 
-      <div className="no-drag flex items-center gap-1">
+      <div className="no-drag ml-auto flex shrink-0 items-center gap-1">
         {Object.keys(pendingEdits).length > 0 && (
           <Button
             variant="gold"

@@ -361,6 +361,8 @@ const en = {
   "inspector.currentSnapshot": " Current snapshot date: {date}.",
   "inspector.growthTitle": "CA / PA growth",
   "inspector.growthAria": "CA and PA growth chart",
+  "inspector.growthExpand": "Click to enlarge",
+  "inspector.growthSnapshots": "{count} snapshots",
   "inspector.growthNote":
     "Snapshots are grouped by save name. Re-opening the same career later appends a point automatically; the save is never modified.",
   "inspector.positionRatings": "Position ratings",
@@ -1058,6 +1060,8 @@ const zhCN: Record<TranslationKey, string> = {
   "inspector.currentSnapshot": " 当前快照日期：{date}。",
   "inspector.growthTitle": "CA / PA 成长曲线",
   "inspector.growthAria": "CA PA 成长曲线",
+  "inspector.growthExpand": "点击放大",
+  "inspector.growthSnapshots": "{count} 个快照",
   "inspector.growthNote":
     "快照以存档名称归组；同一生涯再次打开并解析后会自动追加，不会修改存档。",
   "inspector.positionRatings": "位置评分",

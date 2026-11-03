@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { createPortal } from "react-dom";
 import {
   BriefcaseBusiness,
   CalendarDays,
@@ -11,6 +12,7 @@ import {
   GitCompareArrows,
   HeartPulse,
   LockKeyhole,
+  Maximize2,
   Pencil,
   Ruler,
   Shield,
@@ -388,6 +390,7 @@ export function Inspector() {
         )}
         {tab === "growth" && (
           <GrowthPanel
+            key={selectedUid}
             points={growth ?? []}
             gameDate={gameDate}
           />
@@ -665,7 +668,8 @@ function RolesPanel({ roles, bestId }: { roles: RoleScore[]; bestId: string | nu
 }
 
 function GrowthPanel({ points, gameDate }: { points: SnapshotPoint[]; gameDate: string | null }) {
-  const { t, locale } = useI18n();
+  const { t } = useI18n();
+  const [expanded, setExpanded] = useState(false);
   if (points.length < 2) {
     return (
       <div className="flex flex-col items-center gap-2 px-6 py-10 text-center">
@@ -678,20 +682,6 @@ function GrowthPanel({ points, gameDate }: { points: SnapshotPoint[]; gameDate: 
       </div>
     );
   }
-  const width = 320;
-  const height = 132;
-  const pad = 8;
-  const maxY = 200;
-  const x = (index: number) => pad + (index / Math.max(1, points.length - 1)) * (width - pad * 2);
-  const y = (value: number) => height - pad - (value / maxY) * (height - pad * 2);
-  const path = (key: "ca" | "pa") =>
-    points
-      .map((point, index) => {
-        const value = point[key];
-        return value == null ? null : `${index === 0 ? "M" : "L"}${x(index).toFixed(1)},${y(value).toFixed(1)}`;
-      })
-      .filter(Boolean)
-      .join(" ");
   const first = points[0];
   const last = points[points.length - 1];
   const caDelta = (last.ca ?? 0) - (first.ca ?? 0);
@@ -705,26 +695,20 @@ function GrowthPanel({ points, gameDate }: { points: SnapshotPoint[]; gameDate: 
             {caDelta}
           </span>
         </div>
-        <svg
-          viewBox={`0 0 ${width} ${height}`}
-          className="w-full"
-          role="img"
-          aria-label={t("inspector.growthAria")}
+        <button
+          type="button"
+          onClick={() => setExpanded(true)}
+          className="focus-ring group relative block w-full cursor-zoom-in rounded-md"
+          aria-label={t("inspector.growthExpand")}
+          title={t("inspector.growthExpand")}
         >
-          {[100, 140, 180].map((line) => (
-            <g key={line}>
-              <line x1={pad} x2={width - pad} y1={y(line)} y2={y(line)} stroke="var(--line)" strokeWidth="0.5" strokeDasharray="3 3" />
-              <text x={width - pad} y={y(line) - 2} textAnchor="end" fontSize="7" fill="var(--muted)">{line}</text>
-            </g>
-          ))}
-          <path d={path("pa")} fill="none" stroke="var(--gold)" strokeWidth="1.5" strokeDasharray="3 2" />
-          <path d={path("ca")} fill="none" stroke="var(--success)" strokeWidth="2" />
-          {points.map((point, index) =>
-            point.ca == null ? null : (
-              <circle key={point.game_date} cx={x(index)} cy={y(point.ca)} r="2" fill="var(--success)" />
-            ),
-          )}
-        </svg>
+          <GrowthChart points={points} />
+          <span className="pointer-events-none absolute inset-0 flex items-center justify-center rounded-md bg-black/0 opacity-0 transition-opacity group-hover:bg-black/5 group-hover:opacity-100 dark:group-hover:bg-black/20">
+            <span className="flex h-7 w-7 items-center justify-center rounded-full border border-[var(--line)] bg-[var(--surface)]/95 text-[var(--ink)] shadow-sm">
+              <Maximize2 size={13} />
+            </span>
+          </span>
+        </button>
         <div className="flex items-center gap-3 px-1 text-[9px] text-[var(--muted)]">
           <span className="inline-flex items-center gap-1"><span className="h-0.5 w-3 bg-[var(--success)]" /> CA</span>
           <span className="inline-flex items-center gap-1"><span className="h-0.5 w-3 bg-[var(--gold)]" /> PA</span>
@@ -751,7 +735,201 @@ function GrowthPanel({ points, gameDate }: { points: SnapshotPoint[]; gameDate: 
       <p className="text-[9px] leading-relaxed text-[var(--muted)]">
         {t("inspector.growthNote")}
       </p>
+      {expanded && <GrowthChartDialog points={points} onClose={() => setExpanded(false)} />}
     </div>
+  );
+}
+
+const GROWTH_CHART_MAX = 200;
+
+function growthPath(
+  points: SnapshotPoint[],
+  key: "ca" | "pa",
+  x: (index: number) => number,
+  y: (value: number) => number,
+) {
+  return points
+    .map((point, index) => {
+      const value = point[key];
+      return value == null ? null : `${index === 0 ? "M" : "L"}${x(index).toFixed(1)},${y(value).toFixed(1)}`;
+    })
+    .filter(Boolean)
+    .join(" ");
+}
+
+function GrowthChart({ points, expanded = false }: { points: SnapshotPoint[]; expanded?: boolean }) {
+  const { t } = useI18n();
+  const width = expanded ? 900 : 320;
+  const height = expanded ? 360 : 132;
+  const padLeft = expanded ? 44 : 8;
+  const padRight = expanded ? 20 : 8;
+  const padTop = expanded ? 14 : 8;
+  const padBottom = expanded ? 32 : 8;
+  const plotWidth = width - padLeft - padRight;
+  const plotHeight = height - padTop - padBottom;
+  const x = (index: number) => padLeft + (index / Math.max(1, points.length - 1)) * plotWidth;
+  const knownValues = points
+    .flatMap((point) => [point.ca, point.pa])
+    .filter((value): value is number => value != null);
+  const initialCa = points.find((point) => point.ca != null)?.ca ?? null;
+  const currentPa = [...points].reverse().find((point) => point.pa != null)?.pa ?? null;
+  const zoomed = expanded && knownValues.length > 0;
+  const domainMin = zoomed
+    ? Math.min(initialCa ?? Math.min(...knownValues), ...knownValues)
+    : 0;
+  const domainMax = zoomed
+    ? Math.max(currentPa ?? Math.max(...knownValues), ...knownValues, domainMin + 1)
+    : GROWTH_CHART_MAX;
+  const y = (value: number) =>
+    padTop + plotHeight - ((value - domainMin) / (domainMax - domainMin)) * plotHeight;
+  const gridLines = zoomed
+    ? Array.from({ length: 5 }, (_, index) => domainMin + ((domainMax - domainMin) * index) / 4)
+    : [100, 140, 180];
+  const labelStep = Math.max(1, Math.ceil((points.length - 1) / 6));
+  const dateLabels = expanded
+    ? points
+        .map((_, index) => index)
+        .filter((index) => index === 0 || index === points.length - 1 || index % labelStep === 0)
+    : [];
+
+  return (
+    <svg
+      viewBox={`0 0 ${width} ${height}`}
+      className="w-full"
+      role="img"
+      aria-label={t("inspector.growthAria")}
+    >
+      {gridLines.map((line) => (
+        <g key={line}>
+          <line
+            x1={padLeft}
+            x2={width - padRight}
+            y1={y(line)}
+            y2={y(line)}
+            stroke="var(--line)"
+            strokeWidth={expanded ? 0.75 : 0.5}
+            strokeDasharray="3 3"
+          />
+          <text
+            x={expanded ? padLeft - 7 : width - padRight}
+            y={expanded ? y(line) : y(line) - 2}
+            textAnchor="end"
+            dominantBaseline={expanded ? "middle" : undefined}
+            fontSize={expanded ? 10 : 7}
+            fill="var(--muted)"
+          >
+            {Math.round(line)}
+          </text>
+        </g>
+      ))}
+      <path
+        d={growthPath(points, "pa", x, y)}
+        fill="none"
+        stroke="var(--gold)"
+        strokeWidth={expanded ? 2.5 : 1.5}
+        strokeDasharray="3 2"
+      />
+      <path
+        d={growthPath(points, "ca", x, y)}
+        fill="none"
+        stroke="var(--success)"
+        strokeWidth={expanded ? 3 : 2}
+      />
+      {points.map((point, index) =>
+        point.ca == null ? null : (
+          <g key={point.game_date}>
+            <circle cx={x(index)} cy={y(point.ca)} r={expanded ? 3.5 : 2} fill="var(--success)" />
+            {expanded && <title>{`${point.game_date} · CA ${point.ca}`}</title>}
+          </g>
+        ),
+      )}
+      {dateLabels.map((index) => (
+        <text
+          key={`date-${points[index].game_date}`}
+          x={x(index)}
+          y={height - 10}
+          textAnchor={index === 0 ? "start" : index === points.length - 1 ? "end" : "middle"}
+          fontSize="9"
+          fill="var(--muted)"
+        >
+          {points[index].game_date}
+        </text>
+      ))}
+    </svg>
+  );
+}
+
+function GrowthChartDialog({ points, onClose }: { points: SnapshotPoint[]; onClose: () => void }) {
+  const { t } = useI18n();
+  useEffect(() => {
+    const handler = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      event.stopImmediatePropagation();
+      onClose();
+    };
+    window.addEventListener("keydown", handler, true);
+    return () => window.removeEventListener("keydown", handler, true);
+  }, [onClose]);
+
+  const first = points[0];
+  const last = points[points.length - 1];
+  const caDelta = (last.ca ?? 0) - (first.ca ?? 0);
+  return createPortal(
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-6">
+      <button
+        type="button"
+        aria-label={t("common.close")}
+        className="absolute inset-0 cursor-default bg-black/35 backdrop-blur-[2px] dark:bg-black/55"
+        onClick={onClose}
+      />
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label={t("inspector.growthAria")}
+        className="relative flex max-h-[88vh] w-full max-w-[1040px] flex-col overflow-hidden rounded-2xl border border-[var(--line)] bg-[var(--surface)] shadow-[var(--shadow-pop)]"
+      >
+        <div className="flex items-start justify-between gap-4 border-b border-[var(--line)] px-5 py-4">
+          <div>
+            <div className="text-[15px] font-semibold tracking-tight text-[var(--ink)]">
+              {t("inspector.growthTitle")}
+            </div>
+            <div className="mt-0.5 text-xs text-[var(--muted)]">
+              {first.game_date} → {last.game_date} ·{" "}
+              {t("inspector.growthSnapshots", { count: points.length })}
+            </div>
+          </div>
+          <Button variant="ghost" size="icon" onClick={onClose} aria-label={t("common.close")}>
+            <X size={16} />
+          </Button>
+        </div>
+        <div className="thin-scroll min-h-0 flex-1 overflow-auto p-5">
+          <div className="rounded-xl border border-[var(--line)] bg-[var(--surface-2)] p-3">
+            <div className="mb-2 flex items-center gap-3 px-1 text-[10px] text-[var(--muted)]">
+              <span className="inline-flex items-center gap-1.5">
+                <span className="h-0.5 w-4 bg-[var(--success)]" /> CA
+              </span>
+              <span className="inline-flex items-center gap-1.5">
+                <span className="h-0.5 w-4 bg-[var(--gold)]" /> PA
+              </span>
+              <span
+                className={cn(
+                  "ml-auto font-mono text-[11px] font-semibold",
+                  caDelta >= 0 ? "text-[var(--success)]" : "text-[var(--danger)]",
+                )}
+              >
+                CA {caDelta >= 0 ? "+" : ""}
+                {caDelta}
+              </span>
+            </div>
+            <GrowthChart points={points} expanded />
+          </div>
+          <p className="mt-3 px-1 text-[10px] leading-relaxed text-[var(--muted)]">
+            {t("inspector.growthNote")}
+          </p>
+        </div>
+      </div>
+    </div>,
+    document.body,
   );
 }
 
