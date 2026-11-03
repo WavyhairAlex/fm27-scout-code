@@ -144,11 +144,13 @@ FM 特有的市场低效点可以作为**假设**，但不能直接当结论：
 | `average_rating` | 100% | 可用性较好 |
 | `passes_attempted` | 100% | 可用 |
 | `tackles_attempted` | 100% | 可用 |
-| `distance_km` | 100% | 可用 |
+| `distance_km` | 100% | 非空，但约 37% 为 0；0 代表高级统计整块缺失，见 Phase 0 |
 | `expected_goals_prevented` | 100% | 全表中 94.4% 为 0（非门将没有该值）；门将行中约 35.8% 为 0 |
 | `save_percent` | 1,063 / 1,657 门将行 | 门将字段覆盖率较低 |
 | `pressures_attempted` | 0% | FM27 不支持 |
 | `goals_outside_box` | 0% | FM27 不支持 |
+
+> Phase 0 更正：非空不等于可用。`distance_km == 0` 的行中，关键传球、渐进传球、拦截、争顶、解围、封堵、跑动、扑救、xGP 全部被置为 0；这些 0 必须按缺失处理。高级数据覆盖率随俱乐部声望从 9.8% 升到 98.2%，详见 [`docs/moneyball-phase0.md`](moneyball-phase0.md)。
 
 **身价状态（48,001 名球员）：**
 
@@ -279,6 +281,8 @@ CREATE TABLE IF NOT EXISTS player_metrics (
 ```
 
 评分在 `parse` / `edit` 完成后重算；模型权重变更时 bump `model_version`。原始统计表保留，便于导出和解释。
+
+> 实际实现（Phase 2）把球员/俱乐部/统计展示字段、成本、评分、置信度、flags 和 drivers 都落成 `player_metrics` 普通列，并额外保存 `min_minutes`；不再是 JSON 缓存。详见 [`docs/moneyball-phase2.md`](moneyball-phase2.md)。
 
 ### 3.2 评分模型
 
@@ -468,6 +472,20 @@ i18n：所有新文案加到 `apps/desktop/src/lib/i18n.ts`，中英文都要有
 - 尚未接入赛季统计、联赛强度、伤病风险和真正的产出指标。
 
 下一步按本文路线图执行：Phase 0 字段/榜单验证 → Phase 2 season stats parser → 模型校准。
+
+## 9. Phase 0 验证结果（2026-11-03）
+
+Phase 0 已完成，详细记录见 [`docs/moneyball-phase0.md`](moneyball-phase0.md)。
+
+关键结论：
+
+- 三个 Parma 存档（base / v02 / v03）共约 15.5 万行赛季统计；结构、`overall` 汇总和每 90 分钟换算全部通过。
+- 约 37% 的 ≥900 分钟球员缺少高级统计块：`distance_km == 0` 时，关键传球、渐进传球、拦截、争顶、解围、封堵、跑动、扑救、xGP 全部为 0，但 xG/xA/传球/抢断仍然正常。必须写 `NULL`，不能当 0。
+- 高级数据覆盖率随俱乐部声望从 9.8% 升到 98.2%；因此 v1 主榜应使用只含全量字段的 **core** 模型，advanced 只用于有数据的子集。
+- 无约束“产出/成本”榜会被 30+ 岁、CA 80–110 的低级别球员占据；加上 `CA ≥ 120`、`年龄 ≤ 30`、有效费用/工资后，榜单跨 3 个存档 × 2 个模型稳定，43–48/50 重叠，且有 30 名球员在全部 6 个榜单中出现。
+- 门将扑救数据实际覆盖 64.6%，建议单独榜单；`pressures_*` 和 `goals_outside_box` 在 FM27 中不可用。
+- 当前状态为 **Go**：自动验证与 Parma 16 人游戏内对照均已通过；可以进入 Phase 2 parser/schema 工作（`docs/moneyball-phase0.md`）。
+- Phase 2 已落地：容器 unlisted span frame、`season_stats.rs`、`player_season_stats` schema、core/advanced 评分、Tauri `stats_moneyball` 命令和 AnalysisDialog “数据版” tab。真实存档 156,272 行与参考实现一致。见 [`docs/moneyball-phase2.md`](moneyball-phase2.md)。
 
 ## 附录：代码与数据参考
 

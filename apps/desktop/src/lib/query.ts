@@ -12,12 +12,14 @@ import {
   listSaves,
   queryClubs,
   queryPlayers,
+  queryStatsMoneyball,
   queryValueFinder,
 } from "./api";
 import type {
   ClubQuery,
   PlayerQuery,
   SortRule,
+  StatsMoneyballRequest,
   ValueFinderRequest,
 } from "./types";
 import { useAppStore, type ClubFilters, type Filters } from "@/store/app";
@@ -153,6 +155,16 @@ export function useValueFinder(request: ValueFinderRequest | null) {
   return useQuery({
     queryKey: ["value-finder", request],
     queryFn: () => queryValueFinder(request!),
+    enabled: request != null,
+    placeholderData: keepPreviousData,
+    staleTime: 30_000,
+  });
+}
+
+export function useStatsMoneyball(request: StatsMoneyballRequest | null) {
+  return useQuery({
+    queryKey: ["stats-moneyball", request],
+    queryFn: () => queryStatsMoneyball(request!),
     enabled: request != null,
     placeholderData: keepPreviousData,
     staleTime: 30_000,

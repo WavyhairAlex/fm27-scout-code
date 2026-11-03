@@ -28,6 +28,8 @@ import type {
   SaveRecord,
   SnapshotPoint,
   SquadAnalysis,
+  StatsMoneyballPage,
+  StatsMoneyballRequest,
   TraitOption,
   ValueFinderPage,
   ValueFinderRequest,
@@ -48,6 +50,7 @@ import {
   mockQuery,
   mockQueryClubs,
   mockSquadAnalysis,
+  mockStatsMoneyball,
   mockValueFinder,
 } from "./mock";
 
@@ -97,6 +100,13 @@ export async function queryValueFinder(
 ): Promise<ValueFinderPage> {
   if (!isTauri) return mockValueFinder(request);
   return invoke<ValueFinderPage>("value_finder", { request });
+}
+
+export async function queryStatsMoneyball(
+  request: StatsMoneyballRequest,
+): Promise<StatsMoneyballPage> {
+  if (!isTauri) return mockStatsMoneyball(request);
+  return invoke<StatsMoneyballPage>("stats_moneyball", { request });
 }
 
 export async function getPlayer(

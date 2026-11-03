@@ -4,6 +4,7 @@ import {
   ArrowRight,
   BarChart3,
   CalendarClock,
+  ChevronDown,
   ChevronLeft,
   ChevronRight,
   Coins,
@@ -19,12 +20,15 @@ import {
   useAnalysisOverview,
   useFilterOptions,
   useSquadAnalysis,
+  useStatsMoneyball,
   useValueFinder,
 } from "@/lib/query";
 import type {
   AnalysisOverview,
   DistributionBand,
   SquadAnalysis,
+  StatsMoneyballRequest,
+  StatsMoneyballRow,
   ValueFinderRequest,
   ValueFinderRow,
 } from "@/lib/types";
@@ -36,7 +40,7 @@ import { useAppStore } from "@/store/app";
 import { Badge, Button, Input, Modal, Select } from "./ui";
 import { MultiSelect } from "./MultiSelect";
 
-type AnalysisTab = "overview" | "squad" | "wonderkids" | "value";
+type AnalysisTab = "overview" | "squad" | "wonderkids" | "value" | "stats";
 
 export function AnalysisDialog() {
   const { t, locale } = useI18n();
@@ -149,6 +153,7 @@ export function AnalysisDialog() {
           ["squad", t("analysis.tab.squad"), <Users size={12} key="squad" />],
           ["wonderkids", t("analysis.tab.wonderkids"), <Sparkles size={12} key="wonderkids" />],
           ["value", t("analysis.tab.value"), <Coins size={12} key="value" />],
+          ["stats", t("analysis.tab.stats"), <TrendingUp size={12} key="stats" />],
         ].map(([value, label, icon]) => (
           <button
             key={value as string}
@@ -243,6 +248,17 @@ export function AnalysisDialog() {
 
         {tab === "value" && (
           <ValueFinderPanel
+            saveId={saveId}
+            onPlayer={(uid) => {
+              setSelectedUid(uid);
+              setInspectorOpen(true);
+              setOpen(false);
+            }}
+          />
+        )}
+
+        {tab === "stats" && (
+          <StatsMoneyballPanel
             saveId={saveId}
             onPlayer={(uid) => {
               setSelectedUid(uid);
@@ -608,6 +624,726 @@ function WonderkidPanel({
           </table>
         </div>
       )}
+    </div>
+  );
+}
+
+type StatsView = {
+  id: string;
+  name: string;
+  model: "core" | "advanced";
+  position: string;
+  league: string;
+  minCa: number;
+  maxAge: number;
+  minMinutes: number;
+  maxFee: number | null;
+  maxWage: number | null;
+  includeUnknownFee: boolean;
+};
+
+const STATS_VIEWS_KEY = "fm27scout.statsViews";
+
+function loadStatsViews(): StatsView[] {
+  try {
+    const raw = localStorage.getItem(STATS_VIEWS_KEY);
+    return raw ? (JSON.parse(raw) as StatsView[]) : [];
+  } catch {
+    return [];
+  }
+}
+
+function persistStatsViews(views: StatsView[]) {
+  try {
+    localStorage.setItem(STATS_VIEWS_KEY, JSON.stringify(views));
+  } catch {
+    // Local storage is optional in a webview; failure should not break analysis.
+  }
+}
+
+function StatsMoneyballPanel({
+  saveId,
+  onPlayer,
+}: {
+  saveId: number | null;
+  onPlayer: (uid: number) => void;
+}) {
+  const { t, locale } = useI18n();
+  const [model, setModel] = useState<"core" | "advanced">("core");
+  const [position, setPosition] = useState("");
+  const [league, setLeague] = useState("");
+  const [minCa, setMinCa] = useState(120);
+  const [maxAge, setMaxAge] = useState(30);
+  const [minMinutes, setMinMinutes] = useState(900);
+  const [maxFee, setMaxFee] = useState<number | null>(null);
+  const [maxWage, setMaxWage] = useState<number | null>(null);
+  const [includeUnknownFee, setIncludeUnknownFee] = useState(false);
+  const [page, setPage] = useState(0);
+  const [sortBy, setSortBy] = useState("score");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
+  const [expandedUid, setExpandedUid] = useState<number | null>(null);
+  const [savedViews, setSavedViews] = useState<StatsView[]>(loadStatsViews);
+
+  useEffect(() => {
+    setPage(0);
+  }, [
+    saveId,
+    model,
+    position,
+    league,
+    minCa,
+    maxAge,
+    minMinutes,
+    maxFee,
+    maxWage,
+    includeUnknownFee,
+    sortBy,
+    sortDir,
+  ]);
+
+  const request = useMemo<StatsMoneyballRequest | null>(
+    () =>
+      saveId == null
+        ? null
+        : {
+            save_id: saveId,
+            model,
+            include_goalkeepers: position === "GK",
+            position_group: position || null,
+            league: league || null,
+            ca_min: minCa,
+            age_max: maxAge,
+            min_minutes: minMinutes,
+            max_fee: maxFee,
+            max_wage: maxWage,
+            include_unknown_fee: includeUnknownFee,
+            sort_by: sortBy,
+            sort_dir: sortDir,
+            page,
+            page_size: VALUE_PAGE_SIZE,
+          },
+    [
+      saveId,
+      model,
+      position,
+      league,
+      minCa,
+      maxAge,
+      minMinutes,
+      maxFee,
+      maxWage,
+      includeUnknownFee,
+      sortBy,
+      sortDir,
+      page,
+    ],
+  );
+  const query = useStatsMoneyball(request);
+  const data = query.data;
+  const rows = data?.rows ?? [];
+  const pages = Math.max(1, Math.ceil((data?.total ?? 0) / VALUE_PAGE_SIZE));
+  const leagues = data?.meta.leagues ?? [];
+
+  const changeSort = (by: string) => {
+    if (sortBy === by) {
+      setSortDir((current) => (current === "desc" ? "asc" : "desc"));
+    } else {
+      setSortBy(by);
+      setSortDir("desc");
+    }
+  };
+
+  const reset = () => {
+    setModel("core");
+    setPosition("");
+    setLeague("");
+    setMinCa(120);
+    setMaxAge(30);
+    setMinMinutes(900);
+    setMaxFee(null);
+    setMaxWage(null);
+    setIncludeUnknownFee(false);
+    setSortBy("score");
+    setSortDir("desc");
+    setPage(0);
+  };
+
+  const applyPreset = (preset: "win" | "resale" | "budget") => {
+    setModel("core");
+    setPosition("");
+    setLeague("");
+    setMinMinutes(900);
+    setIncludeUnknownFee(false);
+    setSortBy("score");
+    setSortDir("desc");
+    setPage(0);
+    if (preset === "win") {
+      setMinCa(120);
+      setMaxAge(30);
+      setMaxFee(null);
+      setMaxWage(null);
+    } else if (preset === "resale") {
+      setMinCa(110);
+      setMaxAge(23);
+      setMaxFee(null);
+      setMaxWage(null);
+    } else {
+      setMinCa(110);
+      setMaxAge(30);
+      setMaxFee(5_000_000);
+      setMaxWage(25_000);
+    }
+  };
+
+  const saveStatsView = () => {
+    const name = window.prompt(t("analysis.stats.saveViewPrompt"))?.trim();
+    if (!name) return;
+    const view: StatsView = {
+      id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      name,
+      model,
+      position,
+      league,
+      minCa,
+      maxAge,
+      minMinutes,
+      maxFee,
+      maxWage,
+      includeUnknownFee,
+    };
+    const next = [...savedViews, view].slice(-20);
+    persistStatsViews(next);
+    setSavedViews(next);
+  };
+
+  const applyStatsView = (id: string) => {
+    const view = savedViews.find((item) => item.id === id);
+    if (!view) return;
+    setModel(view.model);
+    setPosition(view.position);
+    setLeague(view.league);
+    setMinCa(view.minCa);
+    setMaxAge(view.maxAge);
+    setMinMinutes(view.minMinutes);
+    setMaxFee(view.maxFee);
+    setMaxWage(view.maxWage);
+    setIncludeUnknownFee(view.includeUnknownFee);
+    setSortBy("score");
+    setSortDir("desc");
+    setPage(0);
+    setExpandedUid(null);
+  };
+
+  const flagLabel = (flag: string) => {
+    const statsKey = `analysis.stats.flag.${flag}` as TranslationKey;
+    const statsText = t(statsKey);
+    return statsText === statsKey
+      ? t(`analysis.value.flag.${flag}` as TranslationKey)
+      : statsText;
+  };
+
+  const confidenceTone = (
+    row: StatsMoneyballRow,
+  ): "accent" | "default" | "danger" =>
+    row.confidence >= 0.9 ? "accent" : row.confidence >= 0.7 ? "default" : "danger";
+
+  return (
+    <div className="space-y-3">
+      <div className="rounded-xl border border-[var(--line)] bg-[var(--surface-2)] p-3">
+        <div className="flex flex-wrap items-end gap-2.5">
+          <ValueFilter label={t("analysis.stats.model")} className="w-[180px]">
+            <Select
+              value={model}
+              onChange={(event) => setModel(event.target.value as "core" | "advanced")}
+              className="h-7 text-[10px]"
+            >
+              <option value="core">{t("analysis.stats.modelCore")}</option>
+              <option value="advanced">{t("analysis.stats.modelAdvanced")}</option>
+            </Select>
+          </ValueFilter>
+          <ValueFilter label={t("analysis.stats.league")} className="w-[190px]">
+            <Select
+              value={league}
+              onChange={(event) => setLeague(event.target.value)}
+              className="h-7 text-[10px]"
+            >
+              <option value="">{t("analysis.stats.allLeagues")}</option>
+              {leagues.map((name) => (
+                <option key={name} value={name}>
+                  {name}
+                </option>
+              ))}
+            </Select>
+          </ValueFilter>
+          <NumberField
+            label={t("analysis.stats.minCa")}
+            value={minCa}
+            min={0}
+            max={200}
+            onChange={setMinCa}
+          />
+          <NumberField
+            label={t("analysis.stats.maxAge")}
+            value={maxAge}
+            min={15}
+            max={50}
+            onChange={setMaxAge}
+          />
+          <NumberField
+            label={t("analysis.stats.minMinutes")}
+            value={minMinutes}
+            min={0}
+            max={4000}
+            onChange={setMinMinutes}
+          />
+          <label className="space-y-1">
+            <span className="block text-[9px] uppercase tracking-wider text-[var(--muted)]">
+              {t("analysis.stats.maxFee")}
+            </span>
+            <Input
+              type="number"
+              min={0}
+              value={maxFee ?? ""}
+              placeholder="—"
+              onChange={(event) => setMaxFee(optionalNumber(event.target.value))}
+              className="h-7 w-[96px] font-mono text-[10px]"
+            />
+          </label>
+          <label className="space-y-1">
+            <span className="block text-[9px] uppercase tracking-wider text-[var(--muted)]">
+              {t("analysis.stats.maxWage")}
+            </span>
+            <Input
+              type="number"
+              min={0}
+              value={maxWage ?? ""}
+              placeholder="—"
+              onChange={(event) => setMaxWage(optionalNumber(event.target.value))}
+              className="h-7 w-[96px] font-mono text-[10px]"
+            />
+          </label>
+          <label className="flex h-7 items-center gap-1.5 text-[10px] text-[var(--muted)]">
+            <input
+              type="checkbox"
+              checked={includeUnknownFee}
+              onChange={(event) => setIncludeUnknownFee(event.target.checked)}
+              className="accent-[var(--accent)]"
+            />
+            {t("analysis.stats.includeUnknownFee")}
+          </label>
+          <div className="flex items-center gap-1">
+            <span className="text-[9px] uppercase tracking-wider text-[var(--muted)]">
+              {t("analysis.stats.presets")}
+            </span>
+            {(["win", "resale", "budget"] as const).map((preset) => (
+              <Button
+                key={preset}
+                variant="secondary"
+                size="sm"
+                className="h-7 px-2 text-[9px]"
+                onClick={() => applyPreset(preset)}
+              >
+                {t(
+                  preset === "win"
+                    ? "analysis.stats.presetWinNow"
+                    : preset === "resale"
+                      ? "analysis.stats.presetResale"
+                      : "analysis.stats.presetBudget",
+                )}
+              </Button>
+            ))}
+          </div>
+          {savedViews.length > 0 && (
+            <ValueFilter label={t("analysis.stats.savedViews")} className="w-[150px]">
+              <Select
+                value=""
+                onChange={(event) => applyStatsView(event.target.value)}
+                className="h-7 text-[10px]"
+              >
+                <option value="">—</option>
+                {savedViews.map((view) => (
+                  <option key={view.id} value={view.id}>
+                    {view.name}
+                  </option>
+                ))}
+              </Select>
+            </ValueFilter>
+          )}
+          <Button variant="secondary" size="sm" className="h-7" onClick={saveStatsView}>
+            {t("analysis.stats.saveView")}
+          </Button>
+          <Button variant="ghost" size="sm" className="h-7" onClick={reset}>
+            {t("analysis.stats.reset")}
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-7"
+            onClick={() => void query.refetch()}
+            title={t("analysis.refresh")}
+          >
+            <RefreshCw size={11} />
+          </Button>
+        </div>
+        <div className="mt-2 flex flex-wrap items-center gap-1">
+          <span className="mr-1 text-[9px] uppercase tracking-wider text-[var(--muted)]">
+            {t("analysis.stats.position")}
+          </span>
+          {(["", ...VALUE_POSITIONS] as const).map((group) => (
+            <button
+              key={group || "all"}
+              type="button"
+              onClick={() => {
+                setPosition(group);
+                setExpandedUid(null);
+              }}
+              className={cn(
+                "rounded border px-1.5 py-0.5 text-[9px] font-medium transition-colors",
+                position === group
+                  ? "border-[var(--accent-line)] bg-[var(--accent-soft)] text-[var(--accent-strong)]"
+                  : "border-[var(--line)] bg-[var(--surface)] text-[var(--muted)] hover:text-[var(--ink)]",
+              )}
+            >
+              {group || t("analysis.stats.positionAll")}
+            </button>
+          ))}
+        </div>
+        <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[9px] text-[var(--muted)]">
+          <span>
+            {data
+              ? t("analysis.stats.summary", {
+                  count: data.total,
+                  shown: rows.length,
+                  model: data.meta.model,
+                })
+              : t("analysis.stats.loading")}
+          </span>
+          <span>{t("analysis.stats.scoreHint")}</span>
+          <span>{t("analysis.stats.leagueHint")}</span>
+        </div>
+      </div>
+
+      {query.isLoading && !data ? (
+        <div className="flex items-center justify-center gap-2 rounded-xl border border-dashed border-[var(--line)] py-12 text-[11px] text-[var(--muted)]">
+          <Loader2 size={14} className="animate-spin" />
+          {t("analysis.stats.loading")}
+        </div>
+      ) : query.isError ? (
+        <div className="rounded-xl border border-[var(--danger-line)] bg-[var(--danger-soft)] px-3 py-4 text-[11px] text-[var(--danger)]">
+          {t("analysis.loadError")}
+        </div>
+      ) : rows.length === 0 ? (
+        <EmptyHint text={t("analysis.stats.empty")} />
+      ) : (
+        <div className="overflow-hidden rounded-xl border border-[var(--line)]">
+          <div className="thin-scroll max-h-[430px] overflow-auto">
+            <table className="w-full min-w-[980px] text-left">
+              <thead className="sticky top-0 z-10 bg-[var(--surface-2)] text-[9px] uppercase tracking-wider text-[var(--muted)]">
+                <tr>
+                  <th className="px-3 py-1.5">{t("analysis.stats.table.player")}</th>
+                  <th className="px-2 py-1.5">{t("analysis.stats.table.position")}</th>
+                  <ValueSortHeader
+                    label={t("analysis.stats.table.age")}
+                    by="age"
+                    active={sortBy}
+                    dir={sortDir}
+                    onClick={changeSort}
+                  />
+                  <ValueSortHeader
+                    label={t("analysis.stats.table.ca")}
+                    by="ca"
+                    active={sortBy}
+                    dir={sortDir}
+                    onClick={changeSort}
+                  />
+                  <ValueSortHeader
+                    label={t("analysis.stats.table.minutes")}
+                    by="minutes"
+                    active={sortBy}
+                    dir={sortDir}
+                    onClick={changeSort}
+                  />
+                  <ValueSortHeader
+                    label={t("analysis.stats.table.production")}
+                    by="production"
+                    active={sortBy}
+                    dir={sortDir}
+                    onClick={changeSort}
+                  />
+                  <ValueSortHeader
+                    label={t("analysis.stats.table.cost")}
+                    by="cost"
+                    active={sortBy}
+                    dir={sortDir}
+                    onClick={changeSort}
+                  />
+                  <ValueSortHeader
+                    label={t("analysis.stats.table.score")}
+                    by="score"
+                    active={sortBy}
+                    dir={sortDir}
+                    onClick={changeSort}
+                  />
+                  <th className="px-2 py-1.5 text-right">
+                    {t("analysis.stats.table.confidence")}
+                  </th>
+                  <th className="px-3 py-1.5">{t("analysis.stats.table.flags")}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((row) => (
+                  <Fragment key={row.uid}>
+                    <tr
+                      className="cursor-pointer border-t border-[var(--line)]/60 text-[10px] hover:bg-[var(--surface-2)]"
+                      onClick={() => onPlayer(row.uid)}
+                    >
+                    <td className="px-3 py-1.5">
+                      <div className="flex items-center gap-1.5">
+                        <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-[var(--line)] bg-[var(--surface-2)] text-[8px] font-bold text-[var(--muted)]">
+                          {initials(row.name)}
+                        </span>
+                        <div className="min-w-0">
+                          <div className="max-w-[180px] truncate font-medium text-[var(--ink)]">
+                            {row.name ?? t("common.unnamed")}
+                          </div>
+                          <div className="max-w-[200px] truncate text-[9px] text-[var(--muted)]">
+                            {row.club_name ?? t("common.freeAgent")}
+                            {row.league_name ? ` · ${row.league_name}` : ""}
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          className="ml-auto flex h-5 w-5 shrink-0 items-center justify-center rounded border border-[var(--line)] bg-[var(--surface-2)] text-[var(--muted)] hover:text-[var(--ink)]"
+                          title={
+                            expandedUid === row.uid
+                              ? t("analysis.stats.detail.collapse")
+                              : t("analysis.stats.detail.expand")
+                          }
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            setExpandedUid((current) =>
+                              current === row.uid ? null : row.uid,
+                            );
+                          }}
+                        >
+                          {expandedUid === row.uid ? (
+                            <ChevronDown size={11} />
+                          ) : (
+                            <ChevronRight size={11} />
+                          )}
+                        </button>
+                      </div>
+                    </td>
+                    <td className="px-2 py-1.5 font-mono text-[10px] font-semibold text-[var(--accent-strong)]">
+                      {row.position_group}
+                    </td>
+                    <td className="px-2 py-1.5 text-right font-mono text-[var(--muted)]">
+                      {row.age ?? "—"}
+                    </td>
+                    <td className="px-2 py-1.5 text-right">
+                      <span
+                        className={cn(
+                          "inline-flex rounded border px-1.5 py-0.5 font-mono text-[9px] font-bold",
+                          caTone(row.ca),
+                        )}
+                      >
+                        {row.ca}
+                      </span>
+                      <span className="ml-1 font-mono text-[9px] text-[var(--muted)]">
+                        / {row.pa ?? "?"}
+                      </span>
+                    </td>
+                    <td className="px-2 py-1.5 text-right font-mono text-[var(--muted)]">
+                      {formatNumber(row.minutes, locale)}
+                    </td>
+                    <td
+                      className="px-2 py-1.5 text-right font-mono text-[var(--muted)]"
+                      title={row.drivers
+                        .map((driver) => `${driver.label} ${Math.round(driver.percentile)}`)
+                        .join(" · ")}
+                    >
+                      {row.production_tier != null ? Math.round(row.production_tier) : "—"}
+                    </td>
+                    <td className="px-2 py-1.5 text-right font-mono text-[var(--muted)]">
+                      {formatValue(row.cost)}
+                    </td>
+                    <td className="px-2 py-1.5 text-right">
+                      <span
+                        className={cn(
+                          "inline-flex rounded border px-1.5 py-0.5 font-mono text-[9px] font-bold",
+                          (row.score ?? 0) >= 75
+                            ? "border-[var(--gold-line)] bg-[var(--gold-soft)] text-[var(--gold)]"
+                            : (row.score ?? 0) >= 60
+                              ? "border-[var(--success-line)] bg-[var(--success-soft)] text-[var(--success)]"
+                              : (row.score ?? 0) >= 45
+                                ? "border-[var(--blue-line)] bg-[var(--blue-soft)] text-[var(--blue)]"
+                                : "border-[var(--line)] bg-[var(--surface-2)] text-[var(--muted)]",
+                        )}
+                      >
+                        {row.score != null ? Math.round(row.score) : "—"}
+                      </span>
+                      {row.surplus != null && (
+                        <div className="mt-0.5 font-mono text-[8px] text-[var(--muted)]">
+                          {row.surplus >= 0 ? "+" : ""}
+                          {Math.round(row.surplus)}
+                        </div>
+                      )}
+                    </td>
+                    <td className="px-2 py-1.5 text-right">
+                      <Badge tone={confidenceTone(row)} className="px-1.5 text-[8px]">
+                        {Math.round(row.confidence * 100)}%
+                      </Badge>
+                    </td>
+                    <td className="px-3 py-1.5">
+                      <div className="flex max-w-[190px] flex-wrap gap-0.5">
+                        {row.flags.slice(0, 3).map((flag) => (
+                          <span
+                            key={flag}
+                            className="rounded border border-[var(--line)] bg-[var(--surface-2)] px-1 py-0.5 text-[8px] text-[var(--muted)]"
+                          >
+                            {flagLabel(flag)}
+                          </span>
+                        ))}
+                        {row.flags.length > 3 && (
+                          <span
+                            className="rounded border border-[var(--line)] px-1 py-0.5 text-[8px] text-[var(--muted)]"
+                            title={row.flags.map(flagLabel).join(", ")}
+                          >
+                            +{row.flags.length - 3}
+                          </span>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                    {expandedUid === row.uid && (
+                      <tr className="border-t border-[var(--line)]/60 bg-[var(--surface-2)]/60">
+                        <td colSpan={10} className="px-3 py-2">
+                          <StatsMoneyballDetail row={row} />
+                        </td>
+                      </tr>
+                    )}
+                  </Fragment>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <div className="flex items-center justify-between border-t border-[var(--line)] bg-[var(--surface-2)] px-3 py-2">
+            <span className="text-[9px] text-[var(--muted)]">
+              {t("analysis.value.page", { page: page + 1, pages })}
+            </span>
+            <div className="flex items-center gap-1">
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-6 px-2 text-[10px]"
+                disabled={page <= 0}
+                onClick={() => setPage((current) => Math.max(0, current - 1))}
+              >
+                <ChevronLeft size={11} />
+                {t("analysis.value.prev")}
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-6 px-2 text-[10px]"
+                disabled={page + 1 >= pages}
+                onClick={() => setPage((current) => Math.min(pages - 1, current + 1))}
+              >
+                {t("analysis.value.next")}
+                <ChevronRight size={11} />
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function StatsMoneyballDetail({ row }: { row: StatsMoneyballRow }) {
+  const { t, locale } = useI18n();
+  const flagLabel = (flag: string) => {
+    const statsKey = `analysis.stats.flag.${flag}` as TranslationKey;
+    const statsText = t(statsKey);
+    return statsText === statsKey
+      ? t(`analysis.value.flag.${flag}` as TranslationKey)
+      : statsText;
+  };
+  return (
+    <div className="grid gap-3 text-[10px] lg:grid-cols-3">
+      <div className="space-y-1">
+        <div className="text-[9px] font-semibold uppercase tracking-wider text-[var(--muted)]">
+          {t("analysis.stats.detail.title")}
+        </div>
+        <div className="text-[var(--ink)]">
+          {t("analysis.stats.detail.sample")}: {formatNumber(row.minutes, locale)} min ·{" "}
+          {row.starts} starts · {row.substitute_appearances} sub
+        </div>
+        <div className="text-[var(--muted)]">
+          {t("analysis.stats.detail.advanced")}:{" "}
+          {row.advanced_available
+            ? t("analysis.stats.detail.available")
+            : t("analysis.stats.detail.missing")}
+        </div>
+        <div className="font-mono text-[var(--muted)]">
+          {t("analysis.stats.detail.production")}: {Math.round(row.production_tier ?? 0)} ·{" "}
+          {t("analysis.stats.detail.costPercentile")}:{" "}
+          {Math.round(row.cost_pct_tier ?? 0)}
+        </div>
+        <div className="flex flex-wrap gap-1 pt-1">
+          {row.flags.map((flag) => (
+            <span
+              key={flag}
+              className="rounded border border-[var(--line)] bg-[var(--surface)] px-1 py-0.5 text-[8px] text-[var(--muted)]"
+            >
+              {flagLabel(flag)}
+            </span>
+          ))}
+        </div>
+      </div>
+      <div>
+        <div className="text-[9px] font-semibold uppercase tracking-wider text-[var(--muted)]">
+          {t("analysis.stats.detail.drivers")}
+        </div>
+        <div className="mt-1 space-y-1">
+          {row.drivers.length === 0 ? (
+            <span className="text-[var(--muted)]">—</span>
+          ) : (
+            row.drivers.map((driver) => (
+              <div key={driver.key} className="flex items-center justify-between gap-3">
+                <span className="text-[var(--muted)]">{driver.label}</span>
+                <span className="font-mono text-[var(--ink)]">
+                  {Math.round(driver.percentile)}
+                </span>
+              </div>
+            ))
+          )}
+        </div>
+      </div>
+      <div>
+        <div className="text-[9px] font-semibold uppercase tracking-wider text-[var(--muted)]">
+          {t("analysis.stats.detail.cost")}
+        </div>
+        <div className="mt-1 space-y-1 font-mono text-[var(--muted)]">
+          <div className="flex justify-between gap-3">
+            <span>{t("analysis.stats.detail.fee")}</span>
+            <span className="text-[var(--ink)]">
+              {row.fee == null ? t("analysis.value.unknownFee") : formatValue(row.fee)}
+            </span>
+          </div>
+          <div className="flex justify-between gap-3">
+            <span>{t("analysis.stats.detail.wage")}</span>
+            <span className="text-[var(--ink)]">{formatWage(row.wage, locale)}</span>
+          </div>
+          <div className="flex justify-between gap-3 border-t border-[var(--line)] pt-1">
+            <span>{t("analysis.stats.detail.total")}</span>
+            <span className="text-[var(--ink)]">{formatValue(row.cost)}</span>
+          </div>
+        </div>
+        <div className="mt-2 text-[9px] text-[var(--muted)]">
+          {t("analysis.stats.scoreHint")}
+        </div>
+      </div>
     </div>
   );
 }
