@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
   ArrowRight,
@@ -633,20 +633,25 @@ function BandBars({
   const max = Math.max(1, ...bands.map((band) => band.count));
   const color = tone === "gold" ? "bg-[var(--gold)]" : tone === "blue" ? "bg-[var(--blue)]" : "bg-[var(--accent)]";
   return (
-    <div className={compact ? "mt-2 space-y-1" : "mt-2 space-y-1.5"}>
+    <div
+      className={cn(
+        "mt-2 grid grid-cols-[auto_1fr_auto] items-center gap-x-2",
+        compact ? "gap-y-1" : "gap-y-1.5",
+      )}
+    >
       {bands.length === 0 && (
-        <div className="text-[10px] text-[var(--muted)]">{t("analysis.noData")}</div>
+        <div className="col-span-3 text-[10px] text-[var(--muted)]">{t("analysis.noData")}</div>
       )}
       {bands.map((band) => (
-        <div key={band.label} className="flex items-center gap-2">
-          <span className="w-12 shrink-0 text-right font-mono text-[9px] text-[var(--muted)]">
+        <Fragment key={band.label}>
+          <span className="whitespace-nowrap text-right font-mono text-[9px] text-[var(--muted)]">
             {bandLabel(band.label, locale)}
           </span>
-          <div className={cn("flex-1 overflow-hidden rounded-full bg-[var(--surface-3)]", compact ? "h-1" : "h-1.5")}>
+          <div className={cn("overflow-hidden rounded-full bg-[var(--surface-3)]", compact ? "h-1" : "h-1.5")}>
             <div className={cn("h-full rounded-full", color)} style={{ width: `${(band.count / max) * 100}%` }} />
           </div>
-          <span className="w-8 text-right font-mono text-[9px] text-[var(--muted)]">{band.count}</span>
-        </div>
+          <span className="text-right font-mono text-[9px] text-[var(--muted)]">{band.count}</span>
+        </Fragment>
       ))}
     </div>
   );
