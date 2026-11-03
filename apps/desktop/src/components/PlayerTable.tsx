@@ -132,7 +132,8 @@ export function PlayerTable() {
           row.original.club_uid != null ? (
             <button
               type="button"
-              className="min-w-0 text-left"
+              className="block w-full min-w-0 max-w-full overflow-hidden text-left"
+              title={row.original.club_name ?? t("common.freeAgent")}
               onClick={(event) => {
                 event.stopPropagation();
                 setSelectedClubUid(row.original.club_uid);
@@ -563,6 +564,7 @@ export function PlayerTable() {
                           (cell.column.id === "name" || cell.column.id === "compare") &&
                             isSelected &&
                             "bg-[var(--accent-soft)]",
+                          cell.column.id === "club" && "overflow-hidden",
                         )}
                       >
                         {flexRender(cell.column.columnDef.cell, cell.getContext())}
