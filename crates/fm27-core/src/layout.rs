@@ -6,11 +6,13 @@ use chrono::NaiveDate;
 pub const GAME: &str = "FM27";
 pub const BUILD: &str = "27.0.0+2486695";
 pub const GAME_DB_SCHEMA: u32 = 4000;
-/// Cache/parser revision. The suffix invalidates caches written before the
+/// Cache/parser revision. This is intentionally independent of the app version:
+/// bump the leading version and/or the suffix only when parsing behavior or the
+/// cached data shape changes. The suffix invalidates caches written before the
 /// complete player-trait and nation-name tables landed, and before the current
 /// injury windows were read from the stride-14 arrays.
 pub const PARSER_VERSION: &str = concat!(
-    env!("CARGO_PKG_VERSION"),
+    "1.1.0",
     "+nation-names+listing+injury-windows+club-finance+stadiums+club-facilities+youth-level-edt"
 );
 pub const EARLIEST_YEAR: i32 = 1901;

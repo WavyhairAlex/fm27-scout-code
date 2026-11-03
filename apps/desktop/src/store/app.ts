@@ -64,6 +64,15 @@ export interface ClubFilters {
   wageBudgetMin: number | null;
   wageBudgetMax: number | null;
   corporateFacilitiesMin: number | null;
+  corporateFacilitiesMax: number | null;
+  trainingFacilitiesMin: number | null;
+  trainingFacilitiesMax: number | null;
+  youthFacilitiesMin: number | null;
+  youthFacilitiesMax: number | null;
+  juniorCoachingMin: number | null;
+  juniorCoachingMax: number | null;
+  youthRecruitmentMin: number | null;
+  youthRecruitmentMax: number | null;
   playerCountMin: number | null;
   hasStadium: boolean | null;
 }
@@ -82,6 +91,15 @@ export const EMPTY_CLUB_FILTERS: ClubFilters = {
   wageBudgetMin: null,
   wageBudgetMax: null,
   corporateFacilitiesMin: null,
+  corporateFacilitiesMax: null,
+  trainingFacilitiesMin: null,
+  trainingFacilitiesMax: null,
+  youthFacilitiesMin: null,
+  youthFacilitiesMax: null,
+  juniorCoachingMin: null,
+  juniorCoachingMax: null,
+  youthRecruitmentMin: null,
+  youthRecruitmentMax: null,
   playerCountMin: null,
   hasStadium: null,
 };

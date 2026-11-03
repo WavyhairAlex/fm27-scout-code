@@ -1,4 +1,5 @@
 import { Command, Database, Eye, Info, LockKeyhole, ShieldCheck, WifiOff } from "lucide-react";
+import { useAppInfo } from "@/lib/query";
 import { useI18n } from "@/lib/useI18n";
 import { useAppStore } from "@/store/app";
 import { Badge, Button, Modal } from "./ui";
@@ -6,6 +7,7 @@ import { Badge, Button, Modal } from "./ui";
 export function HelpDialog() {
   const open = useAppStore((state) => state.helpOpen);
   const setOpen = useAppStore((state) => state.setHelpOpen);
+  const { data: info } = useAppInfo(open);
   const { t } = useI18n();
   const shortcuts = [
     [t("shortcut.open"), t("help.shortcut.open")],
@@ -21,7 +23,9 @@ export function HelpDialog() {
       open={open}
       onClose={() => setOpen(false)}
       title={t("help.title")}
-      description={t("help.description")}
+      description={t("help.description", {
+        version: info?.version ?? __APP_VERSION__,
+      })}
       width="max-w-[620px]"
       footer={
         <Button variant="secondary" size="sm" onClick={() => setOpen(false)}>
@@ -93,7 +97,7 @@ export function HelpDialog() {
               <Database size={9} /> {t("help.parserPlayers", { count: "46,273" })}
             </Badge>
             <Badge tone="outline">
-              <LockKeyhole size={9} /> parser 1.1.0
+              <LockKeyhole size={9} /> parser {info?.parser_version ?? __APP_VERSION__}
             </Badge>
             <Badge tone="outline">
               <WifiOff size={9} /> offline

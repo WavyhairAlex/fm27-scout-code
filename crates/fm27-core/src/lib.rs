@@ -38,7 +38,10 @@ pub use error::{Error, Result};
 pub use model::{
     Club, ClubDetail, ClubLink, Contract, FinanceMonth, ParseReport, Player, SaveSummary, Stadium,
 };
-pub use parse::{ParseProgress, ParsedSave, parse_save, parse_save_with_progress, parser_version};
+pub use parse::{
+    ParseProgress, ParsedSave, parse_save, parse_save_with_progress, parser_display_version,
+    parser_version,
+};
 
 /// Open a save and return its container metadata without decompressing `game_db`.
 pub fn inspect_save(path: impl AsRef<std::path::Path>) -> Result<SaveSummary> {

@@ -473,6 +473,14 @@ export interface ClubQuery {
   wage_budget_max?: number | null;
   corporate_facilities_min?: number | null;
   corporate_facilities_max?: number | null;
+  training_facilities_min?: number | null;
+  training_facilities_max?: number | null;
+  youth_facilities_min?: number | null;
+  youth_facilities_max?: number | null;
+  junior_coaching_min?: number | null;
+  junior_coaching_max?: number | null;
+  youth_recruitment_min?: number | null;
+  youth_recruitment_max?: number | null;
   player_count_min?: number | null;
   player_count_max?: number | null;
   average_ca_min?: number | null;

@@ -3,6 +3,7 @@ import { Building2, Filter, RotateCcw, SlidersHorizontal } from "lucide-react";
 import { nationLabel } from "@/lib/labels";
 import { useClubFilterOptions } from "@/lib/query";
 import { useI18n } from "@/lib/useI18n";
+import { cn } from "@/lib/utils";
 import { useAppStore } from "@/store/app";
 import { Button, Input, Label, Select } from "./ui";
 import { MultiSelect } from "./MultiSelect";
@@ -33,7 +34,11 @@ export function ClubFilterSidebar() {
     (filters.balanceMin != null ? 1 : 0) +
     (filters.transferBudgetMin != null ? 1 : 0) +
     (filters.wageBudgetMin != null ? 1 : 0) +
-    (filters.corporateFacilitiesMin != null ? 1 : 0) +
+    (filters.corporateFacilitiesMin != null || filters.corporateFacilitiesMax != null ? 1 : 0) +
+    (filters.trainingFacilitiesMin != null || filters.trainingFacilitiesMax != null ? 1 : 0) +
+    (filters.youthFacilitiesMin != null || filters.youthFacilitiesMax != null ? 1 : 0) +
+    (filters.juniorCoachingMin != null || filters.juniorCoachingMax != null ? 1 : 0) +
+    (filters.youthRecruitmentMin != null || filters.youthRecruitmentMax != null ? 1 : 0) +
     (filters.hasStadium != null ? 1 : 0);
 
   return (
@@ -86,27 +91,19 @@ export function ClubFilterSidebar() {
                   ? filters.genders.length === 0
                   : filters.genders.length === option.ids.length &&
                     option.ids.every((id) => filters.genders.includes(id));
-              const count =
-                option.ids.length === 0
-                  ? options.data?.genders.reduce((sum, item) => sum + item.count, 0)
-                  : options.data?.genders
-                      .filter((item) => option.ids.includes(item.id))
-                      .reduce((sum, item) => sum + item.count, 0);
               return (
                 <button
                   key={option.label}
                   type="button"
                   onClick={() => patch({ genders: option.ids })}
-                  className={
+                  className={cn(
+                    "flex items-center justify-center rounded-[6px] border px-2 py-1.5 text-[10px] transition-colors",
                     active
-                      ? "flex items-center justify-between rounded-[6px] border border-[var(--accent)] bg-[var(--accent-soft)] px-2 py-1.5 text-[10px] font-semibold text-[var(--accent-strong)]"
-                      : "flex items-center justify-between rounded-[6px] border border-[var(--line)] bg-[var(--surface-2)] px-2 py-1.5 text-[10px] text-[var(--muted)] hover:border-[var(--line-strong)] hover:text-[var(--ink)]"
-                  }
+                      ? "border-[var(--accent)] bg-[var(--accent-soft)] font-semibold text-[var(--accent-strong)]"
+                      : "border-[var(--line)] bg-[var(--surface-2)] text-[var(--muted)] hover:border-[var(--line-strong)] hover:text-[var(--ink)]",
+                  )}
                 >
                   <span className="truncate">{option.label}</span>
-                  {count != null && (
-                    <span className="font-mono text-[9px] opacity-70">{count}</span>
-                  )}
                 </button>
               );
             })}
@@ -158,12 +155,50 @@ export function ClubFilterSidebar() {
         </Section>
 
         <Section title={t("clubs.inspector.facilities")} icon={<Building2 size={12} />}>
-          <NumberFilter
-            label={t("clubs.filter.corporateFacilitiesMin")}
-            value={filters.corporateFacilitiesMin}
-            onChange={(corporateFacilitiesMin) => patch({ corporateFacilitiesMin })}
-            min={1}
-            max={20}
+          <RangeInput
+            label={t("clubs.filter.corporateFacilities")}
+            min={filters.corporateFacilitiesMin}
+            max={filters.corporateFacilitiesMax}
+            onMin={(corporateFacilitiesMin) => patch({ corporateFacilitiesMin })}
+            onMax={(corporateFacilitiesMax) => patch({ corporateFacilitiesMax })}
+            placeholderMin="1"
+            placeholderMax="20"
+          />
+          <RangeInput
+            label={t("clubs.filter.trainingFacilities")}
+            min={filters.trainingFacilitiesMin}
+            max={filters.trainingFacilitiesMax}
+            onMin={(trainingFacilitiesMin) => patch({ trainingFacilitiesMin })}
+            onMax={(trainingFacilitiesMax) => patch({ trainingFacilitiesMax })}
+            placeholderMin="1"
+            placeholderMax="20"
+          />
+          <RangeInput
+            label={t("clubs.filter.youthFacilities")}
+            min={filters.youthFacilitiesMin}
+            max={filters.youthFacilitiesMax}
+            onMin={(youthFacilitiesMin) => patch({ youthFacilitiesMin })}
+            onMax={(youthFacilitiesMax) => patch({ youthFacilitiesMax })}
+            placeholderMin="1"
+            placeholderMax="20"
+          />
+          <RangeInput
+            label={t("clubs.filter.juniorCoaching")}
+            min={filters.juniorCoachingMin}
+            max={filters.juniorCoachingMax}
+            onMin={(juniorCoachingMin) => patch({ juniorCoachingMin })}
+            onMax={(juniorCoachingMax) => patch({ juniorCoachingMax })}
+            placeholderMin="1"
+            placeholderMax="20"
+          />
+          <RangeInput
+            label={t("clubs.filter.youthRecruitment")}
+            min={filters.youthRecruitmentMin}
+            max={filters.youthRecruitmentMax}
+            onMin={(youthRecruitmentMin) => patch({ youthRecruitmentMin })}
+            onMax={(youthRecruitmentMax) => patch({ youthRecruitmentMax })}
+            placeholderMin="1"
+            placeholderMax="20"
           />
           <div className="space-y-1.5">
             <Label>{t("clubs.filter.stadium")}</Label>

@@ -27,6 +27,9 @@ jobs:
         with:
           node-version: 24
 
+      - name: Check version consistency
+        run: node scripts/version.mjs --check
+
       - name: Install pnpm
         run: npm install -g pnpm@12.3.4
 

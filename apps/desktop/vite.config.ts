@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
@@ -5,7 +6,19 @@ import path from "node:path";
 
 const host = process.env.TAURI_DEV_HOST;
 
+function readAppVersion(): string {
+  const cargoToml = readFileSync(path.resolve(__dirname, "../../Cargo.toml"), "utf8");
+  const match = /^\[workspace\.package\][\s\S]*?^version\s*=\s*"([^"]+)"/m.exec(cargoToml);
+  if (!match) {
+    throw new Error("Could not read [workspace.package].version from Cargo.toml");
+  }
+  return match[1];
+}
+
 export default defineConfig({
+  define: {
+    __APP_VERSION__: JSON.stringify(readAppVersion()),
+  },
   plugins: [react(), tailwindcss()],
   resolve: {
     alias: {

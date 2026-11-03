@@ -24,6 +24,14 @@ jobs:
         with:
           ref: ${{ inputs.tag || github.ref }}
 
+      - name: Install Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Check version consistency
+        run: node scripts/version.mjs --check
+
       - name: Determine release tag
         id: meta
         if: github.ref_type == 'tag' || inputs.tag != ''
@@ -36,9 +44,9 @@ jobs:
             exit 1
           fi
           VERSION="${TAG#v}"
-          CONFIG_VERSION="$(jq -r .version apps/desktop/src-tauri/tauri.conf.json)"
+          CONFIG_VERSION="$(node scripts/version.mjs)"
           if [[ "${VERSION%%-*}" != "$CONFIG_VERSION" ]]; then
-            echo "::error::Tag '$TAG' does not match tauri.conf.json version '$CONFIG_VERSION'. Bump the version before releasing."
+            echo "::error::Tag '$TAG' does not match Cargo.toml version '$CONFIG_VERSION'. Bump the version before releasing."
             exit 1
           fi
           echo "release_tag=$TAG" >> "$GITHUB_OUTPUT"
@@ -53,11 +61,6 @@ jobs:
 
       - name: Rust tests
         run: cargo test -p fm27-core
-
-      - name: Install Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: 24
 
       - name: Install pnpm
         run: npm install -g pnpm@12.3.4

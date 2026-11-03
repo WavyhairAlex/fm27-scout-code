@@ -17,8 +17,8 @@ import {
 } from "lucide-react";
 import { check, type DownloadEvent, type Update } from "@tauri-apps/plugin-updater";
 import { relaunch } from "@tauri-apps/plugin-process";
-import { appInfo, deleteSave, updaterInfo, type UpdaterInfo } from "@/lib/api";
-import { useSaves } from "@/lib/query";
+import { deleteSave, updaterInfo, type UpdaterInfo } from "@/lib/api";
+import { useAppInfo, useSaves } from "@/lib/query";
 import { formatNumber } from "@/lib/i18n";
 import { LANGUAGE_OPTIONS, type Language } from "@/lib/i18n";
 import { useI18n } from "@/lib/useI18n";
@@ -54,20 +54,15 @@ export function SettingsDialog() {
   const pushToast = useAppStore((state) => state.pushToast);
   const currentSaveId = useAppStore((state) => state.saveId);
   const clearSession = useAppStore((state) => state.clearSession);
-  const [dataDir, setDataDir] = useState("");
-  const [info, setInfo] = useState<Awaited<ReturnType<typeof appInfo>> | null>(null);
   const [updater, setUpdater] = useState<UpdaterInfo | null>(null);
   const [updateStatus, setUpdateStatus] = useState<UpdateStatus>({ kind: "idle" });
   const pendingUpdate = useRef<Update | null>(null);
+  const { data: info } = useAppInfo(open);
   const { data: saves = [] } = useSaves();
   const queryClient = useQueryClient();
 
   useEffect(() => {
     if (!open) return;
-    void appInfo().then((value) => {
-      setInfo(value);
-      setDataDir(value.data_dir);
-    });
     void updaterInfo().then(setUpdater);
   }, [open]);
 
@@ -249,7 +244,9 @@ export function SettingsDialog() {
             <h3 className="text-[11px] font-semibold uppercase tracking-wider text-[var(--muted)]">
               {t("settings.localCache")}
             </h3>
-            <span className="font-mono text-[9px] text-[var(--muted)]">{dataDir}</span>
+            <span className="font-mono text-[9px] text-[var(--muted)]">
+              {info?.data_dir ?? ""}
+            </span>
           </div>
           <div className="divide-y divide-[var(--line)] overflow-hidden rounded-xl border border-[var(--line)]">
             {saves.length === 0 && (
@@ -326,7 +323,7 @@ export function SettingsDialog() {
               <div className="min-w-0">
                 <div className="text-[11px] font-semibold text-[var(--ink)]">
                   {t("settings.updateVersion", {
-                    version: updater?.version ?? info?.version ?? "1.1.0",
+                    version: updater?.version ?? info?.version ?? __APP_VERSION__,
                   })}
                 </div>
                 <p className="mt-1 max-w-sm leading-relaxed">
@@ -446,13 +443,13 @@ export function SettingsDialog() {
           <div className="rounded-xl border border-[var(--line)] bg-[var(--surface-2)] p-3 text-[10px] leading-relaxed text-[var(--muted)]">
             <div className="flex items-center gap-2 text-[11px] font-semibold text-[var(--ink)]">
               <Info size={13} />
-              FM27 Scout {info?.version ?? "1.1.0"}
+              FM27 Scout {info?.version ?? __APP_VERSION__}
             </div>
             <div className="mt-1">{t("settings.aboutDescription")}</div>
             <div className="mt-2 flex flex-wrap items-center gap-1.5">
               <Badge tone="outline">
                 {t("settings.parserLabel", {
-                  version: saves[0]?.parser_version ?? "0.1.0",
+                  version: info?.parser_version ?? __APP_VERSION__,
                 })}
               </Badge>
               <Badge tone="outline">Tauri 2</Badge>

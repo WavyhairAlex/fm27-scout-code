@@ -635,8 +635,14 @@ fn find_bytes(haystack: &[u8], needle: &[u8]) -> Option<usize> {
         .position(|window| window == needle)
 }
 
+/// Cache key for parsed saves. Use [`parser_display_version`] for UI display.
 pub fn parser_version() -> &'static str {
     PARSER_VERSION
+}
+
+/// Human-readable parser version without the cache-revision suffix.
+pub fn parser_display_version() -> &'static str {
+    PARSER_VERSION.split('+').next().unwrap_or(PARSER_VERSION)
 }
 
 #[allow(dead_code)]
@@ -645,4 +651,15 @@ fn club_names(clubs: &[Club]) -> HashMap<u32, String> {
         .iter()
         .map(|club| (club.uid, club.name.clone()))
         .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parser_display_version_strips_the_cache_suffix() {
+        assert!(!parser_display_version().contains('+'));
+        assert!(parser_version().starts_with(parser_display_version()));
+    }
 }

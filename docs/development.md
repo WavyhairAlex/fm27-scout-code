@@ -35,7 +35,7 @@ pnpm tauri dev
 Release build paths:
 
 ```text
-target/universal-apple-darwin/release/bundle/dmg/FM27 Scout_1.1.0_universal.dmg
+target/universal-apple-darwin/release/bundle/dmg/FM27 Scout_<version>_universal.dmg
 target/universal-apple-darwin/release/bundle/macos/FM27 Scout.app
 ```
 

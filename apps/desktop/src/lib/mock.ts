@@ -618,8 +618,30 @@ const MOCK_CLUB_ROWS: ClubRow[] = CLUBS.map(([name, uid, nation], index) => {
   };
 });
 
+type MockFacilityField =
+  | "training_facilities"
+  | "youth_facilities"
+  | "junior_coaching"
+  | "youth_recruitment";
+
+function mockFacilityValue(row: ClubRow, field: MockFacilityField): number | null {
+  if (row.corporate_facilities == null) return null;
+  switch (field) {
+    case "training_facilities":
+      return 12 + (row.uid % 8);
+    case "youth_facilities":
+      return 10 + (row.uid % 9);
+    case "junior_coaching":
+      return 9 + (row.uid % 10);
+    case "youth_recruitment":
+      return 10 + (row.uid % 8);
+  }
+}
+
 export function mockQueryClubs(query: ClubQuery): ClubPage {
   let rows = [...MOCK_CLUB_ROWS];
+  const inRange = (value: number | null, min?: number | null, max?: number | null) =>
+    (min == null || (value ?? -Infinity) >= min) && (max == null || (value ?? Infinity) <= max);
   const search = query.search?.trim().toLowerCase();
   if (search) {
     rows = rows.filter(
@@ -643,6 +665,26 @@ export function mockQueryClubs(query: ClubQuery): ClubPage {
   }
   if (query.transfer_budget_max != null) {
     rows = rows.filter((row) => (row.transfer_budget_remaining ?? Infinity) <= query.transfer_budget_max!);
+  }
+  if (query.corporate_facilities_min != null || query.corporate_facilities_max != null) {
+    rows = rows.filter((row) =>
+      inRange(row.corporate_facilities, query.corporate_facilities_min, query.corporate_facilities_max),
+    );
+  }
+  for (const field of [
+    "training_facilities",
+    "youth_facilities",
+    "junior_coaching",
+    "youth_recruitment",
+  ] as const) {
+    if (query[`${field}_min`] == null && query[`${field}_max`] == null) continue;
+    rows = rows.filter((row) =>
+      inRange(
+        mockFacilityValue(row, field),
+        query[`${field}_min`],
+        query[`${field}_max`],
+      ),
+    );
   }
   if (query.player_count_min != null) rows = rows.filter((row) => row.player_count >= query.player_count_min!);
   if (query.has_stadium != null) rows = rows.filter((row) => (row.stadium_count > 0) === query.has_stadium);

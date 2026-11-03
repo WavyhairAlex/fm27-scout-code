@@ -364,6 +364,7 @@ export async function listenParseDone(
 export interface AppInfo {
   data_dir: string;
   version: string;
+  parser_version: string;
   nation_names: number;
   competition_names: number;
 }
@@ -386,7 +387,8 @@ export async function appInfo(): Promise<AppInfo> {
   if (!isTauri) {
     return {
       data_dir: "~/Library/Application Support/com.fm27scout.desktop",
-      version: "1.1.0",
+      version: __APP_VERSION__,
+      parser_version: __APP_VERSION__,
       nation_names: 228,
       competition_names: 0,
     };
@@ -395,7 +397,7 @@ export async function appInfo(): Promise<AppInfo> {
 }
 
 export async function updaterInfo(): Promise<UpdaterInfo> {
-  if (!isTauri) return { configured: false, version: "1.1.0" };
+  if (!isTauri) return { configured: false, version: __APP_VERSION__ };
   return invoke<UpdaterInfo>("updater_info");
 }
 

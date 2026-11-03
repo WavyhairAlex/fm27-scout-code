@@ -87,7 +87,11 @@ const en = {
   "clubs.filter.balanceMin": "Min balance",
   "clubs.filter.transferBudgetMin": "Min transfer budget",
   "clubs.filter.wageBudgetMin": "Min wage budget",
-  "clubs.filter.corporateFacilitiesMin": "Min corporate facilities",
+  "clubs.filter.corporateFacilities": "Corporate facilities",
+  "clubs.filter.trainingFacilities": "Training facilities",
+  "clubs.filter.youthFacilities": "Youth facilities",
+  "clubs.filter.juniorCoaching": "Junior coaching",
+  "clubs.filter.youthRecruitment": "Youth recruitment",
   "clubs.filter.finances": "Finances",
   "clubs.filter.stadium": "Stadium",
   "clubs.filter.any": "All",
@@ -486,7 +490,7 @@ const en = {
 
   // Help dialog
   "help.title": "About & help",
-  "help.description": "FM27 Scout 1.1.0 · Scouting workbench with an optional save editor",
+  "help.description": "FM27 Scout {version} · Scouting workbench with an optional save editor",
   "help.privacyTitle": "Privacy & local writes",
   "help.privacy.1":
     "Read commands never modify the save. The edit dialog writes a new save file; the source is never overwritten.",
@@ -793,7 +797,11 @@ const zhCN: Record<TranslationKey, string> = {
   "clubs.filter.balanceMin": "最低余额",
   "clubs.filter.transferBudgetMin": "最低转会预算",
   "clubs.filter.wageBudgetMin": "最低周薪预算",
-  "clubs.filter.corporateFacilitiesMin": "最低公司设施",
+  "clubs.filter.corporateFacilities": "公司设施",
+  "clubs.filter.trainingFacilities": "训练设施",
+  "clubs.filter.youthFacilities": "青训设施",
+  "clubs.filter.juniorCoaching": "青年队教练",
+  "clubs.filter.youthRecruitment": "青年队招募",
   "clubs.filter.finances": "财政",
   "clubs.filter.stadium": "球场",
   "clubs.filter.any": "全部",
@@ -1183,7 +1191,7 @@ const zhCN: Record<TranslationKey, string> = {
     "CSV 包含表格字段与 52 项属性。导出文件写入你选择的位置；不会上传到任何服务器。",
 
   "help.title": "关于与帮助",
-  "help.description": "FM27 Scout 1.1.0 · 球探工作台，可选存档编辑器",
+  "help.description": "FM27 Scout {version} · 球探工作台，可选存档编辑器",
   "help.privacyTitle": "隐私与本地写入",
   "help.privacy.1": "读取命令不修改存档；编辑对话框只写入新存档，绝不覆盖源文件。",
   "help.privacy.2": "完全离线，不上传存档、球员或使用数据。",

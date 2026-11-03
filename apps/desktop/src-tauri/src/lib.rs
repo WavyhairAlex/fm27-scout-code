@@ -14,7 +14,8 @@ use fm27_core::store::{
     PlayerQuery, SaveRecord, SnapshotPoint, SquadAnalysis, Store,
 };
 use fm27_core::{
-    ParseReport, Player, SaveSummary, inspect_save, parse_save_with_progress, parser_version,
+    ParseReport, Player, SaveSummary, inspect_save, parse_save_with_progress,
+    parser_display_version, parser_version,
 };
 use serde::{Deserialize, Serialize};
 use tauri::menu::{Menu, MenuItem, PredefinedMenuItem, Submenu};
@@ -84,6 +85,7 @@ struct EditClubResult {
 #[derive(Debug, Serialize)]
 struct AppInfo {
     version: String,
+    parser_version: String,
     data_dir: String,
     nation_names: usize,
     competition_names: usize,
@@ -659,6 +661,7 @@ fn log_message(app: AppHandle, message: String) {
 fn app_info(state: State<'_, AppState>) -> AppInfo {
     AppInfo {
         version: env!("CARGO_PKG_VERSION").to_owned(),
+        parser_version: parser_display_version().to_owned(),
         data_dir: state.data_dir.display().to_string(),
         nation_names: fm27_core::nations::name_count(),
         competition_names: fm27_core::reference::name_count(),

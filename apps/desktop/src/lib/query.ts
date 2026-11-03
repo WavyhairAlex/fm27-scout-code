@@ -1,5 +1,6 @@
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import {
+  appInfo,
   getAnalysisOverview,
   getClub,
   getClubFilterOptions,
@@ -86,6 +87,15 @@ export function buildClubQuery(
     wage_budget_min: filters.wageBudgetMin,
     wage_budget_max: filters.wageBudgetMax,
     corporate_facilities_min: filters.corporateFacilitiesMin,
+    corporate_facilities_max: filters.corporateFacilitiesMax,
+    training_facilities_min: filters.trainingFacilitiesMin,
+    training_facilities_max: filters.trainingFacilitiesMax,
+    youth_facilities_min: filters.youthFacilitiesMin,
+    youth_facilities_max: filters.youthFacilitiesMax,
+    junior_coaching_min: filters.juniorCoachingMin,
+    junior_coaching_max: filters.juniorCoachingMax,
+    youth_recruitment_min: filters.youthRecruitmentMin,
+    youth_recruitment_max: filters.youthRecruitmentMax,
     player_count_min: filters.playerCountMin,
     has_stadium: filters.hasStadium,
     sort,
@@ -101,6 +111,15 @@ export function useSaves() {
     queryKey: ["saves"],
     queryFn: listSaves,
     staleTime: 10_000,
+  });
+}
+
+export function useAppInfo(enabled = true) {
+  return useQuery({
+    queryKey: ["app-info"],
+    queryFn: appInfo,
+    enabled,
+    staleTime: Infinity,
   });
 }
 

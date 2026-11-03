@@ -3,16 +3,39 @@
 FM27 Scout 通过 GitHub Actions 发布**未签名、未公证**的 Universal DMG。
 这样不需要 Apple Developer Program 年费；代价是用户首次打开时需要手动绕过 Gatekeeper。
 
+## 版本号管理
+
+版本号只有一个手动维护的位置：根 `Cargo.toml` 的 `[workspace.package].version`。
+`apps/desktop/src-tauri/tauri.conf.json` 不设置 `version`，Tauri 会自动读取 Cargo 版本；
+前端通过 Vite 的 `__APP_VERSION__` 注入，不再硬编码。
+
+发版前用脚本同步版本和 `Cargo.lock`：
+
+```bash
+node scripts/version.mjs 1.2.0
+git add Cargo.toml Cargo.lock apps/desktop/package.json
+git commit -m "chore: release v1.2.0"
+git tag v1.2.0
+git push --follow-tags
+```
+
+CI 会运行 `node scripts/version.mjs --check`，确保 `Cargo.toml` 与
+`apps/desktop/package.json` 一致；tag 也必须与 `Cargo.toml` 版本一致。
+
+注意：`crates/fm27-core/src/layout.rs` 的 `PARSER_VERSION` 是独立的解析缓存版本，
+只有解析逻辑或缓存数据结构变化时才需要修改；普通发版不要跟着改，否则会让所有
+已解析存档的缓存失效。
+
 ## CI 发布
 
 `.github/workflows/release.yml` 不读取任何 Apple Secrets。
 
 推送 `v*` tag 会构建并发布 GitHub Release。手动触发 workflow 时，可以在 `tag` 输入框填写
-一个已存在的 tag（例如 `v1.1.0`）来发布。留空时使用当前选择的 ref：从 tag 触发会发布
+一个已存在的 tag（例如 `v1.2.0`）来发布。留空时使用当前选择的 ref：从 tag 触发会发布
 Release，从分支触发则只构建并上传 CI artifact。
 
-发布前必须保证 tag 版本与 `apps/desktop/src-tauri/tauri.conf.json` 的 `version` 一致
-（例如 tag `v1.1.0` 对应 `1.1.0`），否则 workflow 会在构建前失败。
+发布前必须保证 tag 版本与根 `Cargo.toml` 的 `[workspace.package].version` 一致
+（例如 tag `v1.2.0` 对应 `1.2.0`），否则 workflow 会在构建前失败。
 
 Release 附件包括：
 
@@ -117,7 +140,7 @@ scripts/release-macos.sh
 
 ```text
 target/universal-apple-darwin/release/bundle/macos/FM27 Scout.app
-target/universal-apple-darwin/release/bundle/dmg/FM27 Scout_1.1.0_universal.dmg
+target/universal-apple-darwin/release/bundle/dmg/FM27 Scout_<version>_universal.dmg
 ```
 
 如果以后要恢复 CI 签名发布，需要在 workflow 中重新加入 Apple Secrets：
@@ -137,8 +160,9 @@ target/universal-apple-darwin/release/bundle/dmg/FM27 Scout_1.1.0_universal.dmg
 ## 本地验证
 
 ```bash
-hdiutil verify "target/universal-apple-darwin/release/bundle/dmg/FM27 Scout_1.1.0_universal.dmg"
-hdiutil attach "target/universal-apple-darwin/release/bundle/dmg/FM27 Scout_1.1.0_universal.dmg"
+DMG="$(find target/universal-apple-darwin/release/bundle/dmg -name 'FM27 Scout_*_universal.dmg' -print -quit)"
+hdiutil verify "$DMG"
+hdiutil attach "$DMG"
 cp -R "/Volumes/FM27 Scout/FM27 Scout.app" /tmp/
 lipo -info /tmp/"FM27 Scout.app"/Contents/MacOS/*
 ```

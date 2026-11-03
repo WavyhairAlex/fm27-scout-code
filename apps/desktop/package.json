@@ -8,7 +8,9 @@
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
     "tauri": "tauri",
-    "test": "vitest run"
+    "test": "vitest run",
+    "version:check": "node ../../scripts/version.mjs --check",
+    "version:bump": "node ../../scripts/version.mjs"
   },
   "dependencies": {
     "@tanstack/react-query": "^5.90.0",

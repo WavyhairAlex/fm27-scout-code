@@ -164,6 +164,14 @@ pub struct ClubQuery {
     pub wage_budget_max: Option<i64>,
     pub corporate_facilities_min: Option<u8>,
     pub corporate_facilities_max: Option<u8>,
+    pub training_facilities_min: Option<u8>,
+    pub training_facilities_max: Option<u8>,
+    pub youth_facilities_min: Option<u8>,
+    pub youth_facilities_max: Option<u8>,
+    pub junior_coaching_min: Option<u8>,
+    pub junior_coaching_max: Option<u8>,
+    pub youth_recruitment_min: Option<u8>,
+    pub youth_recruitment_max: Option<u8>,
     pub player_count_min: Option<i64>,
     pub player_count_max: Option<i64>,
     pub average_ca_min: Option<f64>,
@@ -1929,6 +1937,34 @@ fn build_club_where(query: &ClubQuery, params: &mut Vec<Value>) -> Result<String
         query.corporate_facilities_min,
         query.corporate_facilities_max,
         "c.corporate_facilities",
+        params,
+        &mut clauses,
+    );
+    add_range(
+        query.training_facilities_min,
+        query.training_facilities_max,
+        "c.training_facilities",
+        params,
+        &mut clauses,
+    );
+    add_range(
+        query.youth_facilities_min,
+        query.youth_facilities_max,
+        "c.youth_facilities",
+        params,
+        &mut clauses,
+    );
+    add_range(
+        query.junior_coaching_min,
+        query.junior_coaching_max,
+        "c.junior_coaching",
+        params,
+        &mut clauses,
+    );
+    add_range(
+        query.youth_recruitment_min,
+        query.youth_recruitment_max,
+        "c.youth_recruitment",
         params,
         &mut clauses,
     );
