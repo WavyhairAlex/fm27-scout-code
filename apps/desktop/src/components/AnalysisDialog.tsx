@@ -4,6 +4,8 @@ import {
   ArrowRight,
   BarChart3,
   CalendarClock,
+  ChevronLeft,
+  ChevronRight,
   Coins,
   Loader2,
   RefreshCw,
@@ -17,17 +19,24 @@ import {
   useAnalysisOverview,
   useFilterOptions,
   useSquadAnalysis,
+  useValueFinder,
 } from "@/lib/query";
-import type { AnalysisOverview, DistributionBand, SquadAnalysis } from "@/lib/types";
-import { bandLabel } from "@/lib/labels";
-import { formatNumber } from "@/lib/i18n";
+import type {
+  AnalysisOverview,
+  DistributionBand,
+  SquadAnalysis,
+  ValueFinderRequest,
+  ValueFinderRow,
+} from "@/lib/types";
+import { bandLabel, roleName } from "@/lib/labels";
+import { formatNumber, type TranslationKey } from "@/lib/i18n";
 import { useI18n } from "@/lib/useI18n";
 import { caTone, cn, formatValue, formatWage, initials } from "@/lib/utils";
 import { useAppStore } from "@/store/app";
-import { Badge, Button, Modal } from "./ui";
+import { Badge, Button, Input, Modal, Select } from "./ui";
 import { MultiSelect } from "./MultiSelect";
 
-type AnalysisTab = "overview" | "squad" | "wonderkids";
+type AnalysisTab = "overview" | "squad" | "wonderkids" | "value";
 
 export function AnalysisDialog() {
   const { t, locale } = useI18n();
@@ -139,6 +148,7 @@ export function AnalysisDialog() {
           ["overview", t("analysis.tab.overview"), <BarChart3 size={12} key="overview" />],
           ["squad", t("analysis.tab.squad"), <Users size={12} key="squad" />],
           ["wonderkids", t("analysis.tab.wonderkids"), <Sparkles size={12} key="wonderkids" />],
+          ["value", t("analysis.tab.value"), <Coins size={12} key="value" />],
         ].map(([value, label, icon]) => (
           <button
             key={value as string}
@@ -223,6 +233,17 @@ export function AnalysisDialog() {
             rows={wonderkids.data?.rows ?? []}
             total={wonderkids.data?.total ?? 0}
             onApply={applyWonderkidFilters}
+            onPlayer={(uid) => {
+              setSelectedUid(uid);
+              setInspectorOpen(true);
+              setOpen(false);
+            }}
+          />
+        )}
+
+        {tab === "value" && (
+          <ValueFinderPanel
+            saveId={saveId}
             onPlayer={(uid) => {
               setSelectedUid(uid);
               setInspectorOpen(true);
@@ -588,6 +609,524 @@ function WonderkidPanel({
         </div>
       )}
     </div>
+  );
+}
+
+const VALUE_PAGE_SIZE = 40;
+const VALUE_POSITIONS = ["GK", "DC", "FB", "MID", "AM", "ST"] as const;
+
+function optionalNumber(value: string): number | null {
+  if (!value.trim()) return null;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? Math.max(0, Math.round(parsed)) : null;
+}
+
+function ValueFinderPanel({
+  saveId,
+  onPlayer,
+}: {
+  saveId: number | null;
+  onPlayer: (uid: number) => void;
+}) {
+  const { t, locale } = useI18n();
+  const [position, setPosition] = useState("");
+  const [league, setLeague] = useState("");
+  const [minCa, setMinCa] = useState(120);
+  const [minRole, setMinRole] = useState(12);
+  const [maxAge, setMaxAge] = useState(30);
+  const [maxFee, setMaxFee] = useState<number | null>(null);
+  const [maxWage, setMaxWage] = useState<number | null>(null);
+  const [market, setMarket] = useState("all");
+  const [includeUnknownFee, setIncludeUnknownFee] = useState(false);
+  const [page, setPage] = useState(0);
+  const [sortBy, setSortBy] = useState("score");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
+
+  useEffect(() => {
+    setPage(0);
+  }, [
+    saveId,
+    position,
+    league,
+    minCa,
+    minRole,
+    maxAge,
+    maxFee,
+    maxWage,
+    market,
+    includeUnknownFee,
+    sortBy,
+    sortDir,
+  ]);
+
+  const request = useMemo<ValueFinderRequest | null>(
+    () =>
+      saveId == null
+        ? null
+        : {
+            save_id: saveId,
+            position_group: position || null,
+            league: league || null,
+            age_max: maxAge,
+            ca_min: minCa,
+            role_min: minRole,
+            max_fee: maxFee,
+            max_wage: maxWage,
+            listings: market === "all" ? [] : [market],
+            include_unknown_fee: includeUnknownFee,
+            sort_by: sortBy,
+            sort_dir: sortDir,
+            page,
+            page_size: VALUE_PAGE_SIZE,
+          },
+    [
+      saveId,
+      position,
+      league,
+      minCa,
+      minRole,
+      maxAge,
+      maxFee,
+      maxWage,
+      market,
+      includeUnknownFee,
+      sortBy,
+      sortDir,
+      page,
+    ],
+  );
+  const query = useValueFinder(request);
+  const data = query.data;
+  const rows = data?.rows ?? [];
+  const pages = Math.max(1, Math.ceil((data?.total ?? 0) / VALUE_PAGE_SIZE));
+  const leagues = data?.meta.leagues ?? [];
+
+  const changeSort = (by: string) => {
+    if (sortBy === by) {
+      setSortDir((current) => (current === "desc" ? "asc" : "desc"));
+    } else {
+      setSortBy(by);
+      setSortDir("desc");
+    }
+  };
+
+  const reset = () => {
+    setPosition("");
+    setLeague("");
+    setMinCa(120);
+    setMinRole(12);
+    setMaxAge(30);
+    setMaxFee(null);
+    setMaxWage(null);
+    setMarket("all");
+    setIncludeUnknownFee(false);
+    setSortBy("score");
+    setSortDir("desc");
+    setPage(0);
+  };
+
+  const feeLabel = (row: ValueFinderRow) => {
+    if (row.fee == null) return t("analysis.value.unknownFee");
+    if (row.fee === 0) return t("analysis.value.free");
+    return formatValue(row.fee);
+  };
+
+  const confidenceTone = (
+    row: ValueFinderRow,
+  ): "accent" | "default" | "danger" =>
+    row.confidence >= 0.9 ? "accent" : row.confidence >= 0.7 ? "default" : "danger";
+
+  return (
+    <div className="space-y-3">
+      <div className="rounded-xl border border-[var(--line)] bg-[var(--surface-2)] p-3">
+        <div className="flex flex-wrap items-end gap-2.5">
+          <ValueFilter label={t("analysis.value.position")} className="w-[118px]">
+            <Select
+              value={position}
+              onChange={(event) => setPosition(event.target.value)}
+              className="h-7 text-[10px]"
+            >
+              <option value="">{t("analysis.value.allPositions")}</option>
+              {VALUE_POSITIONS.map((group) => (
+                <option key={group} value={group}>
+                  {group}
+                </option>
+              ))}
+            </Select>
+          </ValueFilter>
+          <ValueFilter label={t("analysis.value.league")} className="w-[190px]">
+            <Select
+              value={league}
+              onChange={(event) => setLeague(event.target.value)}
+              className="h-7 text-[10px]"
+            >
+              <option value="">{t("analysis.value.allLeagues")}</option>
+              {leagues.map((name) => (
+                <option key={name} value={name}>
+                  {name}
+                </option>
+              ))}
+            </Select>
+          </ValueFilter>
+          <NumberField
+            label={t("analysis.value.minCa")}
+            value={minCa}
+            min={0}
+            max={200}
+            onChange={setMinCa}
+          />
+          <NumberField
+            label={t("analysis.value.minRole")}
+            value={minRole}
+            min={1}
+            max={20}
+            onChange={setMinRole}
+          />
+          <NumberField
+            label={t("analysis.value.maxAge")}
+            value={maxAge}
+            min={15}
+            max={50}
+            onChange={setMaxAge}
+          />
+          <label className="space-y-1">
+            <span className="block text-[9px] uppercase tracking-wider text-[var(--muted)]">
+              {t("analysis.value.maxFee")}
+            </span>
+            <Input
+              type="number"
+              min={0}
+              value={maxFee ?? ""}
+              placeholder="—"
+              onChange={(event) => setMaxFee(optionalNumber(event.target.value))}
+              className="h-7 w-[96px] font-mono text-[10px]"
+            />
+          </label>
+          <label className="space-y-1">
+            <span className="block text-[9px] uppercase tracking-wider text-[var(--muted)]">
+              {t("analysis.value.maxWage")}
+            </span>
+            <Input
+              type="number"
+              min={0}
+              value={maxWage ?? ""}
+              placeholder="—"
+              onChange={(event) => setMaxWage(optionalNumber(event.target.value))}
+              className="h-7 w-[96px] font-mono text-[10px]"
+            />
+          </label>
+          <ValueFilter label={t("analysis.value.market")} className="w-[150px]">
+            <Select
+              value={market}
+              onChange={(event) => setMarket(event.target.value)}
+              className="h-7 text-[10px]"
+            >
+              <option value="all">{t("analysis.value.marketAll")}</option>
+              <option value="sale">{t("analysis.value.marketSale")}</option>
+              <option value="loan">{t("analysis.value.marketLoan")}</option>
+              <option value="free">{t("analysis.value.marketFree")}</option>
+            </Select>
+          </ValueFilter>
+          <label className="flex h-7 items-center gap-1.5 text-[10px] text-[var(--muted)]">
+            <input
+              type="checkbox"
+              checked={includeUnknownFee}
+              onChange={(event) => setIncludeUnknownFee(event.target.checked)}
+              className="accent-[var(--accent)]"
+            />
+            {t("analysis.value.includeUnknownFee")}
+          </label>
+          <Button variant="ghost" size="sm" className="h-7" onClick={reset}>
+            {t("analysis.value.reset")}
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-7"
+            onClick={() => void query.refetch()}
+            title={t("analysis.refresh")}
+          >
+            <RefreshCw size={11} />
+          </Button>
+        </div>
+        <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[9px] text-[var(--muted)]">
+          <span>
+            {data
+              ? t("analysis.value.summary", {
+                  count: data.total,
+                  shown: rows.length,
+                  years: data.meta.cost_horizon_years,
+                })
+              : t("analysis.value.loading")}
+          </span>
+          <span>{t("analysis.value.scoreHint")}</span>
+        </div>
+      </div>
+
+      {query.isLoading && !data ? (
+        <div className="flex items-center justify-center gap-2 rounded-xl border border-dashed border-[var(--line)] py-12 text-[11px] text-[var(--muted)]">
+          <Loader2 size={14} className="animate-spin" />
+          {t("analysis.value.loading")}
+        </div>
+      ) : query.isError ? (
+        <div className="rounded-xl border border-[var(--danger-line)] bg-[var(--danger-soft)] px-3 py-4 text-[11px] text-[var(--danger)]">
+          {t("analysis.loadError")}
+        </div>
+      ) : rows.length === 0 ? (
+        <EmptyHint text={t("analysis.value.empty")} />
+      ) : (
+        <div className="overflow-hidden rounded-xl border border-[var(--line)]">
+          <div className="thin-scroll max-h-[430px] overflow-auto">
+            <table className="w-full min-w-[1040px] text-left">
+              <thead className="sticky top-0 z-10 bg-[var(--surface-2)] text-[9px] uppercase tracking-wider text-[var(--muted)]">
+                <tr>
+                  <th className="px-3 py-1.5">{t("analysis.value.table.player")}</th>
+                  <th className="px-2 py-1.5">{t("analysis.value.table.position")}</th>
+                  <ValueSortHeader
+                    label={t("analysis.value.table.age")}
+                    by="age"
+                    active={sortBy}
+                    dir={sortDir}
+                    onClick={changeSort}
+                  />
+                  <ValueSortHeader
+                    label={t("analysis.value.table.ca")}
+                    by="ca"
+                    active={sortBy}
+                    dir={sortDir}
+                    onClick={changeSort}
+                  />
+                  <ValueSortHeader
+                    label={t("analysis.value.table.role")}
+                    by="role"
+                    active={sortBy}
+                    dir={sortDir}
+                    onClick={changeSort}
+                  />
+                  <ValueSortHeader
+                    label={t("analysis.value.table.fee")}
+                    by="fee"
+                    active={sortBy}
+                    dir={sortDir}
+                    onClick={changeSort}
+                  />
+                  <ValueSortHeader
+                    label={t("analysis.value.table.wage")}
+                    by="wage"
+                    active={sortBy}
+                    dir={sortDir}
+                    onClick={changeSort}
+                  />
+                  <ValueSortHeader
+                    label={t("analysis.value.table.cost")}
+                    by="cost"
+                    active={sortBy}
+                    dir={sortDir}
+                    onClick={changeSort}
+                  />
+                  <ValueSortHeader
+                    label={t("analysis.value.table.score")}
+                    by="score"
+                    active={sortBy}
+                    dir={sortDir}
+                    onClick={changeSort}
+                  />
+                  <th className="px-2 py-1.5 text-right">{t("analysis.value.table.confidence")}</th>
+                  <th className="px-3 py-1.5">{t("analysis.value.table.flags")}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((row) => (
+                  <tr
+                    key={row.uid}
+                    className="cursor-pointer border-t border-[var(--line)]/60 text-[10px] hover:bg-[var(--surface-2)]"
+                    onClick={() => onPlayer(row.uid)}
+                  >
+                    <td className="px-3 py-1.5">
+                      <div className="flex items-center gap-1.5">
+                        <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-[var(--line)] bg-[var(--surface-2)] text-[8px] font-bold text-[var(--muted)]">
+                          {initials(row.name)}
+                        </span>
+                        <div className="min-w-0">
+                          <div className="max-w-[170px] truncate font-medium text-[var(--ink)]">
+                            {row.name ?? t("common.unnamed")}
+                          </div>
+                          <div className="max-w-[190px] truncate text-[9px] text-[var(--muted)]">
+                            {row.club_name ?? t("common.freeAgent")}
+                            {row.league_name ? ` · ${row.league_name}` : ""}
+                          </div>
+                        </div>
+                      </div>
+                    </td>
+                    <td className="px-2 py-1.5">
+                      <div className="font-mono text-[10px] font-semibold text-[var(--accent-strong)]">
+                        {row.role_position ?? row.position_group}
+                      </div>
+                      <div className="max-w-[120px] truncate text-[9px] text-[var(--muted)]">
+                        {roleName(row.role_id, row.role_name, locale) ?? "—"}
+                      </div>
+                    </td>
+                    <td className="px-2 py-1.5 text-right font-mono text-[var(--muted)]">
+                      {row.age ?? "—"}
+                    </td>
+                    <td className="px-2 py-1.5 text-right">
+                      <span
+                        className={cn(
+                          "inline-flex rounded border px-1.5 py-0.5 font-mono text-[9px] font-bold",
+                          caTone(row.ca),
+                        )}
+                      >
+                        {row.ca}
+                      </span>
+                      <span className="ml-1 font-mono text-[9px] text-[var(--muted)]">
+                        / {row.pa ?? "?"}
+                      </span>
+                    </td>
+                    <td className="px-2 py-1.5 text-right font-mono text-[var(--muted)]">
+                      {row.role_score != null ? `${row.role_score}/20` : "—"}
+                    </td>
+                    <td className="px-2 py-1.5 text-right font-mono text-[var(--muted)]">
+                      {feeLabel(row)}
+                    </td>
+                    <td className="px-2 py-1.5 text-right font-mono text-[var(--muted)]">
+                      {formatWage(row.wage, locale)}
+                    </td>
+                    <td className="px-2 py-1.5 text-right font-mono text-[var(--muted)]">
+                      {formatValue(row.cost)}
+                    </td>
+                    <td className="px-2 py-1.5 text-right">
+                      <span
+                        className={cn(
+                          "inline-flex rounded border px-1.5 py-0.5 font-mono text-[9px] font-bold",
+                          row.score >= 75
+                            ? "border-[var(--gold-line)] bg-[var(--gold-soft)] text-[var(--gold)]"
+                            : row.score >= 60
+                              ? "border-[var(--success-line)] bg-[var(--success-soft)] text-[var(--success)]"
+                              : row.score >= 45
+                                ? "border-[var(--blue-line)] bg-[var(--blue-soft)] text-[var(--blue)]"
+                                : "border-[var(--line)] bg-[var(--surface-2)] text-[var(--muted)]",
+                        )}
+                      >
+                        {Math.round(row.score)}
+                      </span>
+                      {row.surplus != null && (
+                        <div className="mt-0.5 font-mono text-[8px] text-[var(--muted)]">
+                          {row.surplus >= 0 ? "+" : ""}
+                          {Math.round(row.surplus * 100)}
+                        </div>
+                      )}
+                    </td>
+                    <td className="px-2 py-1.5 text-right">
+                      <Badge tone={confidenceTone(row)} className="px-1.5 text-[8px]">
+                        {Math.round(row.confidence * 100)}%
+                      </Badge>
+                    </td>
+                    <td className="px-3 py-1.5">
+                      <div className="flex max-w-[180px] flex-wrap gap-0.5">
+                        {row.flags.slice(0, 2).map((flag) => (
+                          <span
+                            key={flag}
+                            className="rounded border border-[var(--line)] bg-[var(--surface-2)] px-1 py-0.5 text-[8px] text-[var(--muted)]"
+                          >
+                            {t(`analysis.value.flag.${flag}` as TranslationKey)}
+                          </span>
+                        ))}
+                        {row.flags.length > 2 && (
+                          <span
+                            className="rounded border border-[var(--line)] px-1 py-0.5 text-[8px] text-[var(--muted)]"
+                            title={row.flags
+                              .map((flag) => t(`analysis.value.flag.${flag}` as TranslationKey))
+                              .join(", ")}
+                          >
+                            +{row.flags.length - 2}
+                          </span>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <div className="flex items-center justify-between border-t border-[var(--line)] bg-[var(--surface-2)] px-3 py-2">
+            <span className="text-[9px] text-[var(--muted)]">
+              {t("analysis.value.page", { page: page + 1, pages })}
+            </span>
+            <div className="flex items-center gap-1">
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-6 px-2 text-[10px]"
+                disabled={page <= 0}
+                onClick={() => setPage((current) => Math.max(0, current - 1))}
+              >
+                <ChevronLeft size={11} />
+                {t("analysis.value.prev")}
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-6 px-2 text-[10px]"
+                disabled={page + 1 >= pages}
+                onClick={() => setPage((current) => Math.min(pages - 1, current + 1))}
+              >
+                {t("analysis.value.next")}
+                <ChevronRight size={11} />
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ValueFilter({
+  label,
+  className,
+  children,
+}: {
+  label: string;
+  className?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <label className={cn("space-y-1", className)}>
+      <span className="block text-[9px] uppercase tracking-wider text-[var(--muted)]">
+        {label}
+      </span>
+      {children}
+    </label>
+  );
+}
+
+function ValueSortHeader({
+  label,
+  by,
+  active,
+  dir,
+  onClick,
+}: {
+  label: string;
+  by: string;
+  active: string;
+  dir: "asc" | "desc";
+  onClick: (by: string) => void;
+}) {
+  return (
+    <th className="px-2 py-1.5 text-right">
+      <button
+        type="button"
+        onClick={() => onClick(by)}
+        className={cn(
+          "inline-flex items-center gap-0.5 font-medium uppercase tracking-wider transition-colors hover:text-[var(--ink)]",
+          active === by ? "text-[var(--accent-strong)]" : "text-[var(--muted)]",
+        )}
+      >
+        {label}
+        {active === by && <span className="text-[8px]">{dir === "desc" ? "↓" : "↑"}</span>}
+      </button>
+    </th>
   );
 }
 

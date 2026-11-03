@@ -893,6 +893,61 @@ impl Store {
         Ok(rows)
     }
 
+    /// Value Finder: load a lightweight player row once and rank it in Rust.
+    ///
+    /// The ranking deliberately lives outside SQL: percentile groups, missing
+    /// cost handling and the explainable score are easier to test and evolve as
+    /// pure functions. The candidate query returns one row per player, not per
+    /// contract or per match.
+    pub fn value_finder(
+        &self,
+        request: &crate::moneyball::ValueFinderRequest,
+    ) -> Result<crate::moneyball::ValueFinderPage> {
+        let mut statement = self.conn.prepare(
+            "SELECT p.uid, p.name, p.age, p.club_uid, p.club_name, p.league_name,
+                    p.nation_name, p.ca, p.pa, p.best_role_id, p.best_role_name,
+                    p.best_role_score, p.best_role_position, p.transfer_value,
+                    p.transfer_value_state, c.wage, c.end_date, cl.reputation,
+                    p.transfer_listed, p.loan_listed, p.injury_status, p.recent_injury
+             FROM players p
+             LEFT JOIN contracts c ON c.save_id = p.save_id AND c.player_uid = p.uid
+             LEFT JOIN clubs cl ON cl.save_id = p.save_id AND cl.uid = p.club_uid
+             WHERE p.save_id = ?1",
+        )?;
+        let rows = statement.query_map(params![request.save_id], |row| {
+            let transfer_value_state = row
+                .get::<_, Option<String>>(14)?
+                .and_then(|text| serde_json::from_str::<String>(&text).ok())
+                .unwrap_or_else(|| "ok".to_owned());
+            Ok(crate::moneyball::ValueFinderCandidate {
+                uid: row.get(0)?,
+                name: row.get(1)?,
+                age: row.get(2)?,
+                club_uid: row.get(3)?,
+                club_name: row.get(4)?,
+                league_name: row.get(5)?,
+                nation_name: row.get(6)?,
+                ca: row.get(7)?,
+                pa: row.get(8)?,
+                role_id: row.get(9)?,
+                role_name: row.get(10)?,
+                role_score: row.get(11)?,
+                role_position: row.get(12)?,
+                transfer_value: row.get(13)?,
+                transfer_value_state,
+                wage: row.get(15)?,
+                contract_end: row.get(16)?,
+                club_reputation: row.get(17)?,
+                transfer_listed: row.get(18)?,
+                loan_listed: row.get(19)?,
+                injury_status: row.get(20)?,
+                recent_injury: row.get(21)?,
+            })
+        })?;
+        let candidates = rows.collect::<std::result::Result<Vec<_>, _>>()?;
+        crate::moneyball::score_value_finder(candidates, request)
+    }
+
     pub fn get_player(
         &self,
         save_id: i64,
@@ -2518,5 +2573,55 @@ mod tests {
         let mut params = Vec::new();
         let sql = build_where(&query, &mut params).expect("database filter should be valid");
         assert!(sql.contains("p.unique_id IS NULL OR p.unique_id < ?"));
+    }
+
+    #[test]
+    fn value_finder_reads_the_cache_and_keeps_unknown_fees_out_by_default() {
+        let store = Store::open_in_memory().expect("store");
+        store
+            .conn
+            .execute_batch(
+                "INSERT INTO saves
+                   (id, path, file_name, file_size, mtime_ns, fingerprint, game, build,
+                    parser_version, parsed_at)
+                 VALUES (1, '/tmp/test.fm', 'test.fm', 1, 1, 'fp', 'FM27', '27.0.0', 'test', 'now');
+                 INSERT INTO clubs (save_id, uid, name, short_name, reputation)
+                 VALUES (1, 10, 'Test Club', 'Test', 5000);
+                 INSERT INTO players
+                   (save_id, uid, name, age, club_uid, club_name, league_name, ca, pa,
+                    transfer_value, transfer_value_state, positions_json, positions_text,
+                    attributes_json, raw_attributes_json, best_role_id, best_role_name,
+                    best_role_score, best_role_position, data_json)
+                 VALUES
+                   (1, 1, 'Cheap', 24, 10, 'Test Club', 'Test League', 150, 160,
+                    1000, '\"ok\"', '{}', 'MC', '{}', '{}', 'central_midfielder',
+                    'Central Midfielder', 16, 'MC', '{}'),
+                   (1, 2, 'Expensive', 24, 10, 'Test Club', 'Test League', 150, 160,
+                    1000000, '\"ok\"', '{}', 'MC', '{}', '{}', 'central_midfielder',
+                    'Central Midfielder', 16, 'MC', '{}'),
+                   (1, 3, 'Unknown fee', 24, 10, 'Test Club', 'Test League', 150, 160,
+                    0, '\"unset\"', '{}', 'MC', '{}', '{}', 'central_midfielder',
+                    'Central Midfielder', 16, 'MC', '{}');
+                 INSERT INTO contracts (save_id, player_uid, wage, end_date)
+                 VALUES (1, 1, 100, '2028-06-30'),
+                        (1, 2, 1000, '2028-06-30'),
+                        (1, 3, 1000, '2028-06-30');",
+            )
+            .expect("seed");
+
+        let request = crate::moneyball::ValueFinderRequest {
+            save_id: 1,
+            ca_min: Some(100),
+            ..crate::moneyball::ValueFinderRequest::default()
+        };
+        let page = store.value_finder(&request).expect("value finder");
+        assert_eq!(page.total, 2);
+        assert_eq!(page.rows[0].name.as_deref(), Some("Cheap"));
+        assert_eq!(page.meta.leagues, vec!["Test League".to_owned()]);
+
+        let mut with_unknown = request;
+        with_unknown.include_unknown_fee = true;
+        let page = store.value_finder(&with_unknown).expect("value finder");
+        assert_eq!(page.total, 3);
     }
 }

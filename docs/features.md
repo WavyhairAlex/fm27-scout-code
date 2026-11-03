@@ -57,6 +57,10 @@
   can be included, excluded or isolated with the player-origin filter.
 - Role scores: 29 FM-style roles weighted by key attributes and combined with
   position familiarity; the detail panel shows every role and the best role.
+- Value finder (experimental): role/CA quality against transfer value plus three
+  years of wages, with position-group percentiles, confidence, market/contract
+  flags and explainable score components. It is not a stats-based model yet;
+  unknown fees and wages are excluded by default.
 - Growth history: each parse records a snapshot keyed by save name + game date;
   the detail panel shows CA / PA / value history.
 - Linked filtering: club, nationality, gender and status counts update live with

@@ -29,6 +29,8 @@ import type {
   SnapshotPoint,
   SquadAnalysis,
   TraitOption,
+  ValueFinderPage,
+  ValueFinderRequest,
 } from "./types";
 import { estimateCaExact } from "./ca";
 import {
@@ -46,6 +48,7 @@ import {
   mockQuery,
   mockQueryClubs,
   mockSquadAnalysis,
+  mockValueFinder,
 } from "./mock";
 
 export const isTauri =
@@ -87,6 +90,13 @@ export async function openSave(path: string, force = false): Promise<OpenSaveRes
 export async function queryPlayers(query: PlayerQuery): Promise<PlayerPage> {
   if (!isTauri) return mockQuery(query);
   return invoke<PlayerPage>("query_players", { query });
+}
+
+export async function queryValueFinder(
+  request: ValueFinderRequest,
+): Promise<ValueFinderPage> {
+  if (!isTauri) return mockValueFinder(request);
+  return invoke<ValueFinderPage>("value_finder", { request });
 }
 
 export async function getPlayer(

@@ -362,6 +362,82 @@ export interface PlayerPage {
   rows: PlayerRow[];
 }
 
+export interface ValueFinderRequest {
+  save_id: number;
+  position_group?: string | null;
+  league?: string | null;
+  age_min?: number | null;
+  age_max?: number | null;
+  ca_min?: number | null;
+  ca_max?: number | null;
+  role_min?: number | null;
+  max_fee?: number | null;
+  max_wage?: number | null;
+  contract_end_before?: string | null;
+  listings?: string[];
+  min_confidence?: number | null;
+  include_unknown_fee?: boolean;
+  sort_by?: string | null;
+  sort_dir?: "asc" | "desc" | null;
+  page?: number | null;
+  page_size?: number | null;
+}
+
+export interface ValueFinderRow {
+  uid: number;
+  name: string | null;
+  age: number | null;
+  club_uid: number | null;
+  club_name: string | null;
+  league_name: string | null;
+  nation_name: string | null;
+  ca: number;
+  pa: number | null;
+  role_id: string | null;
+  role_name: string | null;
+  role_score: number | null;
+  role_position: string | null;
+  position_group: string;
+  transfer_value: number | null;
+  transfer_value_state: TransferValueState;
+  wage: number | null;
+  contract_end: string | null;
+  club_reputation: number | null;
+  fee: number | null;
+  cost: number;
+  fee_known: boolean;
+  wage_known: boolean;
+  role_pct: number | null;
+  ca_pct: number | null;
+  quality_pct: number;
+  cost_pct: number | null;
+  surplus: number | null;
+  score: number;
+  confidence: number;
+  league_median_ca: number | null;
+  flags: string[];
+  transfer_listed: boolean;
+  loan_listed: boolean;
+  injury_status: "injured" | "fit";
+  recent_injury: string | null;
+}
+
+export interface ValueFinderMeta {
+  model: string;
+  scored: number;
+  filtered: number;
+  cost_horizon_years: number;
+  leagues: string[];
+}
+
+export interface ValueFinderPage {
+  total: number;
+  page: number;
+  page_size: number;
+  rows: ValueFinderRow[];
+  meta: ValueFinderMeta;
+}
+
 export interface Club {
   uid: number;
   unique_id: number | null;

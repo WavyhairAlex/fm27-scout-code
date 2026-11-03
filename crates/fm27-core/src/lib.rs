@@ -19,6 +19,7 @@ mod layout_tests;
 pub mod leagues;
 pub mod metadata;
 pub mod model;
+pub mod moneyball;
 pub mod names;
 pub mod nations;
 pub mod parse;

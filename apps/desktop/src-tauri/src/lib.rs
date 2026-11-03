@@ -272,6 +272,15 @@ fn query_players(state: State<'_, AppState>, query: PlayerQuery) -> Result<Playe
 }
 
 #[tauri::command]
+fn value_finder(
+    state: State<'_, AppState>,
+    request: fm27_core::moneyball::ValueFinderRequest,
+) -> Result<fm27_core::moneyball::ValueFinderPage, String> {
+    let store = state.store.lock().map_err(error_string)?;
+    store.value_finder(&request).map_err(error_string)
+}
+
+#[tauri::command]
 fn get_player(
     state: State<'_, AppState>,
     save_id: i64,
@@ -919,6 +928,7 @@ pub fn run() {
             list_saves,
             open_save,
             query_players,
+            value_finder,
             query_clubs,
             get_player,
             get_club,

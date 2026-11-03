@@ -19,6 +19,7 @@ A macOS scouting workbench for Football Manager 27 with an optional, experimenta
 - Optional save editor for CA/PA, attributes, hidden attributes, determination, personality and traits. Edits are staged across players and written in one batch to a new save.
 - Low-risk club edits: club reputation, latest-month finance snapshot (balance, transfer budget, wage budget), corporate facilities, training/youth/junior-coaching/youth-recruitment ratings and owned-stadium capacities. The source save is never modified.
 - CA budget estimator using the reverse-engineered FM RCA formula (position weights, both feet, multi-position cost), with over/under-budget guidance.
+- Experimental Value finder: role/CA quality against transfer value and wages, with confidence and risk flags. Not a stats-based model yet.
 - English / Simplified Chinese UI that follows the system language.
 - Universal macOS release published by CI, with optional Developer ID signing/notarization.
 

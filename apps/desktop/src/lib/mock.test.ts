@@ -8,6 +8,7 @@ import {
   mockQuery,
   mockQueryClubs,
   mockSquadAnalysis,
+  mockValueFinder,
 } from "./mock";
 
 describe("mock player query", () => {
@@ -194,3 +195,21 @@ describe("mock club query", () => {
       expect((row.pa ?? 0) - row.ca).toBeGreaterThanOrEqual(10);
     }
   });
+
+describe("mock value finder", () => {
+  it("returns candidates with defaults", () => {
+    const page = mockValueFinder({
+      save_id: MOCK_SAVE_ID,
+      ca_min: 120,
+      role_min: 12,
+      age_max: 30,
+      include_unknown_fee: false,
+      page: 0,
+      page_size: 40,
+      sort_by: "score",
+      sort_dir: "desc",
+    });
+    expect(page.total).toBeGreaterThan(0);
+    expect(page.rows.length).toBeGreaterThan(0);
+  });
+});

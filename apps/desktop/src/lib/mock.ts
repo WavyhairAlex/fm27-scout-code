@@ -24,6 +24,9 @@ import type {
   Stadium,
   Trait,
   TraitOption,
+  ValueFinderPage,
+  ValueFinderRequest,
+  ValueFinderRow,
 } from "./types";
 
 export const MOCK_SAVE_ID = 1;
@@ -120,6 +123,9 @@ function emptyPositions(): Positions {
 
 function buildPlayer(index: number): Player {
   const random = rng(index + 7);
+  // Warm the LCG once: the first value from small seeds clusters low, which
+  // would leave the mock save with almost no high-CA players.
+  random();
   const first = FIRST_NAMES[index % FIRST_NAMES.length];
   const last = LAST_NAMES[(index * 7 + 3) % LAST_NAMES.length];
   const [club, clubUid, nation] = CLUBS[index % CLUBS.length];
@@ -590,6 +596,129 @@ export function mockQuery(query: PlayerQuery): {
   };
 }
 
+
+function mockPositionGroup(position: string | null): string {
+  switch ((position ?? "").toUpperCase()) {
+    case "GK": return "GK";
+    case "DC": case "SW": return "DC";
+    case "DL": case "DR": case "WBL": case "WBR": return "FB";
+    case "DM": case "MC": case "ML": case "MR": return "MID";
+    case "AMC": case "AML": case "AMR": return "AM";
+    case "STC": case "SC": return "ST";
+    default: return "OTHER";
+  }
+}
+
+export function mockValueFinder(request: ValueFinderRequest): ValueFinderPage {
+  const players = MOCK_PLAYERS.map(mockPlayerRow);
+  const withCost = players.map((player) => {
+    const fee = player.transfer_value_state === "ok" ? player.transfer_value : null;
+    const cost = (fee ?? 0) + (player.wage ?? 0) * 52 * 3;
+    const rolePct = (player.best_role_score ?? 1) / 20;
+    const caPct = player.ca / 200;
+    const qualityPct = 0.6 * rolePct + 0.4 * caPct;
+    const costPct = cost > 0 ? Math.min(1, Math.log1p(cost / 1000) / 16) : 0;
+    const score = 100 * (0.55 * qualityPct + 0.45 * (1 - costPct));
+    return { player, fee, cost, qualityPct, costPct, score };
+  });
+  const filtered = withCost
+    .filter(({ player }) => {
+      if (request.position_group && mockPositionGroup(player.best_role_position) !== request.position_group) return false;
+      if (request.league && player.league_name !== request.league) return false;
+      if (request.age_min != null && (player.age ?? 0) < request.age_min) return false;
+      if (request.age_max != null && (player.age ?? 999) > request.age_max) return false;
+      if (request.ca_min != null && player.ca < request.ca_min) return false;
+      if (request.ca_max != null && player.ca > request.ca_max) return false;
+      if (request.role_min != null && (player.best_role_score ?? 0) < request.role_min) return false;
+      if (!request.include_unknown_fee && player.transfer_value_state !== "ok") return false;
+      if (request.max_fee != null && player.transfer_value_state === "ok" && (player.transfer_value ?? Infinity) > request.max_fee) return false;
+      if (request.max_wage != null && (player.wage ?? Infinity) > request.max_wage) return false;
+      if (request.contract_end_before && (player.contract_end ?? "9999") > request.contract_end_before) return false;
+      if (request.listings?.length) {
+        const matches = request.listings.some((listing) =>
+          listing === "sale" ? player.transfer_listed : listing === "loan" ? player.loan_listed : player.club_uid == null,
+        );
+        if (!matches) return false;
+      }
+      return true;
+    })
+    .sort((left, right) => {
+      const by = request.sort_by ?? "score";
+      const direction = request.sort_dir === "asc" ? 1 : -1;
+      const read = (item: typeof left): number | string | null => {
+        switch (by) {
+          case "ca": return item.player.ca;
+          case "age": return item.player.age;
+          case "value": case "fee": return item.player.transfer_value;
+          case "wage": return item.player.wage;
+          case "cost": return item.cost;
+          case "quality": return item.qualityPct;
+          case "surplus": return item.qualityPct - item.costPct;
+          case "name": return item.player.name;
+          default: return item.score;
+        }
+      };
+      const a = read(left);
+      const b = read(right);
+      if (a == null && b == null) return 0;
+      if (a == null) return 1;
+      if (b == null) return -1;
+      return (a > b ? 1 : a < b ? -1 : 0) * direction;
+    });
+  const page = request.page ?? 0;
+  const pageSize = request.page_size ?? 100;
+  const rows: ValueFinderRow[] = filtered.slice(page * pageSize, (page + 1) * pageSize).map(({ player, fee, cost, qualityPct, costPct, score }) => ({
+    uid: player.uid,
+    name: player.name,
+    age: player.age,
+    club_uid: player.club_uid,
+    club_name: player.club_name,
+    league_name: player.league_name,
+    nation_name: player.nation_name,
+    ca: player.ca,
+    pa: player.pa,
+    role_id: player.best_role_id,
+    role_name: player.best_role_name,
+    role_score: player.best_role_score,
+    role_position: player.best_role_position,
+    position_group: mockPositionGroup(player.best_role_position),
+    transfer_value: player.transfer_value,
+    transfer_value_state: player.transfer_value_state,
+    wage: player.wage,
+    contract_end: player.contract_end,
+    club_reputation: null,
+    fee,
+    cost,
+    fee_known: fee != null,
+    wage_known: player.wage != null,
+    role_pct: (player.best_role_score ?? 1) / 20,
+    ca_pct: player.ca / 200,
+    quality_pct: qualityPct,
+    cost_pct: costPct,
+    surplus: qualityPct - costPct,
+    score,
+    confidence: fee != null && player.wage != null ? 1 : 0.75,
+    league_median_ca: null,
+    flags: fee == null ? ["missing_fee"] : [],
+    transfer_listed: player.transfer_listed,
+    loan_listed: player.loan_listed,
+    injury_status: player.injury_status,
+    recent_injury: player.recent_injury,
+  }));
+  return {
+    total: filtered.length,
+    page,
+    page_size: pageSize,
+    rows,
+    meta: {
+      model: "value-finder-v1-mock",
+      scored: filtered.length,
+      filtered: filtered.length,
+      cost_horizon_years: 3,
+      leagues: Array.from(new Set(players.map((player) => player.league_name).filter((name): name is string => !!name))).sort(),
+    },
+  };
+}
 
 const MOCK_CLUB_ROWS: ClubRow[] = CLUBS.map(([name, uid, nation], index) => {
   const hasFinance = index < 6;
