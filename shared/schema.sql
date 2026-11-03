@@ -130,7 +130,7 @@ CREATE TABLE IF NOT EXISTS clubs (
   youth_facilities INTEGER,
   junior_coaching INTEGER,
   youth_recruitment INTEGER,
-  youth_academy    INTEGER,
+  youth_level    INTEGER,
   finance_month   TEXT,
   balance         INTEGER,
   transfer_budget_allocated INTEGER,

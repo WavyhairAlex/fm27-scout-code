@@ -38,11 +38,17 @@ The club profile's **Edit club** dialog exposes a small, low-risk set of fields:
 - club reputation (1–10000),
 - latest-month balance, transfer budget remaining and weekly wage budget,
 - corporate facilities (1–20; only for clubs with a monthly finance chain),
+- training facilities, youth facilities, junior coaching and youth recruitment
+  (1–20; only for clubs with a monthly finance chain),
 - all-seater and expansion capacity for each stadium the club owns.
 
 The dialog writes one new save copy, re-parses it, and verifies every changed
 field. Attribution and stadium ownership are not editable; the source save is
 never modified.
+
+Facility ratings live in the club-info row that also holds supporter shares.
+Youth Level is read-only: English clubs get their EPPP category from the
+installed game's `eng_youth_grades.edt`, and it cannot be edited.
 
 ## CLI usage
 
@@ -60,6 +66,8 @@ never modified.
 # Low-risk club edit
 ./target/release/fm27scout edit-club "/path/to/save.fm" --club-uid 1155 \
   --reputation 6500 --corporate-facilities 8 \
+  --training-facilities 18 --youth-facilities 16 \
+  --junior-coaching 15 --youth-recruitment 14 \
   --balance 30000000 --transfer-budget 6000000 --wage-budget 600000 \
   --stadium-uid 43156154 --all-seater 1300 --expansion 6000 \
   --output club-edited.fm

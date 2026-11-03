@@ -32,6 +32,10 @@ export function EditClubDialog() {
 
   const [reputation, setReputation] = useState<number | null>(null);
   const [corporate, setCorporate] = useState<number | null>(null);
+  const [training, setTraining] = useState<number | null>(null);
+  const [youth, setYouth] = useState<number | null>(null);
+  const [junior, setJunior] = useState<number | null>(null);
+  const [recruitment, setRecruitment] = useState<number | null>(null);
   const [finance, setFinance] = useState<FinanceForm>({
     balance: null,
     transferBudget: null,
@@ -42,11 +46,20 @@ export function EditClubDialog() {
   const [error, setError] = useState<string | null>(null);
 
   const latestFinance = detail?.finance_months.at(-1) ?? null;
+  const facilitiesAvailable =
+    detail?.club.training_facilities != null ||
+    detail?.club.youth_facilities != null ||
+    detail?.club.junior_coaching != null ||
+    detail?.club.youth_recruitment != null;
 
   useEffect(() => {
     if (!open || !detail) return;
     setReputation(detail.club.reputation);
     setCorporate(detail.club.corporate_facilities);
+    setTraining(detail.club.training_facilities);
+    setYouth(detail.club.youth_facilities);
+    setJunior(detail.club.junior_coaching);
+    setRecruitment(detail.club.youth_recruitment);
     setFinance({
       balance: latestFinance?.balance ?? null,
       transferBudget: latestFinance?.transfer_budget_remaining ?? null,
@@ -114,15 +127,38 @@ export function EditClubDialog() {
         reputation != null && reputation !== club.reputation ? reputation : null,
       corporate_facilities:
         corporate != null && corporate !== club.corporate_facilities ? corporate : null,
+      training_facilities:
+        training != null && training !== club.training_facilities ? training : null,
+      youth_facilities:
+        youth != null && youth !== club.youth_facilities ? youth : null,
+      junior_coaching:
+        junior != null && junior !== club.junior_coaching ? junior : null,
+      youth_recruitment:
+        recruitment != null && recruitment !== club.youth_recruitment ? recruitment : null,
       finances: hasFinance ? financeEdit : null,
       stadiums: stadiumEdits,
     };
-  }, [detail, finance, latestFinance, reputation, corporate, stadiums]);
+  }, [
+    detail,
+    finance,
+    latestFinance,
+    reputation,
+    corporate,
+    training,
+    youth,
+    junior,
+    recruitment,
+    stadiums,
+  ]);
 
   const hasChanges =
     request != null &&
     (request.reputation != null ||
       request.corporate_facilities != null ||
+      request.training_facilities != null ||
+      request.youth_facilities != null ||
+      request.junior_coaching != null ||
+      request.youth_recruitment != null ||
       request.finances != null ||
       request.stadiums.length > 0);
 
@@ -217,6 +253,50 @@ export function EditClubDialog() {
               }
               onChange={setCorporate}
             />
+          </Section>
+
+          <Section title={t("clubs.inspector.facilities")}>
+            {[
+              {
+                key: "training",
+                label: t("clubs.facilities.training"),
+                value: training,
+                set: setTraining,
+              },
+              {
+                key: "youth",
+                label: t("clubs.facilities.youth"),
+                value: youth,
+                set: setYouth,
+              },
+              {
+                key: "junior",
+                label: t("clubs.facilities.junior"),
+                value: junior,
+                set: setJunior,
+              },
+              {
+                key: "recruitment",
+                label: t("clubs.facilities.recruitment"),
+                value: recruitment,
+                set: setRecruitment,
+              },
+            ].map((facility) => (
+              <Field
+                key={facility.key}
+                label={facility.label}
+                value={facility.value}
+                min={1}
+                max={20}
+                disabled={!facilitiesAvailable}
+                hint={
+                  !facilitiesAvailable
+                    ? t("clubs.edit.unavailable")
+                    : (facilityRatingLabel(facility.value, locale) ?? undefined)
+                }
+                onChange={facility.set}
+              />
+            ))}
           </Section>
 
           <Section title={t("clubs.edit.finances")}>

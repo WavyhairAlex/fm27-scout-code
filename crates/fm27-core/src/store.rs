@@ -559,7 +559,7 @@ impl Store {
                  (save_id, uid, unique_id, name, short_name, nation_id, nation_name, fa_nation_id,
                   fa_nation_name, city_id, gender, reputation, last_league_position,
                   parent_club_uid, parent_club_name, corporate_facilities, training_facilities,
-                  youth_facilities, junior_coaching, youth_recruitment, youth_academy,
+                  youth_facilities, junior_coaching, youth_recruitment, youth_level,
                   finance_month, balance, transfer_budget_allocated, transfer_budget_remaining,
                   wage_budget_weekly, wage_payroll_weekly, net, teams_json)
                  VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18,
@@ -588,7 +588,7 @@ impl Store {
                     club.youth_facilities,
                     club.junior_coaching,
                     club.youth_recruitment,
-                    club.youth_academy,
+                    club.youth_level,
                     finance.map(|row| row.month.as_str()),
                     finance.map(|row| row.balance),
                     finance.map(|row| row.transfer_budget_allocated),
@@ -1295,7 +1295,7 @@ impl Store {
                         nation_id, nation_name, fa_nation_id, fa_nation_name, city_id, gender,
                         reputation, last_league_position, parent_club_uid, parent_club_name,
                         corporate_facilities, training_facilities, youth_facilities,
-                        junior_coaching, youth_recruitment, youth_academy, teams_json
+                        junior_coaching, youth_recruitment, youth_level, teams_json
                  FROM clubs WHERE save_id = ?1 AND uid = ?2",
                 params![save_id, uid],
                 |row| {
@@ -1345,7 +1345,7 @@ impl Store {
             youth_facilities,
             junior_coaching,
             youth_recruitment,
-            youth_academy,
+            youth_level,
             teams_json,
         )) = row
         else {
@@ -1371,7 +1371,7 @@ impl Store {
             youth_facilities,
             junior_coaching,
             youth_recruitment,
-            youth_academy,
+            youth_level,
             teams: teams_json
                 .and_then(|text| serde_json::from_str(&text).ok())
                 .unwrap_or_default(),
@@ -1805,7 +1805,7 @@ fn migrate(conn: &Connection) -> Result<()> {
         ("clubs", "youth_facilities", "INTEGER"),
         ("clubs", "junior_coaching", "INTEGER"),
         ("clubs", "youth_recruitment", "INTEGER"),
-        ("clubs", "youth_academy", "INTEGER"),
+        ("clubs", "youth_level", "INTEGER"),
         ("clubs", "finance_month", "TEXT"),
         ("clubs", "balance", "INTEGER"),
         ("clubs", "transfer_budget_allocated", "INTEGER"),

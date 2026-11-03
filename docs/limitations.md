@@ -35,13 +35,15 @@
   that is 122 clubs out of more than 26,000; other clubs show their basic
   profile, squad and owned stadiums but no finance series or facility ratings.
 - Corporate, training, youth, junior-coaching and youth-recruitment ratings are
-  parsed for the clubs that keep a finance chain. FM27 does not expose a separate
-  Youth Academy rating, so that line stays blank.
+  parsed for the clubs that keep a finance chain. English Youth Level is read
+  from the installed game's `eng_youth_grades.edt`; it is not stored in the save,
+  so it is blank when the game files are unavailable or the club is not English.
 - The stadium table stores ownership but no direct club -> ground pointer.
   Home-ground use would require the fixture calendar and is not implemented yet.
 - Club editing is limited to fixed-width, low-risk fields: reputation, the
-  latest finance snapshot, corporate facilities and owned-stadium capacities.
-  It does not edit names, nations, team lists, affiliations or stadium owners.
+  latest finance snapshot, corporate facilities, training/youth/junior-coaching/
+  youth-recruitment ratings and owned-stadium capacities. It does not edit names,
+  nations, team lists, affiliations, Youth Level or stadium owners.
 - Windows/Linux builds are not available yet.
 - CI publishes an unsigned DMG; on first launch, use
   **System Settings → Privacy & Security → Open Anyway**. Developer ID

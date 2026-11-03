@@ -126,6 +126,16 @@ export async function editClub(
       ...(request.corporate_facilities != null
         ? [{ field: "corporate_facilities", before: 0, after: request.corporate_facilities }]
         : []),
+      ...(
+        [
+          ["training_facilities", request.training_facilities],
+          ["youth_facilities", request.youth_facilities],
+          ["junior_coaching", request.junior_coaching],
+          ["youth_recruitment", request.youth_recruitment],
+        ] as const
+      ).flatMap(([field, value]) =>
+        value != null ? [{ field, before: 0, after: value }] : [],
+      ),
       ...(request.finances?.balance != null
         ? [{ field: "finance.balance", before: 0, after: request.finances.balance }]
         : []),

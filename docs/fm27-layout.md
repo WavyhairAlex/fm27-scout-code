@@ -117,7 +117,12 @@ youth recruitment      +65  u8 (1–20)
 
 Rows are not contiguous and only the tracked clubs (those with a finance chain)
 have one. Locate a row by its club-index key, then verify the share block; do not
-walk the rows sequentially. FM27 does not expose a separate Youth Academy rating.
+walk the rows sequentially.
+
+English Youth Level is not stored in this row or in the save. It comes from the
+game's `eng_youth_grades.edt` file, which maps club Unique IDs to EPPP categories
+1–4 for the current season. The parser reads that file from the installed game
+and leaves the field empty when the file is unavailable.
 
 ### Stadium table
 

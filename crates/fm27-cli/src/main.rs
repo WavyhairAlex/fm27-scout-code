@@ -131,6 +131,18 @@ enum Command {
         /// Corporate facilities rating (1-20). Only clubs with a finance chain have one.
         #[arg(long)]
         corporate_facilities: Option<u8>,
+        /// Training facilities rating (1-20).
+        #[arg(long)]
+        training_facilities: Option<u8>,
+        /// Youth facilities rating (1-20).
+        #[arg(long)]
+        youth_facilities: Option<u8>,
+        /// Junior coaching rating (1-20).
+        #[arg(long)]
+        junior_coaching: Option<u8>,
+        /// Youth recruitment rating (1-20).
+        #[arg(long)]
+        youth_recruitment: Option<u8>,
         /// Latest-month club balance.
         #[arg(long)]
         balance: Option<i64>,
@@ -398,6 +410,10 @@ fn main() -> Result<()> {
             club_uid,
             reputation,
             corporate_facilities,
+            training_facilities,
+            youth_facilities,
+            junior_coaching,
+            youth_recruitment,
             balance,
             transfer_budget,
             wage_budget,
@@ -428,6 +444,10 @@ fn main() -> Result<()> {
             let request = ClubEditRequest {
                 reputation,
                 corporate_facilities,
+                training_facilities,
+                youth_facilities,
+                junior_coaching,
+                youth_recruitment,
                 finances: (!finance.is_empty()).then_some(finance),
                 stadiums: stadium_uid
                     .map(|stadium_uid| StadiumCapacityEdit {
@@ -440,7 +460,7 @@ fn main() -> Result<()> {
             };
             if request.is_empty() {
                 bail!(
-                    "no edits requested; pass --reputation, --corporate-facilities, --balance, --transfer-budget, --wage-budget or --stadium-uid"
+                    "no edits requested; pass --reputation, --corporate-facilities, --training-facilities, --youth-facilities, --junior-coaching, --youth-recruitment, --balance, --transfer-budget, --wage-budget or --stadium-uid"
                 );
             }
             let warnings = request.warnings();

@@ -10,7 +10,8 @@
   personality, traits, contracts, value and status.
 - Clubs: more than 26,000 records with team mapping, reputation, last season's
   league position and, for tracked clubs, training, youth, junior-coaching and
-  youth-recruitment facility ratings.
+  youth-recruitment facility ratings. English Youth Level (EPPP category 1–4) is
+  read from the game's `eng_youth_grades.edt` file.
 - Club finances: monthly snapshots (balance, transfer budget, wage budget,
   payroll, income/expenditure and net) plus corporate facilities, read from each
   club record. Only the league nations the save tracks keep these rows.
@@ -66,8 +67,9 @@
 - CA budget estimator: live estimate from edited attributes using community FM
   position weights, with over/under-budget guidance and position selection.
 - Low-risk club edits: reputation, latest-month balance, transfer budget
-  remaining, weekly wage budget, corporate facilities and owned-stadium
-  capacities. Club edits write one new save copy and verify every changed field.
+  remaining, weekly wage budget, corporate facilities, training/youth/
+  junior-coaching/youth-recruitment ratings and owned-stadium capacities. Club
+  edits write one new save copy and verify every changed field.
 - The source save is never modified; existing output files are not overwritten;
   the result is verified by re-parsing it.
 - See [editor.md](editor.md) for the workflow and safety notes.

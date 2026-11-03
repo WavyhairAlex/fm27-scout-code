@@ -130,16 +130,17 @@ mismatches: 0
 ```
 
 A controlled club edit on Parma (uid 1155) changed reputation, balance, transfer
-budget, weekly wage budget, corporate facilities, all-seater capacity and
-expansion capacity. Re-parsing the output and fmsave both read the new values;
-the club's last league position and all other finance fields remained unchanged.
+budget, weekly wage budget, corporate facilities, training, youth,
+junior-coaching and youth-recruitment ratings, all-seater capacity and expansion
+capacity. Re-parsing the output and fmsave both read the new values; the club's
+last league position and all other finance fields remained unchanged.
 
 The ignored `club_real_save.rs` tests cover:
 
 - finance, facilities and stadium counts,
 - training/youth/junior-coaching/youth-recruitment ratings against the in-game
   facilities screen for Parma, Arsenal, Liverpool, Manchester City, Tottenham,
-  Napoli and Torino,
+  Napoli and Torino, plus English Youth Level against `eng_youth_grades.edt`,
 - club search and detail retrieval through SQLite,
 - owned-stadium capacity edits,
 - re-parsing and field-by-field verification of an edited save copy.

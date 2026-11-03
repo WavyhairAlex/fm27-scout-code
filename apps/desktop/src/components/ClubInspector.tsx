@@ -567,9 +567,9 @@ function StadiumTab({ detail }: { detail: import("@/lib/types").ClubDetail }) {
       value: club.youth_recruitment,
     },
     {
-      key: "academy",
-      label: t("clubs.facilities.academy"),
-      value: club.youth_academy,
+      key: "youthLevel",
+      label: t("clubs.facilities.youthLevel"),
+      value: club.youth_level,
     },
   ];
   return (
@@ -581,7 +581,12 @@ function StadiumTab({ detail }: { detail: import("@/lib/types").ClubDetail }) {
         </div>
         <div className="divide-y divide-[var(--line)]/60">
           {facilities.map((facility) => {
-            const label = facilityRatingLabel(facility.value, locale);
+            const isYouthLevel = facility.key === "youthLevel";
+            const label = isYouthLevel
+              ? facility.value != null
+                ? t("clubs.facilities.youthLevelValue", { level: facility.value })
+                : null
+              : facilityRatingLabel(facility.value, locale);
             return (
               <div
                 key={facility.key}
@@ -591,9 +596,11 @@ function StadiumTab({ detail }: { detail: import("@/lib/types").ClubDetail }) {
                 {label ? (
                   <span className="text-right">
                     <span className="text-[10px] font-semibold text-[var(--ink)]">{label}</span>
-                    <span className="ml-1 font-mono text-[8px] text-[var(--muted)]">
-                      {facility.value}
-                    </span>
+                    {!isYouthLevel && (
+                      <span className="ml-1 font-mono text-[8px] text-[var(--muted)]">
+                        {facility.value}
+                      </span>
+                    )}
                   </span>
                 ) : (
                   <span className="font-mono text-[10px] text-[var(--muted)]">—</span>

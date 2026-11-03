@@ -710,7 +710,7 @@ export function mockClubDetail(uid: number): ClubDetail | null {
     youth_facilities: row.corporate_facilities == null ? null : 10 + (row.uid % 9),
     junior_coaching: row.corporate_facilities == null ? null : 9 + (row.uid % 10),
     youth_recruitment: row.corporate_facilities == null ? null : 10 + (row.uid % 8),
-    youth_academy: row.corporate_facilities == null ? null : 11 + (row.uid % 7),
+    youth_level: row.corporate_facilities == null ? null : 1 + (row.uid % 4),
     teams: [],
   };
   const financeMonths: FinanceMonth[] =

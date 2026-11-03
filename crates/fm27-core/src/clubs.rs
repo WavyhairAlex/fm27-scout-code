@@ -349,7 +349,7 @@ impl ClubIndex {
                 youth_facilities: None,
                 junior_coaching: None,
                 youth_recruitment: None,
-                youth_academy: None,
+                youth_level: None,
                 teams: team_list.team_ids,
             });
         }

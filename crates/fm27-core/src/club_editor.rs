@@ -37,12 +37,35 @@ pub struct StadiumCapacityEdit {
     pub expansion_capacity: Option<u32>,
 }
 
+/// The four editable facility ratings stored in a club's club-info row.
+#[derive(Debug, Clone, Copy, Default, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ClubFacilityEdit {
+    pub training_facilities: Option<u8>,
+    pub youth_facilities: Option<u8>,
+    pub junior_coaching: Option<u8>,
+    pub youth_recruitment: Option<u8>,
+}
+
+impl ClubFacilityEdit {
+    pub fn is_empty(&self) -> bool {
+        self.training_facilities.is_none()
+            && self.youth_facilities.is_none()
+            && self.junior_coaching.is_none()
+            && self.youth_recruitment.is_none()
+    }
+}
+
 /// A set of low-risk club edits shared by the CLI and the desktop app.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(default)]
 pub struct ClubEditRequest {
     pub reputation: Option<u16>,
     pub corporate_facilities: Option<u8>,
+    pub training_facilities: Option<u8>,
+    pub youth_facilities: Option<u8>,
+    pub junior_coaching: Option<u8>,
+    pub youth_recruitment: Option<u8>,
     pub finances: Option<ClubFinanceEdit>,
     pub stadiums: Vec<StadiumCapacityEdit>,
 }
@@ -51,6 +74,10 @@ impl ClubEditRequest {
     pub fn is_empty(&self) -> bool {
         self.reputation.is_none()
             && self.corporate_facilities.is_none()
+            && self.training_facilities.is_none()
+            && self.youth_facilities.is_none()
+            && self.junior_coaching.is_none()
+            && self.youth_recruitment.is_none()
             && self.finances.as_ref().is_none_or(ClubFinanceEdit::is_empty)
             && self.stadiums.iter().all(StadiumCapacityEdit::is_empty)
     }
@@ -66,6 +93,16 @@ impl ClubEditRequest {
         if self.corporate_facilities.is_some() {
             warnings.push(
                 "Corporate facilities feed commercial income. The value is stored only for clubs that keep a monthly finance series."
+                    .to_owned(),
+            );
+        }
+        if self.training_facilities.is_some()
+            || self.youth_facilities.is_some()
+            || self.junior_coaching.is_some()
+            || self.youth_recruitment.is_some()
+        {
+            warnings.push(
+                "Training, youth and academy ratings drive long-term player development. The values are stored only for clubs that keep a monthly finance series."
                     .to_owned(),
             );
         }
@@ -90,6 +127,15 @@ impl ClubEditRequest {
         }
         if let Some(value) = self.corporate_facilities {
             editor.set_corporate_facilities(club_uid, value)?;
+        }
+        let facilities = ClubFacilityEdit {
+            training_facilities: self.training_facilities,
+            youth_facilities: self.youth_facilities,
+            junior_coaching: self.junior_coaching,
+            youth_recruitment: self.youth_recruitment,
+        };
+        if !facilities.is_empty() {
+            editor.set_facility_ratings(club_uid, &facilities)?;
         }
         if let Some(finances) = &self.finances {
             editor.set_finances(club_uid, finances)?;
@@ -120,6 +166,36 @@ impl ClubEditRequest {
                     "corporate facilities verification failed: expected {expected}, got {:?}",
                     club.corporate_facilities
                 )));
+            }
+        }
+        for (field, expected, actual) in [
+            (
+                "training facilities",
+                self.training_facilities,
+                club.training_facilities,
+            ),
+            (
+                "youth facilities",
+                self.youth_facilities,
+                club.youth_facilities,
+            ),
+            (
+                "junior coaching",
+                self.junior_coaching,
+                club.junior_coaching,
+            ),
+            (
+                "youth recruitment",
+                self.youth_recruitment,
+                club.youth_recruitment,
+            ),
+        ] {
+            if let Some(expected) = expected {
+                if actual != Some(expected) {
+                    return Err(Error::parse(format!(
+                        "{field} verification failed: expected {expected}, got {actual:?}"
+                    )));
+                }
             }
         }
         if let Some(finances) = &self.finances {
@@ -304,6 +380,31 @@ impl ClubEditor {
         Ok(self.push_change("corporate_facilities", before as i64, value as i64))
     }
 
+    pub fn set_facility_ratings(&mut self, club_uid: u32, edit: &ClubFacilityEdit) -> Result<()> {
+        if edit.is_empty() {
+            return Ok(());
+        }
+        let row = crate::facilities::locate_facility_row(&self.game_db, &self.club_index, club_uid)
+            .ok_or_else(|| {
+                Error::Unsupported(format!(
+                    "club uid {club_uid} has no stored facility row to edit"
+                ))
+            })?;
+        if let Some(value) = edit.training_facilities {
+            self.write_facility_byte(row.training_offset(), "training_facilities", value)?;
+        }
+        if let Some(value) = edit.youth_facilities {
+            self.write_facility_byte(row.youth_offset(), "youth_facilities", value)?;
+        }
+        if let Some(value) = edit.junior_coaching {
+            self.write_facility_byte(row.junior_coaching_offset(), "junior_coaching", value)?;
+        }
+        if let Some(value) = edit.youth_recruitment {
+            self.write_facility_byte(row.youth_recruitment_offset(), "youth_recruitment", value)?;
+        }
+        Ok(())
+    }
+
     pub fn set_finances(&mut self, club_uid: u32, edit: &ClubFinanceEdit) -> Result<()> {
         if edit.is_empty() {
             return Ok(());
@@ -426,6 +527,21 @@ impl ClubEditor {
                 )));
             }
         }
+        for change in &self.changes {
+            if matches!(
+                change.field.as_str(),
+                "training_facilities"
+                    | "youth_facilities"
+                    | "junior_coaching"
+                    | "youth_recruitment"
+            ) && !(1..=20).contains(&change.after)
+            {
+                return Err(Error::Unsupported(format!(
+                    "{} must be between 1 and 20, got {}",
+                    change.field, change.after
+                )));
+            }
+        }
         Ok(())
     }
 
@@ -485,6 +601,22 @@ impl ClubEditor {
             ))
         })?;
         Ok(chain.last_row())
+    }
+
+    fn write_facility_byte(&mut self, at: usize, field: &str, value: u8) -> Result<()> {
+        if !(1..=20).contains(&value) {
+            return Err(Error::Unsupported(format!(
+                "{field} must be between 1 and 20, got {value}"
+            )));
+        }
+        let before = read_u8(&self.game_db, at)
+            .ok_or_else(|| Error::parse(format!("the facility row ends before {field}")))?;
+        if before == value {
+            return Ok(());
+        }
+        self.game_db[at] = value;
+        self.push_change(field, before as i64, value as i64);
+        Ok(())
     }
 
     fn write_capacity(&mut self, row: usize, offset: usize, field: &str, value: u32) -> Result<()> {

@@ -362,7 +362,8 @@ export interface Club {
   youth_facilities: number | null;
   junior_coaching: number | null;
   youth_recruitment: number | null;
-  youth_academy: number | null;
+  /** Optional byte displayed as Youth Level; not editable. */
+  youth_level: number | null;
   teams: number[];
 }
 
@@ -517,6 +518,10 @@ export interface StadiumCapacityEdit {
 export interface ClubEditRequest {
   reputation: number | null;
   corporate_facilities: number | null;
+  training_facilities: number | null;
+  youth_facilities: number | null;
+  junior_coaching: number | null;
+  youth_recruitment: number | null;
   finances: ClubFinanceEdit | null;
   stadiums: StadiumCapacityEdit[];
 }

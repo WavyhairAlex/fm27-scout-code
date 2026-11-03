@@ -125,6 +125,12 @@ pub fn parse_save_with_progress(
         club.junior_coaching = facilities.junior_coaching;
         club.youth_recruitment = facilities.youth_recruitment;
     }
+    let youth_levels = crate::youth_level::read_english_youth_levels();
+    if !youth_levels.is_empty() {
+        for club in &mut clubs.clubs {
+            club.youth_level = youth_levels.get(&club.uid).copied();
+        }
+    }
     let stadiums = read_stadium_index(&game_db, &clubs).stadiums;
 
     progress(ParseProgress {

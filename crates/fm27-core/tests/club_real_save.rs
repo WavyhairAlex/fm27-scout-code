@@ -53,6 +53,23 @@ fn reads_club_finances_stadiums_and_queries() {
     assert_eq!(parma_club.youth_facilities, Some(13));
     assert_eq!(parma_club.junior_coaching, Some(10));
     assert_eq!(parma_club.youth_recruitment, Some(10));
+    assert_eq!(parma_club.youth_level, None);
+
+    if !fm27_core::youth_level::read_english_youth_levels().is_empty() {
+        for (uid, expected) in [
+            (602, Some(1)), // Arsenal
+            (639, Some(2)), // Coventry City
+            (677, Some(3)), // Luton Town
+            (729, Some(4)), // Tranmere Rovers
+        ] {
+            let club = parsed
+                .clubs
+                .iter()
+                .find(|club| club.uid == uid)
+                .expect("club row");
+            assert_eq!(club.youth_level, expected, "youth level for club {uid}");
+        }
+    }
 
     for (uid, expected) in [
         (602, (19, 16, 17, 15)),  // Arsenal
@@ -125,8 +142,8 @@ fn edits_low_risk_club_fields_in_a_copy() {
     let club = parsed
         .clubs
         .iter()
-        .find(|club| club.corporate_facilities.is_some())
-        .expect("a club with finance data");
+        .find(|club| club.corporate_facilities.is_some() && club.training_facilities.is_some())
+        .expect("a club with finance and facility data");
     let stadium = parsed
         .stadiums
         .iter()
@@ -142,6 +159,10 @@ fn edits_low_risk_club_fields_in_a_copy() {
     let request = ClubEditRequest {
         reputation: Some(club.reputation.unwrap_or(5000) + 1),
         corporate_facilities: Some(club.corporate_facilities.unwrap_or(10)),
+        training_facilities: Some(15),
+        youth_facilities: Some(14),
+        junior_coaching: Some(13),
+        youth_recruitment: Some(12),
         finances: Some(ClubFinanceEdit {
             balance: Some(finance.balance + 1),
             transfer_budget_remaining: Some(finance.transfer_budget_remaining + 1),

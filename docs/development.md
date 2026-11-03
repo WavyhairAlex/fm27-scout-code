@@ -82,6 +82,8 @@ cargo build --release -p fm27-cli
 # Experimental: edit low-risk club fields into a new save file
 ./target/release/fm27scout edit-club "/path/to/save.fm" --club-uid 1155 \
   --reputation 6500 --corporate-facilities 8 \
+  --training-facilities 18 --youth-facilities 16 \
+  --junior-coaching 15 --youth-recruitment 14 \
   --balance 30000000 --transfer-budget 6000000 --wage-budget 600000 \
   --stadium-uid 43156154 --all-seater 1300 --expansion 6000 \
   --output club-edited.fm

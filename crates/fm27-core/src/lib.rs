@@ -28,8 +28,11 @@ pub mod roles;
 pub mod stadiums;
 pub mod store;
 pub mod suspensions;
+pub mod youth_level;
 
-pub use club_editor::{ClubEditRequest, ClubEditor, ClubFinanceEdit, StadiumCapacityEdit};
+pub use club_editor::{
+    ClubEditRequest, ClubEditor, ClubFacilityEdit, ClubFinanceEdit, StadiumCapacityEdit,
+};
 pub use editor::{EditChange, PlayerEditor};
 pub use error::{Error, Result};
 pub use model::{

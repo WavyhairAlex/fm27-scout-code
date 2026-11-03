@@ -11,7 +11,7 @@ pub const GAME_DB_SCHEMA: u32 = 4000;
 /// injury windows were read from the stride-14 arrays.
 pub const PARSER_VERSION: &str = concat!(
     env!("CARGO_PKG_VERSION"),
-    "+nation-names+listing+injury-windows+club-finance+stadiums+club-facilities"
+    "+nation-names+listing+injury-windows+club-finance+stadiums+club-facilities+youth-level-edt"
 );
 pub const EARLIEST_YEAR: i32 = 1901;
 pub const LATEST_YEAR: i32 = 2200;

@@ -3,8 +3,8 @@
 //! FM27 keeps the training and youth facility lines outside the club record, in
 //! the same table that carries supporter shares and supporter traits. A row
 //! starts with the stored club index plus one and the training-facilities byte;
-//! the youth, junior-coaching and youth-recruitment ratings sit at a fixed
-//! offset from the supporter-share block in the same row.
+//! the youth, junior-coaching and youth-recruitment bytes sit at a fixed offset
+//! from the supporter-share block in the same row.
 //!
 //! The table is not contiguous, so rows are found by their club-index key and
 //! then validated against the supporter-share block. Only clubs that keep a
@@ -13,7 +13,7 @@
 use std::collections::{HashMap, HashSet};
 
 use crate::clubs::ClubIndex;
-use crate::layout::read_u32;
+use crate::layout::{read_u8, read_u32};
 
 #[derive(Debug, Clone, Copy, Default)]
 pub struct ClubFacilities {
@@ -21,6 +21,31 @@ pub struct ClubFacilities {
     pub youth: Option<u8>,
     pub junior_coaching: Option<u8>,
     pub youth_recruitment: Option<u8>,
+}
+
+/// The offsets of one club's facility row inside `game_db`.
+#[derive(Debug, Clone, Copy)]
+pub struct FacilityRowOffsets {
+    pub row_start: usize,
+    pub info_start: usize,
+}
+
+impl FacilityRowOffsets {
+    pub fn training_offset(self) -> usize {
+        self.row_start + 4
+    }
+
+    pub fn youth_offset(self) -> usize {
+        self.info_start + 63
+    }
+
+    pub fn junior_coaching_offset(self) -> usize {
+        self.info_start + 64
+    }
+
+    pub fn youth_recruitment_offset(self) -> usize {
+        self.info_start + 65
+    }
 }
 
 /// Read the facility ratings for the tracked clubs that store a club-info row.
@@ -88,6 +113,50 @@ pub fn read_club_facilities(
         );
     }
     facilities
+}
+
+/// Locate the facility row that belongs to one club, for in-place editing.
+///
+/// The row key is the stored club index plus one, matching
+/// [`read_club_facilities`]. The first row that passes the same validation as
+/// the read pass is returned.
+pub fn locate_facility_row(
+    game_db: &[u8],
+    club_index: &ClubIndex,
+    club_uid: u32,
+) -> Option<FacilityRowOffsets> {
+    let span = club_index.record_span(club_uid)?;
+    let stored = read_u32(game_db, span.record_start)?;
+    let key = stored.checked_add(1)?;
+    let key_bytes = key.to_le_bytes();
+    let mut search_from = 0usize;
+    while let Some(relative) = find_bytes(game_db.get(search_from..)?, &key_bytes) {
+        let row_start = search_from + relative;
+        search_from = row_start + 1;
+        let Some(training) = read_u8(game_db, row_start + 4) else {
+            continue;
+        };
+        if !(1..=20).contains(&training) {
+            continue;
+        }
+        let Some(info_start) = locate_info_row(game_db, row_start) else {
+            continue;
+        };
+        return Some(FacilityRowOffsets {
+            row_start,
+            info_start,
+        });
+    }
+    None
+}
+
+fn find_bytes(haystack: &[u8], needle: &[u8]) -> Option<usize> {
+    if needle.is_empty() {
+        return Some(0);
+    }
+    haystack
+        .windows(needle.len())
+        .position(|window| window == needle)
 }
 
 /// Find the supporter-share block that belongs to the row starting at `start`.
@@ -163,6 +232,12 @@ mod tests {
         assert_eq!(row.youth, Some(13));
         assert_eq!(row.junior_coaching, Some(10));
         assert_eq!(row.youth_recruitment, Some(10));
+
+        let offsets = locate_facility_row(&game_db, &club_index, 100).expect("facility offsets");
+        assert_eq!(offsets.training_offset(), start + 4);
+        assert_eq!(offsets.youth_offset(), info + 63);
+        assert_eq!(offsets.junior_coaching_offset(), info + 64);
+        assert_eq!(offsets.youth_recruitment_offset(), info + 65);
     }
 
     #[test]

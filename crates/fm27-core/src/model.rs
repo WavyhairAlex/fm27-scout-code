@@ -316,8 +316,9 @@ pub struct Club {
     pub junior_coaching: Option<u8>,
     #[serde(default)]
     pub youth_recruitment: Option<u8>,
+    /// Optional byte displayed as Youth Level; read-only in the editor.
     #[serde(default)]
-    pub youth_academy: Option<u8>,
+    pub youth_level: Option<u8>,
     pub teams: Vec<u32>,
 }
 
