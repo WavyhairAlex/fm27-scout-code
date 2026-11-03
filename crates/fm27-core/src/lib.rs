@@ -11,6 +11,7 @@ pub mod contracts;
 pub mod editor;
 pub mod error;
 pub mod export;
+pub mod facilities;
 pub mod finances;
 pub mod injuries;
 pub mod layout;

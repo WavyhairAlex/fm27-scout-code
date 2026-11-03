@@ -8,8 +8,9 @@
   copied before parsing so a save in progress cannot be read half-written.
 - Players: 46,273 records with attributes, hidden attributes, CA/PA, positions,
   personality, traits, contracts, value and status.
-- Clubs: more than 26,000 records with team mapping, reputation and last
-  season's league position.
+- Clubs: more than 26,000 records with team mapping, reputation, last season's
+  league position and, for tracked clubs, training, youth, junior-coaching and
+  youth-recruitment facility ratings.
 - Club finances: monthly snapshots (balance, transfer budget, wage budget,
   payroll, income/expenditure and net) plus corporate facilities, read from each
   club record. Only the league nations the save tracks keep these rows.
@@ -40,7 +41,8 @@
 
 - Filters, multi-column sorting and player profiles.
 - Separate club workspace with searchable club table, overview, squad, finance
-  history and owned-stadium/company-facilities panels.
+  history and owned-stadium/facility-rating panels. The squad lists CA and PA
+  with sortable headers, and facility ratings use the game's ten named tiers.
 - 2–4 player comparison.
 - CSV/JSON export.
 - Hidden-attribute toggle, off by default.

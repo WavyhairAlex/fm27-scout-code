@@ -30,10 +30,13 @@
   windows, so it no longer depends on the typed array being populated.
 - Contract clauses, loans and contract chains are parsed; a few unobserved
   fallback structures are explicitly left blank.
-- Monthly club finances and corporate facilities exist only for the league
-  nations the save tracks. In the reference FM27 save that is 122 clubs out of
-  more than 26,000; other clubs show their basic profile, squad and owned
-  stadiums but no finance series.
+- Monthly club finances, corporate facilities and the detailed facility ratings
+  exist only for the league nations the save tracks. In the reference FM27 save
+  that is 122 clubs out of more than 26,000; other clubs show their basic
+  profile, squad and owned stadiums but no finance series or facility ratings.
+- Corporate, training, youth, junior-coaching and youth-recruitment ratings are
+  parsed for the clubs that keep a finance chain. FM27 does not expose a separate
+  Youth Academy rating, so that line stays blank.
 - The stadium table stores ownership but no direct club -> ground pointer.
   Home-ground use would require the fixture calendar and is not implemented yet.
 - Club editing is limited to fixed-width, low-risk fields: reputation, the

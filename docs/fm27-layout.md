@@ -98,6 +98,27 @@ its own record. The count is a u32 at `row - 4`; the full chain count range is
 The corporate-facilities byte sits 50 bytes past the end of the chain, range
 1–20. Only clubs in the tracked league nations keep a chain.
 
+### Club facility rows
+
+Training, youth, junior-coaching and youth-recruitment ratings live in a club-info
+row outside the club record. A row starts with the stored club index plus one
+(u32) and the training-facilities byte at `+4`. The row header is followed by a
+variable-length list, then the supporter-share block:
+
+```text
+supporter shares       six bytes, sum 100
+supporter traits       +15, six bytes (1–20)
+zero run               +21, six bytes
+tag                    +27  02
+youth facilities       +63  u8 (1–20)
+junior coaching        +64  u8 (1–20)
+youth recruitment      +65  u8 (1–20)
+```
+
+Rows are not contiguous and only the tracked clubs (those with a finance chain)
+have one. Locate a row by its club-index key, then verify the share block; do not
+walk the rows sequentially. FM27 does not expose a separate Youth Academy rating.
+
 ### Stadium table
 
 Rows are 181 bytes, unless bit `0x10` of the flags byte at +156 is set: then a

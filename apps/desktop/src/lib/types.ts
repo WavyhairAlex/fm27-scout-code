@@ -358,6 +358,11 @@ export interface Club {
   parent_club_uid: number | null;
   parent_club_name: string | null;
   corporate_facilities: number | null;
+  training_facilities: number | null;
+  youth_facilities: number | null;
+  junior_coaching: number | null;
+  youth_recruitment: number | null;
+  youth_academy: number | null;
   teams: number[];
 }
 

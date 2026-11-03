@@ -345,6 +345,11 @@ impl ClubIndex {
                 parent_club_uid: None,
                 parent_club_name: None,
                 corporate_facilities: None,
+                training_facilities: None,
+                youth_facilities: None,
+                junior_coaching: None,
+                youth_recruitment: None,
+                youth_academy: None,
                 teams: team_list.team_ids,
             });
         }

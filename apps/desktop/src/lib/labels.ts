@@ -84,54 +84,61 @@ const PERSONALITY_LABELS_ZH: Record<string, string> = {
   controversy: "争议",
 };
 
-const CORPORATE_FACILITIES_LABELS: Record<Locale, Record<number, string>> = {
-  en: {
-    1: "Basic",
-    2: "Basic",
-    5: "Fairly Basic",
-    6: "Adequate",
-    7: "Adequate",
-    8: "Adequate",
-    9: "Adequate",
-    10: "Average",
-    11: "Average",
-    12: "Average",
-    13: "Good",
-    14: "Good",
-    15: "Good",
-    17: "Excellent",
-    18: "Excellent",
-    19: "Excellent",
-    20: "Excellent",
-  },
-  "zh-CN": {
-    1: "基础",
-    2: "基础",
-    5: "较基础",
-    6: "合格",
-    7: "合格",
-    8: "合格",
-    9: "合格",
-    10: "一般",
-    11: "一般",
-    12: "一般",
-    13: "良好",
-    14: "良好",
-    15: "良好",
-    17: "优秀",
-    18: "优秀",
-    19: "优秀",
-    20: "优秀",
-  },
+/**
+ * Facility ratings run from 1 to 20. The game groups them into ten named tiers,
+ * best first. The scale is the same for every facility line.
+ */
+const FACILITY_TIER_LABELS: Record<Locale, string[]> = {
+  en: [
+    "State of the Art",
+    "Superb",
+    "Excellent",
+    "Great",
+    "Good",
+    "Average",
+    "Adequate",
+    "Below Average / Fairly Basic",
+    "Basic",
+    "Poor / Minimal",
+  ],
+  "zh-CN": [
+    "顶级",
+    "卓越",
+    "优秀",
+    "出色",
+    "良好",
+    "一般",
+    "合格",
+    "中下 / 较基础",
+    "基础",
+    "较差 / 最低",
+  ],
 };
 
-/** The game displays corporate facilities as a word; unnamed codes stay numeric. */
-export function corporateFacilitiesLabel(
+/** Index into the ten-tier scale for a 1–20 rating, or null when unset. */
+export function facilityTierIndex(value: number | null | undefined): number | null {
+  if (value == null) return null;
+  const rating = Math.max(1, Math.min(20, Math.round(value)));
+  if (rating === 20) return 0;
+  if (rating >= 18) return 1;
+  if (rating >= 16) return 2;
+  if (rating >= 14) return 3;
+  if (rating >= 12) return 4;
+  if (rating >= 10) return 5;
+  if (rating >= 8) return 6;
+  if (rating >= 6) return 7;
+  if (rating >= 4) return 8;
+  return 9;
+}
+
+/** The word the game displays for a facility rating; unnamed values stay numeric. */
+export function facilityRatingLabel(
   value: number | null | undefined,
   locale: Locale,
 ): string | null {
-  if (value == null) return null;
-  return CORPORATE_FACILITIES_LABELS[locale][value] ?? `#${value}`;
+  const index = facilityTierIndex(value);
+  if (index == null) return null;
+  return FACILITY_TIER_LABELS[locale][index];
 }
 
 const SEVERITY_LABELS: Record<Locale, Record<number, string>> = {

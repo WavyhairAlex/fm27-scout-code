@@ -308,6 +308,16 @@ pub struct Club {
     pub parent_club_name: Option<String>,
     #[serde(default)]
     pub corporate_facilities: Option<u8>,
+    #[serde(default)]
+    pub training_facilities: Option<u8>,
+    #[serde(default)]
+    pub youth_facilities: Option<u8>,
+    #[serde(default)]
+    pub junior_coaching: Option<u8>,
+    #[serde(default)]
+    pub youth_recruitment: Option<u8>,
+    #[serde(default)]
+    pub youth_academy: Option<u8>,
     pub teams: Vec<u32>,
 }
 

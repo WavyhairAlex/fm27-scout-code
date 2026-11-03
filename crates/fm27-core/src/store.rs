@@ -558,11 +558,12 @@ impl Store {
                 "INSERT INTO clubs
                  (save_id, uid, unique_id, name, short_name, nation_id, nation_name, fa_nation_id,
                   fa_nation_name, city_id, gender, reputation, last_league_position,
-                  parent_club_uid, parent_club_name, corporate_facilities, finance_month, balance,
-                  transfer_budget_allocated, transfer_budget_remaining, wage_budget_weekly,
-                  wage_payroll_weekly, net, teams_json)
+                  parent_club_uid, parent_club_name, corporate_facilities, training_facilities,
+                  youth_facilities, junior_coaching, youth_recruitment, youth_academy,
+                  finance_month, balance, transfer_budget_allocated, transfer_budget_remaining,
+                  wage_budget_weekly, wage_payroll_weekly, net, teams_json)
                  VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18,
-                         ?19,?20,?21,?22,?23,?24)",
+                         ?19,?20,?21,?22,?23,?24,?25,?26,?27,?28,?29)",
             )?;
             for club in &parsed.clubs {
                 let finance = latest_finance.get(&club.uid);
@@ -583,6 +584,11 @@ impl Store {
                     club.parent_club_uid,
                     club.parent_club_name,
                     club.corporate_facilities,
+                    club.training_facilities,
+                    club.youth_facilities,
+                    club.junior_coaching,
+                    club.youth_recruitment,
+                    club.youth_academy,
                     finance.map(|row| row.month.as_str()),
                     finance.map(|row| row.balance),
                     finance.map(|row| row.transfer_budget_allocated),
@@ -1288,7 +1294,8 @@ impl Store {
                 "SELECT uid, unique_id, COALESCE(name, ''), COALESCE(short_name, ''),
                         nation_id, nation_name, fa_nation_id, fa_nation_name, city_id, gender,
                         reputation, last_league_position, parent_club_uid, parent_club_name,
-                        corporate_facilities, teams_json
+                        corporate_facilities, training_facilities, youth_facilities,
+                        junior_coaching, youth_recruitment, youth_academy, teams_json
                  FROM clubs WHERE save_id = ?1 AND uid = ?2",
                 params![save_id, uid],
                 |row| {
@@ -1308,7 +1315,12 @@ impl Store {
                         row.get::<_, Option<u32>>(12)?,
                         row.get::<_, Option<String>>(13)?,
                         row.get::<_, Option<u8>>(14)?,
-                        row.get::<_, Option<String>>(15)?,
+                        row.get::<_, Option<u8>>(15)?,
+                        row.get::<_, Option<u8>>(16)?,
+                        row.get::<_, Option<u8>>(17)?,
+                        row.get::<_, Option<u8>>(18)?,
+                        row.get::<_, Option<u8>>(19)?,
+                        row.get::<_, Option<String>>(20)?,
                     ))
                 },
             )
@@ -1329,6 +1341,11 @@ impl Store {
             parent_club_uid,
             parent_club_name,
             corporate_facilities,
+            training_facilities,
+            youth_facilities,
+            junior_coaching,
+            youth_recruitment,
+            youth_academy,
             teams_json,
         )) = row
         else {
@@ -1350,6 +1367,11 @@ impl Store {
             parent_club_uid,
             parent_club_name,
             corporate_facilities,
+            training_facilities,
+            youth_facilities,
+            junior_coaching,
+            youth_recruitment,
+            youth_academy,
             teams: teams_json
                 .and_then(|text| serde_json::from_str(&text).ok())
                 .unwrap_or_default(),
@@ -1779,6 +1801,11 @@ fn migrate(conn: &Connection) -> Result<()> {
         ("clubs", "city_id", "INTEGER"),
         ("clubs", "parent_club_name", "TEXT"),
         ("clubs", "corporate_facilities", "INTEGER"),
+        ("clubs", "training_facilities", "INTEGER"),
+        ("clubs", "youth_facilities", "INTEGER"),
+        ("clubs", "junior_coaching", "INTEGER"),
+        ("clubs", "youth_recruitment", "INTEGER"),
+        ("clubs", "youth_academy", "INTEGER"),
         ("clubs", "finance_month", "TEXT"),
         ("clubs", "balance", "INTEGER"),
         ("clubs", "transfer_budget_allocated", "INTEGER"),

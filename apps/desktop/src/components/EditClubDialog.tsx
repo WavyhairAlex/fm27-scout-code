@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { AlertTriangle, Loader2, Save } from "lucide-react";
 import { editClub, pickEditOutputFile } from "@/lib/api";
+import { facilityRatingLabel } from "@/lib/labels";
 import { useClubDetail } from "@/lib/query";
 import type { ClubEditRequest, ClubFinanceEdit, StadiumCapacityEdit } from "@/lib/types";
 import { suggestedEditedSavePath } from "@/lib/utils";
@@ -20,7 +21,7 @@ interface StadiumForm {
 }
 
 export function EditClubDialog() {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const open = useAppStore((state) => state.clubEditOpen);
   const setOpen = useAppStore((state) => state.setClubEditOpen);
   const saveId = useAppStore((state) => state.saveId);
@@ -209,7 +210,11 @@ export function EditClubDialog() {
               min={1}
               max={20}
               disabled={latestFinance == null}
-              hint={latestFinance == null ? t("clubs.edit.unavailable") : undefined}
+              hint={
+                latestFinance == null
+                  ? t("clubs.edit.unavailable")
+                  : (facilityRatingLabel(corporate, locale) ?? undefined)
+              }
               onChange={setCorporate}
             />
           </Section>
@@ -258,10 +263,7 @@ export function EditClubDialog() {
                 >
                   <div className="mb-2 flex items-center justify-between gap-2">
                     <span className="truncate text-[11px] font-semibold text-[var(--ink)]">
-                      {stadium.name ?? `Stadium #${stadium.uid}`}
-                    </span>
-                    <span className="font-mono text-[9px] text-[var(--muted)]">
-                      #{stadium.uid}
+                      {stadium.name ?? t("clubs.inspector.unnamedStadium")}
                     </span>
                   </div>
                   <div className="grid grid-cols-2 gap-2">

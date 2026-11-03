@@ -4,6 +4,8 @@ import {
   attributeLabel,
   clauseKindLabel,
   clauseValueLabel,
+  facilityRatingLabel,
+  facilityTierIndex,
   nationLabel,
   personalityLabel,
   roleName,
@@ -111,6 +113,28 @@ describe("localized domain labels", () => {
     expect(traitLabel(53, null, "en")).toBe("Unknown trait");
     expect(roleName("poacher", "抢点前锋（进攻）", "en")).toBe("Poacher (Attack)");
     expect(personalityLabel("professionalism", "en")).toBe("Professionalism");
+  });
+});
+
+describe("facility rating labels", () => {
+  it("maps the 1–20 scale onto the ten named tiers", () => {
+    expect(facilityRatingLabel(20, "en")).toBe("State of the Art");
+    expect(facilityRatingLabel(19, "en")).toBe("Superb");
+    expect(facilityRatingLabel(16, "en")).toBe("Excellent");
+    expect(facilityRatingLabel(14, "en")).toBe("Great");
+    expect(facilityRatingLabel(12, "en")).toBe("Good");
+    expect(facilityRatingLabel(10, "en")).toBe("Average");
+    expect(facilityRatingLabel(8, "en")).toBe("Adequate");
+    expect(facilityRatingLabel(6, "en")).toBe("Below Average / Fairly Basic");
+    expect(facilityRatingLabel(4, "en")).toBe("Basic");
+    expect(facilityRatingLabel(1, "en")).toBe("Poor / Minimal");
+  });
+
+  it("handles unset values and localizes the tiers", () => {
+    expect(facilityTierIndex(null)).toBeNull();
+    expect(facilityRatingLabel(null, "en")).toBeNull();
+    expect(facilityRatingLabel(20, "zh-CN")).toBe("顶级");
+    expect(facilityRatingLabel(16, "zh-CN")).toBe("优秀");
   });
 });
 

@@ -9,7 +9,7 @@ import {
   Shield,
 } from "lucide-react";
 import { useClubPage } from "@/lib/query";
-import { corporateFacilitiesLabel, nationLabel } from "@/lib/labels";
+import { facilityRatingLabel, nationLabel } from "@/lib/labels";
 import { formatNumber } from "@/lib/i18n";
 import { useI18n } from "@/lib/useI18n";
 import { caTone, cn, formatMoney, formatValue, initials } from "@/lib/utils";
@@ -189,7 +189,7 @@ export function ClubTable() {
                   {formatMoney(club.wage_budget_weekly)}
                 </td>
                 <td className="hidden px-2 py-1.5 text-right text-[10px] text-[var(--muted)] 2xl:table-cell">
-                  {corporateFacilitiesLabel(club.corporate_facilities, locale) ?? "—"}
+                  {facilityRatingLabel(club.corporate_facilities, locale) ?? "—"}
                 </td>
                 <td className="hidden px-2 py-1.5 text-right font-mono text-[var(--muted)] 2xl:table-cell">
                   {club.stadium_capacity != null

@@ -1,6 +1,6 @@
 //! End-to-end parsing of one save into normalized player and club rows.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::Path;
 use std::time::Instant;
 
@@ -113,6 +113,17 @@ pub fn parse_save_with_progress(
             .get(&club.uid)
             .copied()
             .flatten();
+    }
+    let tracked_clubs: HashSet<u32> = finance_data.corporate_facilities.keys().copied().collect();
+    let facility_data = crate::facilities::read_club_facilities(&game_db, &clubs, &tracked_clubs);
+    for club in &mut clubs.clubs {
+        let Some(facilities) = facility_data.get(&club.uid) else {
+            continue;
+        };
+        club.training_facilities = facilities.training;
+        club.youth_facilities = facilities.youth;
+        club.junior_coaching = facilities.junior_coaching;
+        club.youth_recruitment = facilities.youth_recruitment;
     }
     let stadiums = read_stadium_index(&game_db, &clubs).stadiums;
 

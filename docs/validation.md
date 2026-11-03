@@ -108,8 +108,9 @@ clubs                           26,138
 clubs with monthly finance         122
 finance rows                       488
 corporate facilities rows          122
+training/youth facility rows       121
 stadium rows                    27,042
-parse time (release)             1.53 s
+parse time (release)             2.10 s
 ```
 
 The development oracle comparison uses:
@@ -136,6 +137,9 @@ the club's last league position and all other finance fields remained unchanged.
 The ignored `club_real_save.rs` tests cover:
 
 - finance, facilities and stadium counts,
+- training/youth/junior-coaching/youth-recruitment ratings against the in-game
+  facilities screen for Parma, Arsenal, Liverpool, Manchester City, Tottenham,
+  Napoli and Torino,
 - club search and detail retrieval through SQLite,
 - owned-stadium capacity edits,
 - re-parsing and field-by-field verification of an edited save copy.

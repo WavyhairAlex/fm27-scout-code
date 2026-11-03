@@ -44,10 +44,54 @@ fn reads_club_finances_stadiums_and_queries() {
     assert!(parma.finance_month.is_some());
     assert!(parma.balance.is_some());
 
+    let parma_club = parsed
+        .clubs
+        .iter()
+        .find(|club| club.uid == parma.uid)
+        .expect("Parma club row");
+    assert_eq!(parma_club.training_facilities, Some(16));
+    assert_eq!(parma_club.youth_facilities, Some(13));
+    assert_eq!(parma_club.junior_coaching, Some(10));
+    assert_eq!(parma_club.youth_recruitment, Some(10));
+
+    for (uid, expected) in [
+        (602, (19, 16, 17, 15)),  // Arsenal
+        (676, (20, 20, 17, 16)),  // Liverpool
+        (679, (20, 20, 19, 20)),  // Manchester City
+        (728, (20, 20, 16, 16)),  // Tottenham Hotspur
+        (1150, (17, 13, 12, 12)), // Napoli
+        (1174, (15, 14, 14, 14)), // Torino
+    ] {
+        let club = parsed
+            .clubs
+            .iter()
+            .find(|club| club.uid == uid)
+            .expect("club row");
+        assert_eq!(
+            (
+                club.training_facilities,
+                club.youth_facilities,
+                club.junior_coaching,
+                club.youth_recruitment,
+            ),
+            (
+                Some(expected.0),
+                Some(expected.1),
+                Some(expected.2),
+                Some(expected.3),
+            ),
+            "facilities for club {uid}"
+        );
+    }
+
     let detail = store
         .get_club(save_id, parma.uid)
         .expect("get club")
         .expect("club detail");
+    assert_eq!(detail.club.training_facilities, Some(16));
+    assert_eq!(detail.club.youth_facilities, Some(13));
+    assert_eq!(detail.club.junior_coaching, Some(10));
+    assert_eq!(detail.club.youth_recruitment, Some(10));
     assert!(!detail.finance_months.is_empty());
     assert!(!detail.stadiums.is_empty());
     assert_eq!(

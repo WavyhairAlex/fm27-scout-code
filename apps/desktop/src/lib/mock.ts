@@ -705,6 +705,12 @@ export function mockClubDetail(uid: number): ClubDetail | null {
     parent_club_uid: row.parent_club_uid,
     parent_club_name: row.parent_club_name,
     corporate_facilities: row.corporate_facilities,
+    training_facilities:
+      row.corporate_facilities == null ? null : 12 + (row.uid % 8),
+    youth_facilities: row.corporate_facilities == null ? null : 10 + (row.uid % 9),
+    junior_coaching: row.corporate_facilities == null ? null : 9 + (row.uid % 10),
+    youth_recruitment: row.corporate_facilities == null ? null : 10 + (row.uid % 8),
+    youth_academy: row.corporate_facilities == null ? null : 11 + (row.uid % 7),
     teams: [],
   };
   const financeMonths: FinanceMonth[] =

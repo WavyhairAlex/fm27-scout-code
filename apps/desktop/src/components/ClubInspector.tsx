@@ -1,7 +1,17 @@
-import { useEffect, useState } from "react";
-import { Building2, ChevronRight, MapPin, Pencil, Shield, X } from "lucide-react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import {
+  ArrowDown,
+  ArrowUp,
+  ArrowUpDown,
+  Building2,
+  ChevronRight,
+  MapPin,
+  Pencil,
+  Shield,
+  X,
+} from "lucide-react";
 import { useClubDetail, useSquadAnalysis } from "@/lib/query";
-import { corporateFacilitiesLabel, nationLabel } from "@/lib/labels";
+import { facilityRatingLabel, nationLabel } from "@/lib/labels";
 import { formatNumber } from "@/lib/i18n";
 import { useI18n } from "@/lib/useI18n";
 import {
@@ -26,10 +36,26 @@ export function ClubInspector() {
   const setClubEditOpen = useAppStore((state) => state.setClubEditOpen);
   const { data: detail, isLoading } = useClubDetail(selectedClubUid);
   const [tab, setTab] = useState<ClubTab>("overview");
+  const tabBarRef = useRef<HTMLDivElement>(null);
+  const [tabBarWidth, setTabBarWidth] = useState(0);
 
   useEffect(() => {
     setTab("overview");
   }, [selectedClubUid]);
+
+  useLayoutEffect(() => {
+    const element = tabBarRef.current;
+    if (!element) return;
+    const measure = () => {
+      const width = Math.ceil(element.scrollWidth);
+      setTabBarWidth((current) => (current === width ? current : width));
+    };
+    measure();
+    if (typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(measure);
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [selectedClubUid, locale, detail]);
 
   if (selectedClubUid == null) {
     return (
@@ -61,7 +87,10 @@ export function ClubInspector() {
   const latestFinance = detail.finance_months.at(-1) ?? null;
 
   return (
-    <aside className="flex h-full w-[320px] shrink-0 flex-col border-l border-[var(--line)] bg-[var(--surface)] xl:w-[340px] 2xl:w-[390px]">
+    <aside
+      className="flex h-full w-[320px] shrink-0 flex-col border-l border-[var(--line)] bg-[var(--surface)] xl:w-[340px] 2xl:w-[390px]"
+      style={tabBarWidth > 0 ? { minWidth: tabBarWidth } : undefined}
+    >
       <div className="flex items-center justify-between border-b border-[var(--line)] px-3 py-2">
         <div className="flex items-center gap-2 text-[11px] font-semibold text-[var(--muted)]">
           <Building2 size={13} className="text-[var(--accent)]" />
@@ -134,7 +163,10 @@ export function ClubInspector() {
         </div>
       </div>
 
-      <div className="flex gap-1 overflow-x-auto border-b border-[var(--line)] px-2 pt-1">
+      <div
+        ref={tabBarRef}
+        className="flex gap-1 overflow-hidden border-b border-[var(--line)] px-2 pt-1"
+      >
         {(
           [
             ["overview", t("clubs.inspector.overview")],
@@ -148,7 +180,7 @@ export function ClubInspector() {
             type="button"
             onClick={() => setTab(value)}
             className={cn(
-              "focus-ring shrink-0 rounded-t-lg border-b-2 px-2.5 py-2 text-[10px] font-medium transition-colors",
+              "focus-ring shrink-0 whitespace-nowrap rounded-t-lg border-b-2 px-2.5 py-2 text-[10px] font-medium transition-colors",
               tab === value
                 ? "border-[var(--accent)] bg-[var(--surface-2)] text-[var(--accent-strong)]"
                 : "border-transparent text-[var(--muted)] hover:bg-[var(--surface-2)] hover:text-[var(--ink)]",
@@ -201,8 +233,8 @@ function OverviewTab({ detail }: { detail: import("@/lib/types").ClubDetail }) {
           value={formatNumber(club.teams.length, locale)}
         />
         <Info
-          label={t("clubs.inspector.facilities")}
-          value={corporateFacilitiesLabel(club.corporate_facilities, locale) ?? "—"}
+          label={t("clubs.facilities.corporate")}
+          value={facilityRatingLabel(club.corporate_facilities, locale) ?? "—"}
         />
       </div>
       {club.parent_club_uid != null && (
@@ -244,12 +276,39 @@ function OverviewTab({ detail }: { detail: import("@/lib/types").ClubDetail }) {
   );
 }
 
+type SquadSortField = "ca" | "pa";
+
 function SquadTab({ clubUid }: { clubUid: number }) {
   const { t, locale } = useI18n();
   const squad = useSquadAnalysis(clubUid);
   const setSelectedUid = useAppStore((state) => state.setSelectedUid);
   const setViewMode = useAppStore((state) => state.setViewMode);
   const setInspectorOpen = useAppStore((state) => state.setInspectorOpen);
+  const [sort, setSort] = useState<{ by: SquadSortField; dir: "asc" | "desc" }>({
+    by: "ca",
+    dir: "desc",
+  });
+
+  const players = useMemo(() => {
+    if (!squad.data) return [];
+    return [...squad.data.players].sort((left, right) => {
+      const leftValue = sort.by === "ca" ? left.ca : left.pa;
+      const rightValue = sort.by === "ca" ? right.ca : right.pa;
+      if (leftValue == null && rightValue == null) return 0;
+      if (leftValue == null) return 1;
+      if (rightValue == null) return -1;
+      const delta = leftValue - rightValue;
+      return sort.dir === "desc" ? -delta : delta;
+    });
+  }, [squad.data, sort]);
+
+  const toggleSort = (by: SquadSortField) => {
+    setSort((current) =>
+      current.by === by
+        ? { by, dir: current.dir === "desc" ? "asc" : "desc" }
+        : { by, dir: "desc" },
+    );
+  };
 
   if (squad.isLoading) {
     return <div className="text-[11px] text-[var(--muted)]">{t("clubs.loading")}</div>;
@@ -263,25 +322,33 @@ function SquadTab({ clubUid }: { clubUid: number }) {
       <div className="grid grid-cols-3 gap-1.5">
         <MiniStat label={t("clubs.table.players")} value={String(data.player_count)} />
         <MiniStat label={t("clubs.table.avgCa")} value={data.average_ca.toFixed(1)} />
+        <MiniStat label={t("analysis.averagePa")} value={data.average_pa.toFixed(1)} />
         <MiniStat label={t("clubs.table.value")} value={formatValue(data.total_value)} />
         <MiniStat label={t("clubs.inspector.payroll")} value={formatMoney(data.total_wage)} />
         <MiniStat label={t("analysis.averageAge")} value={data.average_age.toFixed(1)} />
-        <MiniStat label={t("analysis.loanees")} value={String(data.loanees)} />
-      </div>
-      <div className="text-[10px] text-[var(--muted)]">
-        {t("analysis.sortedByCa", { club: data.club_name })}
       </div>
       <div className="overflow-hidden rounded-xl border border-[var(--line)]">
         <table className="w-full text-left">
           <thead className="bg-[var(--surface-2)] text-[8px] uppercase tracking-wider text-[var(--muted)]">
             <tr>
               <th className="px-2 py-1.5">{t("table.player")}</th>
-              <th className="px-1 py-1.5 text-right">CA</th>
+              <SortHeader
+                label="CA"
+                active={sort.by === "ca"}
+                dir={sort.dir}
+                onClick={() => toggleSort("ca")}
+              />
+              <SortHeader
+                label="PA"
+                active={sort.by === "pa"}
+                dir={sort.dir}
+                onClick={() => toggleSort("pa")}
+              />
               <th className="px-2 py-1.5 text-right">{t("analysis.table.wage")}</th>
             </tr>
           </thead>
           <tbody>
-            {data.players.map((player) => (
+            {players.map((player) => (
               <tr
                 key={player.uid}
                 className="cursor-pointer border-t border-[var(--line)]/60 text-[10px] hover:bg-[var(--surface-2)]"
@@ -311,6 +378,15 @@ function SquadTab({ clubUid }: { clubUid: number }) {
                     {player.ca}
                   </span>
                 </td>
+                <td className="px-1 py-1.5 text-right">
+                  {player.pa != null ? (
+                    <span className={cn("rounded border px-1 font-mono text-[8px] font-bold", caTone(player.pa))}>
+                      {player.pa}
+                    </span>
+                  ) : (
+                    <span className="font-mono text-[8px] text-[var(--muted)]">—</span>
+                  )}
+                </td>
                 <td className="px-2 py-1.5 text-right font-mono text-[var(--muted)]">
                   {player.wage != null ? formatWage(player.wage, locale) : "—"}
                 </td>
@@ -320,6 +396,35 @@ function SquadTab({ clubUid }: { clubUid: number }) {
         </table>
       </div>
     </div>
+  );
+}
+
+function SortHeader({
+  label,
+  active,
+  dir,
+  onClick,
+}: {
+  label: string;
+  active: boolean;
+  dir: "asc" | "desc";
+  onClick: () => void;
+}) {
+  const Icon = active ? (dir === "desc" ? ArrowDown : ArrowUp) : ArrowUpDown;
+  return (
+    <th className="px-1 py-1.5 text-right">
+      <button
+        type="button"
+        className={cn(
+          "inline-flex items-center gap-0.5 hover:text-[var(--ink)]",
+          active && "text-[var(--ink)]",
+        )}
+        onClick={onClick}
+      >
+        {label}
+        <Icon size={9} />
+      </button>
+    </th>
   );
 }
 
@@ -434,18 +539,75 @@ function FinancesTab({ detail }: { detail: import("@/lib/types").ClubDetail }) {
 
 function StadiumTab({ detail }: { detail: import("@/lib/types").ClubDetail }) {
   const { t, locale } = useI18n();
+  const club = detail.club;
+  const facilities: { key: string; label: string; value: number | null | undefined }[] = [
+    {
+      key: "corporate",
+      label: t("clubs.facilities.corporate"),
+      value: club.corporate_facilities,
+    },
+    {
+      key: "training",
+      label: t("clubs.facilities.training"),
+      value: club.training_facilities,
+    },
+    {
+      key: "youth",
+      label: t("clubs.facilities.youth"),
+      value: club.youth_facilities,
+    },
+    {
+      key: "junior",
+      label: t("clubs.facilities.junior"),
+      value: club.junior_coaching,
+    },
+    {
+      key: "recruitment",
+      label: t("clubs.facilities.recruitment"),
+      value: club.youth_recruitment,
+    },
+    {
+      key: "academy",
+      label: t("clubs.facilities.academy"),
+      value: club.youth_academy,
+    },
+  ];
   return (
     <div className="space-y-3">
-      <div className="rounded-xl border border-[var(--line)] bg-[var(--surface-2)] p-2.5">
-        <div className="flex items-center gap-1.5 text-[9px] uppercase tracking-wider text-[var(--muted)]">
+      <div className="overflow-hidden rounded-xl border border-[var(--line)] bg-[var(--surface-2)]">
+        <div className="flex items-center gap-1.5 border-b border-[var(--line)] px-2.5 py-2 text-[9px] uppercase tracking-wider text-[var(--muted)]">
           <Building2 size={11} />
           {t("clubs.inspector.facilities")}
         </div>
-        <div className="mt-1 text-[14px] font-semibold text-[var(--ink)]">
-          {corporateFacilitiesLabel(detail.club.corporate_facilities, locale) ??
-            t("clubs.inspector.noFacilities")}
+        <div className="divide-y divide-[var(--line)]/60">
+          {facilities.map((facility) => {
+            const label = facilityRatingLabel(facility.value, locale);
+            return (
+              <div
+                key={facility.key}
+                className="flex items-center justify-between gap-2 px-2.5 py-1.5"
+              >
+                <span className="text-[10px] text-[var(--muted)]">{facility.label}</span>
+                {label ? (
+                  <span className="text-right">
+                    <span className="text-[10px] font-semibold text-[var(--ink)]">{label}</span>
+                    <span className="ml-1 font-mono text-[8px] text-[var(--muted)]">
+                      {facility.value}
+                    </span>
+                  </span>
+                ) : (
+                  <span className="font-mono text-[10px] text-[var(--muted)]">—</span>
+                )}
+              </div>
+            );
+          })}
         </div>
       </div>
+      {facilities.some((facility) => facility.value == null) && (
+        <div className="text-[9px] leading-relaxed text-[var(--muted)]">
+          {t("clubs.inspector.facilitiesAvailableHint")}
+        </div>
+      )}
       {detail.stadiums.length === 0 ? (
         <div className="rounded-xl border border-dashed border-[var(--line)] p-4 text-center text-[11px] text-[var(--muted)]">
           {t("clubs.inspector.noStadium")}
@@ -460,7 +622,7 @@ function StadiumTab({ detail }: { detail: import("@/lib/types").ClubDetail }) {
               <MapPin size={14} className="mt-0.5 text-[var(--accent)]" />
               <div className="min-w-0 flex-1">
                 <div className="truncate text-[12px] font-semibold text-[var(--ink)]">
-                  {stadium.name ?? `Stadium #${stadium.uid}`}
+                  {stadium.name ?? t("clubs.inspector.unnamedStadium")}
                 </div>
                 <div className="text-[9px] text-[var(--muted)]">
                   {t("clubs.inspector.owner")}: {stadium.owner_club_name ?? "—"}
