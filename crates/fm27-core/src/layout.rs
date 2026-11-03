@@ -27,7 +27,7 @@ pub fn editable_builds() -> String {
 pub const PARSER_VERSION: &str = concat!(
     "1.1.0",
     "+nation-names+listing+injury-windows+club-finance+stadiums+club-facilities+youth-level-edt",
-    "+competition-names+club-leagues"
+    "+competition-names+club-leagues+season-stats"
 );
 pub const EARLIEST_YEAR: i32 = 1901;
 pub const LATEST_YEAR: i32 = 2200;

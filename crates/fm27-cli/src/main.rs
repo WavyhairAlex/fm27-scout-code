@@ -229,6 +229,7 @@ fn main() -> Result<()> {
                     "db": db,
                     "players": parsed.players.len(),
                     "clubs": parsed.clubs.len(),
+                    "season_stats": parsed.report.season_stats,
                     "contracts": parsed.report.contracts,
                     "competitions": parsed.report.competitions,
                     "competition_stages": parsed.report.competition_stages,

@@ -26,6 +26,7 @@ use crate::names::NamePools;
 use crate::nations::NationIndex;
 use crate::persons::{ClubLookup, PersonDecoder};
 use crate::player_scan::PlayerRecords;
+use crate::season_stats::{SeasonPlayer, SeasonStatRow};
 use crate::stadiums::read_stadium_index;
 
 #[derive(Debug, Clone, Serialize)]
@@ -42,6 +43,7 @@ pub struct ParsedSave {
     pub summary: SaveSummary,
     pub players: Vec<Player>,
     pub clubs: Vec<Club>,
+    pub season_stats: Vec<SeasonStatRow>,
     pub competitions: Vec<Competition>,
     pub club_finances: Vec<FinanceMonth>,
     pub stadiums: Vec<Stadium>,
@@ -505,6 +507,45 @@ pub fn parse_save_with_progress(
     }
 
     progress(ParseProgress {
+        stage: "season_stats".to_owned(),
+        current: 0,
+        total: 0,
+        message: "正在解析赛季统计".to_owned(),
+    });
+    let mut season_players = HashMap::with_capacity(record_index.records.len());
+    for record in &record_index.records {
+        let Some(position) = record_index.by_pindex.get(&record.pindex) else {
+            continue;
+        };
+        let Some(player) = players.get(*position) else {
+            continue;
+        };
+        let Some(key) = record.pindex.checked_add(1) else {
+            continue;
+        };
+        season_players.insert(
+            key,
+            SeasonPlayer {
+                uid: player.uid,
+                name: player.name.clone(),
+                team_id: player.team_id,
+                goalkeeper: player
+                    .natural_positions
+                    .iter()
+                    .any(|position| position == "GK"),
+            },
+        );
+    }
+    let season_stats = match crate::season_stats::read_season_stats(&save, &season_players, &clubs)
+    {
+        Ok(rows) => rows,
+        Err(error) => {
+            warnings.push(format!("season statistics unavailable: {error}"));
+            Vec::new()
+        }
+    };
+
+    progress(ParseProgress {
         stage: "done".to_owned(),
         current: players.len(),
         total: players.len(),
@@ -554,6 +595,7 @@ pub fn parse_save_with_progress(
         save: summary.clone(),
         players: players.len(),
         clubs: clubs.clubs.len(),
+        season_stats: season_stats.len(),
         contracts,
         competitions: competitions.competitions.len(),
         competition_stages: competitions.stage_count,
@@ -576,6 +618,7 @@ pub fn parse_save_with_progress(
         summary,
         players,
         clubs: clubs.clubs,
+        season_stats,
         competitions: competitions.competitions,
         club_finances: finance_data.months,
         stadiums,

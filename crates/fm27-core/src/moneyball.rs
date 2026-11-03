@@ -143,7 +143,7 @@ pub fn position_group(position: Option<&str>) -> &'static str {
 /// Average-rank percentile: ties share their average rank and the result is in
 /// `0..=1`. `None` stays `None` so callers can distinguish "unknown" from
 /// "bottom of the group".
-fn percentiles(values: &[Option<f64>]) -> Vec<Option<f64>> {
+pub(crate) fn percentiles(values: &[Option<f64>]) -> Vec<Option<f64>> {
     let mut present: Vec<(usize, f64)> = values
         .iter()
         .enumerate()

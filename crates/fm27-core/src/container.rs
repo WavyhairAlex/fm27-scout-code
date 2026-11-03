@@ -28,6 +28,15 @@ const MAX_SAVE_NAME_BYTES: usize = 4096;
 const MAX_ENTRY_NAME_BYTES: usize = 256;
 const MAX_DIRECTORY_ENTRIES: usize = 100_000;
 const ENTRY_FIXED_TAIL_BYTES: usize = 40;
+const UNLISTED_REGION_PREFIX: &str = "unlisted_after_";
+const HEAD_READ_BYTES: u64 = 128 * 1024 + 32;
+const MAX_FRAMES_PER_REGION: usize = 1_000_000;
+const ZSTD_FRAME_MAGIC: u32 = 0xFD2F_B528;
+const SKIPPABLE_MAGIC_FIRST: u32 = 0x184D_2A50;
+const SKIPPABLE_MAGIC_LAST: u32 = 0x184D_2A5F;
+const ZSTD_MAX_BLOCK_BYTES: u32 = 128 * 1024;
+const BLOCK_TYPE_RLE: u32 = 1;
+const BLOCK_TYPE_RESERVED: u32 = 3;
 
 #[derive(Debug, Clone, Serialize)]
 pub struct Fingerprint {
@@ -61,6 +70,24 @@ pub struct DirectoryGroup {
     pub entries: Vec<DirectoryEntry>,
 }
 
+/// One byte range of the file: a listed section frame, or a run of frames the
+/// directory does not list. FM27 stores the season-statistics frame in the gap
+/// after `non_pl_hist_ls`, so the parser needs both kinds of region.
+#[derive(Debug, Clone)]
+pub struct Region {
+    pub name: String,
+    pub start: u64,
+    pub end: u64,
+    pub entry: Option<DirectoryEntry>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+pub struct FrameSpan {
+    pub offset: u64,
+    pub size: u64,
+    pub skippable: bool,
+}
+
 #[derive(Debug, Clone)]
 pub struct SaveDirectory {
     pub save_name: String,
@@ -86,6 +113,8 @@ pub struct SaveFile {
     pub trailer_offset: u64,
     pub directory: SaveDirectory,
     pub sections: HashMap<String, usize>,
+    pub regions: Vec<Region>,
+    region_index: HashMap<String, usize>,
     header: [u8; HEADER_SIZE as usize],
     trailer_header: [u8; TRAILER_HEADER_SIZE],
 }
@@ -166,6 +195,17 @@ impl SaveFile {
         let mut trailer_header_bytes = [0u8; TRAILER_HEADER_SIZE];
         trailer_header_bytes.copy_from_slice(&trailer[..TRAILER_HEADER_SIZE]);
 
+        let regions = build_regions(&directory.top_entries, trailer_offset)?;
+        let mut region_index = HashMap::with_capacity(regions.len());
+        for (index, region) in regions.iter().enumerate() {
+            if region_index.insert(region.name.clone(), index).is_some() {
+                return Err(Error::corrupt(format!(
+                    "the save region {:?} appears twice",
+                    region.name
+                )));
+            }
+        }
+
         Ok(Self {
             path,
             save_name: directory.save_name.clone(),
@@ -177,6 +217,8 @@ impl SaveFile {
             trailer_offset,
             directory,
             sections,
+            regions,
+            region_index,
             header: header_bytes,
             trailer_header: trailer_header_bytes,
         })
@@ -226,6 +268,85 @@ impl SaveFile {
             .collect();
         names.sort_unstable();
         names
+    }
+
+    pub fn region(&self, name: &str) -> Result<&Region> {
+        self.region_index
+            .get(name)
+            .map(|index| &self.regions[*index])
+            .ok_or_else(|| Error::corrupt(format!("save has no {name:?} region")))
+    }
+
+    pub fn region_names(&self) -> Vec<&str> {
+        self.regions
+            .iter()
+            .map(|region| region.name.as_str())
+            .collect()
+    }
+
+    /// Locate every zstd frame in a region from its frame and block headers,
+    /// without decompressing any payload.
+    pub fn walk_region_frames(&self, region_name: &str) -> Result<Vec<FrameSpan>> {
+        let region = self.region(region_name)?;
+        let mut file = File::open(&self.path)?;
+        walk_frame_spans(&mut file, region.start, region.end, region_name)
+    }
+
+    /// Each non-skippable frame of a region with at most `length` bytes of its
+    /// decompressed body. Only a capped prefix of each compressed frame is read,
+    /// so a caller can find the one frame it needs without inflating the region.
+    pub fn region_frame_heads(
+        &self,
+        region_name: &str,
+        length: usize,
+    ) -> Result<Vec<(FrameSpan, Vec<u8>)>> {
+        let spans = self.walk_region_frames(region_name)?;
+        let mut file = File::open(&self.path)?;
+        let mut heads = Vec::new();
+        for span in spans {
+            if span.skippable {
+                continue;
+            }
+            let prefix_len = span.size.min(HEAD_READ_BYTES) as usize;
+            let mut prefix = vec![0u8; prefix_len];
+            read_exact_at(&mut file, span.offset, &mut prefix, region_name)?;
+            let head = decompress_head(&prefix, length, region_name)?;
+            heads.push((span, head));
+        }
+        Ok(heads)
+    }
+
+    /// Decompress one frame previously located by [`SaveFile::walk_region_frames`].
+    pub fn read_region_frame(&self, region_name: &str, span: FrameSpan) -> Result<Vec<u8>> {
+        if span.skippable {
+            return Err(Error::corrupt(
+                "a skippable frame has no compressed payload to read",
+            ));
+        }
+        let region = self.region(region_name)?;
+        let end = span
+            .offset
+            .checked_add(span.size)
+            .ok_or_else(|| Error::corrupt("a region frame overflows the file offset"))?;
+        if span.offset < region.start || end > region.end {
+            return Err(Error::corrupt(format!(
+                "a frame of region {region_name:?} lies outside the region"
+            )));
+        }
+        if span.size > DEFAULT_FRAME_CAP {
+            return Err(Error::corrupt(format!(
+                "a frame of region {region_name:?} is larger than the per-frame cap"
+            )));
+        }
+        let mut file = File::open(&self.path)?;
+        let mut compressed = vec![0u8; span.size as usize];
+        read_exact_at(&mut file, span.offset, &mut compressed, region_name)?;
+        decompress_frame(
+            &compressed,
+            None,
+            DEFAULT_FRAME_CAP as usize,
+            &format!("a frame of region {region_name:?}"),
+        )
     }
 
     /// Rewrite this save with one or more top-level sections replaced.
@@ -747,6 +868,250 @@ fn validate_all_entries(directory: &SaveDirectory, trailer_offset: u64) -> Resul
     Ok(())
 }
 
+fn build_regions(entries: &[DirectoryEntry], trailer_offset: u64) -> Result<Vec<Region>> {
+    let mut regions = Vec::new();
+    let mut cursor = HEADER_SIZE;
+    let mut previous_name = "header".to_owned();
+    for entry in entries {
+        let entry_end = entry
+            .frame_offset
+            .checked_add(entry.compressed_size)
+            .ok_or_else(|| Error::corrupt("a directory entry overflows the file offset"))?;
+        if entry.frame_offset < cursor {
+            return Err(Error::corrupt(
+                "the save directory lists overlapping frames",
+            ));
+        }
+        if entry.frame_offset > cursor {
+            regions.push(Region {
+                name: format!("{UNLISTED_REGION_PREFIX}{previous_name}"),
+                start: cursor,
+                end: entry.frame_offset,
+                entry: None,
+            });
+        }
+        if entry.is_section() {
+            regions.push(Region {
+                name: entry.name.clone(),
+                start: entry.frame_offset,
+                end: entry_end,
+                entry: Some(entry.clone()),
+            });
+            previous_name = entry.name.clone();
+        } else {
+            previous_name = format!("{}{}", entry.name, entry.extension);
+        }
+        cursor = entry_end;
+    }
+    if trailer_offset > cursor {
+        regions.push(Region {
+            name: format!("{UNLISTED_REGION_PREFIX}{previous_name}"),
+            start: cursor,
+            end: trailer_offset,
+            entry: None,
+        });
+    }
+    Ok(regions)
+}
+
+fn read_exact_at(file: &mut File, offset: u64, buffer: &mut [u8], what: &str) -> Result<()> {
+    file.seek(SeekFrom::Start(offset))?;
+    file.read_exact(buffer).map_err(|_| {
+        Error::corrupt(format!(
+            "{what} ended early while reading {} bytes at offset {offset}",
+            buffer.len()
+        ))
+    })
+}
+
+fn read_u32_at(file: &mut File, offset: u64, what: &str) -> Result<u32> {
+    let mut buffer = [0u8; 4];
+    read_exact_at(file, offset, &mut buffer, what)?;
+    Ok(u32::from_le_bytes(buffer))
+}
+
+/// Locate every frame in `[start, end)` from frame and block headers, without
+/// decompressing any payload.
+fn walk_frame_spans(file: &mut File, start: u64, end: u64, what: &str) -> Result<Vec<FrameSpan>> {
+    if start >= end {
+        return Ok(Vec::new());
+    }
+    let mut spans = Vec::new();
+    let mut position = start;
+    while position < end {
+        if spans.len() >= MAX_FRAMES_PER_REGION {
+            return Err(Error::corrupt(format!(
+                "{what} contains more than {MAX_FRAMES_PER_REGION} frames"
+            )));
+        }
+        let magic = read_u32_at(file, position, what)?;
+        if (SKIPPABLE_MAGIC_FIRST..=SKIPPABLE_MAGIC_LAST).contains(&magic) {
+            let size_at = position
+                .checked_add(4)
+                .ok_or_else(|| Error::corrupt("a skippable frame overflows the file offset"))?;
+            if size_at + 4 > end {
+                return Err(Error::corrupt(format!(
+                    "{what} has a truncated skippable frame at offset {position}"
+                )));
+            }
+            let payload_size = read_u32_at(file, size_at, what)? as u64;
+            let frame_size = payload_size
+                .checked_add(8)
+                .ok_or_else(|| Error::corrupt("a skippable frame is too large"))?;
+            let frame_end = position
+                .checked_add(frame_size)
+                .ok_or_else(|| Error::corrupt("a skippable frame overflows the file offset"))?;
+            if frame_end > end {
+                return Err(Error::corrupt(format!(
+                    "{what} has a skippable frame at offset {position} that runs past its region"
+                )));
+            }
+            spans.push(FrameSpan {
+                offset: position,
+                size: frame_size,
+                skippable: true,
+            });
+            position = frame_end;
+            continue;
+        }
+        if magic != ZSTD_FRAME_MAGIC {
+            return Err(Error::corrupt(format!(
+                "{what} expected a compressed frame at offset {position}"
+            )));
+        }
+        let frame_end = compressed_frame_end(file, position, end, what)?;
+        spans.push(FrameSpan {
+            offset: position,
+            size: frame_end - position,
+            skippable: false,
+        });
+        position = frame_end;
+    }
+    Ok(spans)
+}
+
+fn compressed_frame_end(
+    file: &mut File,
+    frame_start: u64,
+    region_end: u64,
+    what: &str,
+) -> Result<u64> {
+    let header_end = frame_start
+        .checked_add(5)
+        .ok_or_else(|| Error::corrupt("a compressed frame overflows the file offset"))?;
+    if header_end > region_end {
+        return Err(Error::corrupt(format!(
+            "{what} has a truncated frame at offset {frame_start}"
+        )));
+    }
+    let mut descriptor_bytes = [0u8; 5];
+    read_exact_at(file, frame_start, &mut descriptor_bytes, what)?;
+    let descriptor = descriptor_bytes[4];
+    if descriptor & 0x08 != 0 {
+        return Err(Error::corrupt(format!(
+            "{what} has an invalid frame header at offset {frame_start}"
+        )));
+    }
+    let single_segment = descriptor & 0x20 != 0;
+    let dictionary_id_bytes = match descriptor & 0x03 {
+        0 => 0,
+        1 => 1,
+        2 => 2,
+        _ => 4,
+    };
+    let content_size_bytes = if single_segment {
+        1
+    } else {
+        match descriptor >> 6 {
+            0 => 0,
+            1 => 2,
+            2 => 4,
+            _ => 8,
+        }
+    };
+    let header_size = 5 + usize::from(!single_segment) + dictionary_id_bytes + content_size_bytes;
+    let mut block_position = frame_start
+        .checked_add(header_size as u64)
+        .ok_or_else(|| Error::corrupt("a compressed frame overflows the file offset"))?;
+    loop {
+        let block_end = block_position
+            .checked_add(3)
+            .ok_or_else(|| Error::corrupt("a compressed block overflows the file offset"))?;
+        if block_end > region_end {
+            return Err(Error::corrupt(format!(
+                "{what} has a frame at offset {frame_start} that runs past its region"
+            )));
+        }
+        let mut block_header_bytes = [0u8; 3];
+        read_exact_at(file, block_position, &mut block_header_bytes, what)?;
+        let block_header = u32::from_le_bytes([
+            block_header_bytes[0],
+            block_header_bytes[1],
+            block_header_bytes[2],
+            0,
+        ]);
+        let block_type = (block_header >> 1) & 0x03;
+        let block_size = block_header >> 3;
+        if block_type == BLOCK_TYPE_RESERVED || block_size > ZSTD_MAX_BLOCK_BYTES {
+            return Err(Error::corrupt(format!(
+                "{what} has an invalid block in the frame at offset {frame_start}"
+            )));
+        }
+        block_position = block_position
+            .checked_add(3)
+            .and_then(|position| {
+                position.checked_add(if block_type == BLOCK_TYPE_RLE {
+                    1
+                } else {
+                    u64::from(block_size)
+                })
+            })
+            .ok_or_else(|| Error::corrupt("a compressed block overflows the file offset"))?;
+        if block_header & 1 != 0 {
+            break;
+        }
+    }
+    if descriptor & 0x04 != 0 {
+        block_position = block_position
+            .checked_add(4)
+            .ok_or_else(|| Error::corrupt("a frame checksum overflows the file offset"))?;
+    }
+    if block_position > region_end {
+        return Err(Error::corrupt(format!(
+            "{what} has a frame at offset {frame_start} that runs past its region"
+        )));
+    }
+    Ok(block_position)
+}
+
+/// Decompress at most `wanted` bytes from the start of a compressed frame. A
+/// truncated compressed prefix is expected here: callers only need a frame's
+/// head to decide whether to read its full body.
+fn decompress_head(compressed: &[u8], wanted: usize, what: &str) -> Result<Vec<u8>> {
+    if wanted == 0 {
+        return Ok(Vec::new());
+    }
+    let mut decoder = zstd::stream::read::Decoder::new(compressed).map_err(|error| {
+        Error::corrupt(format!("{what} frame head could not be opened: {error}"))
+    })?;
+    let mut output = Vec::with_capacity(wanted.min(4096));
+    let mut buffer = [0u8; 4096];
+    while output.len() < wanted {
+        let take = (wanted - output.len()).min(buffer.len());
+        match decoder.read(&mut buffer[..take]) {
+            Ok(0) => break,
+            Ok(read) => output.extend_from_slice(&buffer[..read]),
+            Err(error) if error.kind() == std::io::ErrorKind::UnexpectedEof => break,
+            Err(error) => {
+                return Err(Error::corrupt(format!(
+                    "{what} frame head could not be decompressed: {error}"
+                )));
+            }
+        }
+    }
+    Ok(output)
+}
+
 fn decompress_frame(
     compressed: &[u8],
     expected_size: Option<usize>,
@@ -781,6 +1146,33 @@ mod tests {
         [0x02, 0x01, b'f', b'm', b'f', b'.', 0x08, 0x00, 0x00];
 
     fn build_save(top: &[(&str, &[u8])], group: &[(&str, &[u8])]) -> Vec<u8> {
+        build_save_with_hidden(top, &[], group)
+    }
+
+    fn append_listed(
+        frames: &mut Vec<u8>,
+        entries: &mut Vec<DirectoryEntry>,
+        name: &str,
+        data: &[u8],
+    ) {
+        let compressed = compress_frame(data, 3).unwrap();
+        let frame_offset = HEADER_SIZE + frames.len() as u64;
+        frames.extend_from_slice(&compressed);
+        entries.push(DirectoryEntry {
+            name: name.to_owned(),
+            extension: ".dat".to_owned(),
+            frame_offset,
+            compressed_size: compressed.len() as u64,
+            decompressed_size: data.len() as u64,
+            trailing_values: [0xffff_fff1_886e_0900, 0xffff_fff1_886e_0900],
+        });
+    }
+
+    fn build_save_with_hidden(
+        top: &[(&str, &[u8])],
+        hidden: &[&[u8]],
+        group: &[(&str, &[u8])],
+    ) -> Vec<u8> {
         let mut header = [0u8; HEADER_SIZE as usize];
         header[..6].copy_from_slice(FILE_MAGIC);
         header[6..9].copy_from_slice(&[0x08, 0, 0]);
@@ -790,24 +1182,15 @@ mod tests {
         let mut frames = Vec::new();
         let mut top_entries = Vec::new();
         let mut group_entries = Vec::new();
-        let mut append = |name: &str, data: &[u8], entries: &mut Vec<DirectoryEntry>| {
-            let compressed = compress_frame(data, 3).unwrap();
-            let frame_offset = HEADER_SIZE + frames.len() as u64;
-            frames.extend_from_slice(&compressed);
-            entries.push(DirectoryEntry {
-                name: name.to_owned(),
-                extension: ".dat".to_owned(),
-                frame_offset,
-                compressed_size: compressed.len() as u64,
-                decompressed_size: data.len() as u64,
-                trailing_values: [0xffff_fff1_886e_0900, 0xffff_fff1_886e_0900],
-            });
-        };
         for (name, data) in top {
-            append(name, data, &mut top_entries);
+            append_listed(&mut frames, &mut top_entries, name, data);
+        }
+        for data in hidden {
+            let compressed = compress_frame(data, 3).unwrap();
+            frames.extend_from_slice(&compressed);
         }
         for (name, data) in group {
-            append(name, data, &mut group_entries);
+            append_listed(&mut frames, &mut group_entries, name, data);
         }
 
         let payload = encode_directory(&SaveDirectory {
@@ -962,5 +1345,69 @@ mod tests {
             .write_with_replacements(&[("game_db", b"other")], &source, 3)
             .unwrap_err();
         assert!(error.to_string().contains("refusing to overwrite"));
+    }
+
+    #[test]
+    fn finds_and_reads_a_frame_in_an_unlisted_region() {
+        let directory = tempdir().unwrap();
+        let source = directory.path().join("hidden.fm");
+        let hidden = b"season statistics section body";
+        std::fs::write(
+            &source,
+            build_save_with_hidden(
+                &[("game_db", b"database"), ("game_info", b"info")],
+                &[hidden],
+                &[],
+            ),
+        )
+        .unwrap();
+
+        let save = SaveFile::open(&source).unwrap();
+        assert!(save.region("game_db").unwrap().entry.is_some());
+        let region = save.region("unlisted_after_game_info").unwrap();
+        assert!(region.entry.is_none());
+        assert!(region.start < region.end);
+
+        let spans = save.walk_region_frames("unlisted_after_game_info").unwrap();
+        assert_eq!(spans.len(), 1);
+        assert!(!spans[0].skippable);
+
+        let heads = save
+            .region_frame_heads("unlisted_after_game_info", 11)
+            .unwrap();
+        assert_eq!(heads.len(), 1);
+        assert_eq!(heads[0].0, spans[0]);
+        assert_eq!(heads[0].1, &hidden[..11]);
+        assert_eq!(
+            save.read_region_frame("unlisted_after_game_info", heads[0].0)
+                .unwrap(),
+            hidden
+        );
+    }
+
+    #[test]
+    fn rejects_corrupt_bytes_in_an_unlisted_region() {
+        let directory = tempdir().unwrap();
+        let source = directory.path().join("corrupt.fm");
+        std::fs::write(
+            &source,
+            build_save_with_hidden(&[("game_db", b"database")], &[b"not zstd"], &[]),
+        )
+        .unwrap();
+
+        // Replace the first byte of the hidden frame with a byte that cannot be a
+        // zstd frame magic. The listed section ends before it, so the gap is still
+        // structurally valid; only walking the gap should fail.
+        let mut bytes = std::fs::read(&source).unwrap();
+        let save = SaveFile::open(&source).unwrap();
+        let region = save.region("unlisted_after_game_db").unwrap();
+        bytes[region.start as usize] = 0x7f;
+        std::fs::write(&source, bytes).unwrap();
+
+        let reopened = SaveFile::open(&source).unwrap();
+        let error = reopened
+            .walk_region_frames("unlisted_after_game_db")
+            .unwrap_err();
+        assert!(error.to_string().contains("expected a compressed frame"));
     }
 }

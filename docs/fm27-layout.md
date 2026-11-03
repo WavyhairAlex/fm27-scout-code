@@ -207,6 +207,43 @@ constants           -8 7, -6 0, -4 7, -1 FF, +12 0, +15 1,
 
 The database id is the key for `shared/competition-names.csv`; the save stores no names.
 
+## Season statistics frame
+
+The season-statistics section is not listed in the directory. It is one frame in the
+unlisted gap after `non_pl_hist_ls`:
+
+```text
+region            unlisted_after_non_pl_hist_ls
+section header    03 01 74 61 64 2e 0f 00
+```
+
+Record layout:
+
+```text
+record marker     01
+player key        +1   u32 (pindex + 1)
+header            +5   16 bytes
+own slots         +21  8 slots
+block             +?   20 bytes
+other team count  u32 (max 16)
+other team row    lead 1 byte, team id u32, 6 slots
+rating item count u32 (max 256)
+rating items      count × 8 bytes
+form entries      count byte (max 16)
+form entries      count × 3 bytes
+```
+
+A slot is `00` when absent or a 155-byte line starting with `01 07`. The list ends with
+`00` followed by exactly 16 footer bytes.
+
+Line fields use the FM26 offsets, with `line_bytes = 155` for FM27. Goalkeepers and outfield
+players share offsets 35, 37, 69/71, 83 and 95; natural position GK selects the goalkeeper
+set. `distance_km == 0` marks the whole advanced-stat block missing (key passes, progressive
+passes, interceptions, headers, clearances, blocks, sprints, possession, saves, xGP).
+
+Rust implementation: `crates/fm27-core/src/season_stats.rs`; container region support:
+`crates/fm27-core/src/container.rs`.
+
 ## Section schemas observed on the reference save
 
 `game_db` 4000, `game_info` 47, `save_game_summary` 31, `contract_man` 14,

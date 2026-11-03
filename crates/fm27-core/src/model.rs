@@ -449,6 +449,7 @@ pub struct ParseReport {
     pub save: SaveSummary,
     pub players: usize,
     pub clubs: usize,
+    pub season_stats: usize,
     pub contracts: usize,
     pub competitions: usize,
     pub competition_stages: usize,
