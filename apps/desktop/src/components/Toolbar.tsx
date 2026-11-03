@@ -36,6 +36,8 @@ export function Toolbar() {
   const setSidebarOpen = useAppStore((state) => state.setSidebarOpen);
   const filters = useAppStore((state) => state.filters);
   const patchFilters = useAppStore((state) => state.patchFilters);
+  const clubFilters = useAppStore((state) => state.clubFilters);
+  const patchClubFilters = useAppStore((state) => state.patchClubFilters);
   const hiddenEnabled = useAppStore((state) => state.hiddenEnabled);
   const setHiddenEnabled = useAppStore((state) => state.setHiddenEnabled);
   const compareUids = useAppStore((state) => state.compareUids);
@@ -50,13 +52,14 @@ export function Toolbar() {
   const { chooseAndOpen, openPath } = useOpenSave();
   const { data: saves = [] } = useSaves();
   const [saveMenuOpen, setSaveMenuOpen] = useState(false);
-  const [search, setSearch] = useState(filters.search);
+  const searchValue = viewMode === "clubs" ? clubFilters.search : filters.search;
+  const [search, setSearch] = useState(searchValue);
   const saveMenuRef = useRef<HTMLDivElement>(null);
   const debounceRef = useRef<number | null>(null);
 
   useEffect(() => {
-    setSearch(filters.search);
-  }, [filters.search]);
+    setSearch(searchValue);
+  }, [searchValue]);
 
   useEffect(() => {
     if (!saveMenuOpen) return;
@@ -71,7 +74,8 @@ export function Toolbar() {
     setSearch(value);
     if (debounceRef.current) window.clearTimeout(debounceRef.current);
     debounceRef.current = window.setTimeout(() => {
-      patchFilters({ search: value });
+      if (viewMode === "clubs") patchClubFilters({ search: value });
+      else patchFilters({ search: value });
     }, 180);
   };
 
@@ -205,37 +209,39 @@ export function Toolbar() {
         </div>
       </div>
 
-      {viewMode === "players" && (
-        <div className="no-drag flex min-w-0 flex-1 items-center justify-center">
-          <div className="relative w-full max-w-[560px]">
-            <Search
-              size={14}
-              className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-[var(--muted)]"
-            />
-            <Input
-              id="global-search"
-              value={search}
-              onChange={(event) => updateSearch(event.target.value)}
-              placeholder={t("toolbar.searchPlaceholder")}
-              className="h-8 pl-8 pr-16"
-            />
-            <div className="pointer-events-none absolute right-2 top-1/2 flex -translate-y-1/2 items-center gap-1">
-              {search ? (
-                <button
-                  type="button"
-                  className="pointer-events-auto rounded p-0.5 text-[var(--muted)] hover:text-[var(--ink)]"
-                  onClick={() => updateSearch("")}
-                  aria-label={t("toolbar.clearSearch")}
-                >
-                  <X size={12} />
-                </button>
-              ) : (
-                <span className="kbd">⌘F</span>
-              )}
-            </div>
+      <div className="no-drag flex min-w-0 flex-1 items-center justify-center">
+        <div className="relative w-full max-w-[560px]">
+          <Search
+            size={14}
+            className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-[var(--muted)]"
+          />
+          <Input
+            id={viewMode === "clubs" ? "club-search" : "global-search"}
+            value={search}
+            onChange={(event) => updateSearch(event.target.value)}
+            placeholder={
+              viewMode === "clubs"
+                ? t("clubs.searchPlaceholder")
+                : t("toolbar.searchPlaceholder")
+            }
+            className="h-8 pl-8 pr-16"
+          />
+          <div className="pointer-events-none absolute right-2 top-1/2 flex -translate-y-1/2 items-center gap-1">
+            {search ? (
+              <button
+                type="button"
+                className="pointer-events-auto rounded p-0.5 text-[var(--muted)] hover:text-[var(--ink)]"
+                onClick={() => updateSearch("")}
+                aria-label={t("toolbar.clearSearch")}
+              >
+                <X size={12} />
+              </button>
+            ) : (
+              <span className="kbd">⌘F</span>
+            )}
           </div>
         </div>
-      )}
+      </div>
 
       <div className="no-drag ml-auto flex shrink-0 items-center gap-1">
         {Object.keys(pendingEdits).length > 0 && (

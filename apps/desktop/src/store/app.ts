@@ -332,7 +332,8 @@ export const useAppStore = create<AppState>((set, get) => ({
       };
     }),
   setClubPage: (clubPage) => set({ clubPage }),
-  setSelectedClubUid: (selectedClubUid) => set({ selectedClubUid }),
+  setSelectedClubUid: (selectedClubUid) =>
+    set({ selectedClubUid, inspectorOpen: selectedClubUid != null }),
   setClubEditOpen: (clubEditOpen) => set({ clubEditOpen }),
   saveView: (name) => {
     const trimmed = name.trim();

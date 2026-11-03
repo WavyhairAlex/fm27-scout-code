@@ -59,7 +59,7 @@ export function ClubInspector() {
 
   if (selectedClubUid == null) {
     return (
-      <aside className="flex h-full w-[320px] shrink-0 flex-col border-l border-[var(--line)] bg-[var(--surface)] xl:w-[340px] 2xl:w-[390px]">
+      <aside className="flex h-full w-[372px] shrink-0 flex-col border-l border-[var(--line)] bg-[var(--surface)]">
         <EmptyState
           icon={<Shield size={20} />}
           title={t("clubs.noSelection")}
@@ -71,7 +71,7 @@ export function ClubInspector() {
 
   if (isLoading || !detail) {
     return (
-      <aside className="flex h-full w-[320px] shrink-0 flex-col border-l border-[var(--line)] bg-[var(--surface)] p-4 xl:w-[340px] 2xl:w-[390px]">
+      <aside className="flex h-full w-[372px] shrink-0 flex-col border-l border-[var(--line)] bg-[var(--surface)] p-4">
         <div className="h-20 animate-pulse rounded-xl bg-[var(--surface-2)]" />
         <div className="mt-3 h-6 w-2/3 animate-pulse rounded bg-[var(--surface-2)]" />
         <div className="mt-6 space-y-2">
@@ -88,7 +88,7 @@ export function ClubInspector() {
 
   return (
     <aside
-      className="flex h-full w-[320px] shrink-0 flex-col border-l border-[var(--line)] bg-[var(--surface)] xl:w-[340px] 2xl:w-[390px]"
+      className="flex h-full w-[372px] shrink-0 flex-col border-l border-[var(--line)] bg-[var(--surface)]"
       style={tabBarWidth > 0 ? { minWidth: tabBarWidth } : undefined}
     >
       <div className="flex items-center justify-between border-b border-[var(--line)] px-3 py-2">

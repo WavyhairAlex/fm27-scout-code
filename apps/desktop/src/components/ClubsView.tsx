@@ -1,15 +1,17 @@
-import { ClubFilterBar } from "./ClubFilterBar";
+import { ClubFilterSidebar } from "./ClubFilterSidebar";
 import { ClubInspector } from "./ClubInspector";
 import { ClubTable } from "./ClubTable";
+import { useAppStore } from "@/store/app";
 
 export function ClubsView() {
+  const sidebarOpen = useAppStore((state) => state.sidebarOpen);
+  const inspectorOpen = useAppStore((state) => state.inspectorOpen);
+
   return (
-    <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
-      <ClubFilterBar />
-      <div className="flex min-h-0 min-w-0 flex-1 overflow-hidden">
-        <ClubTable />
-        <ClubInspector />
-      </div>
-    </div>
+    <>
+      {sidebarOpen && <ClubFilterSidebar />}
+      <ClubTable />
+      {inspectorOpen && <ClubInspector />}
+    </>
   );
 }

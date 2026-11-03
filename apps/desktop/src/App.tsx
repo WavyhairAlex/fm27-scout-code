@@ -32,7 +32,9 @@ export default function App() {
   const sidebarOpen = useAppStore((state) => state.sidebarOpen);
   const inspectorOpen = useAppStore((state) => state.inspectorOpen);
   const selectedUid = useAppStore((state) => state.selectedUid);
+  const selectedClubUid = useAppStore((state) => state.selectedClubUid);
   const setSelectedUid = useAppStore((state) => state.setSelectedUid);
+  const setSelectedClubUid = useAppStore((state) => state.setSelectedClubUid);
   const setExportOpen = useAppStore((state) => state.setExportOpen);
   const setEditOpen = useAppStore((state) => state.setEditOpen);
   const setPendingOpen = useAppStore((state) => state.setPendingOpen);
@@ -105,6 +107,7 @@ export default function App() {
         else if (editOpen) setEditOpen(false);
         else if (pendingOpen) setPendingOpen(false);
         else if (helpOpen) setHelpOpen(false);
+        else if (viewMode === "clubs" && selectedClubUid != null) setSelectedClubUid(null);
         else if (selectedUid != null) setSelectedUid(null);
       }
     };
@@ -117,12 +120,14 @@ export default function App() {
     exportOpen,
     helpOpen,
     pendingOpen,
+    selectedClubUid,
     selectedUid,
     setCompareOpen,
     setEditOpen,
     setExportOpen,
     setPendingOpen,
     setHelpOpen,
+    setSelectedClubUid,
     setSelectedUid,
     setSettingsOpen,
     settingsOpen,
