@@ -639,6 +639,10 @@ type StatsView = {
   minMinutes: number;
   maxFee: number | null;
   maxWage: number | null;
+  contractBefore?: string;
+  market?: string;
+  minConfidence?: number | null;
+  injuryFilter?: "all" | "fit" | "noHistory";
   includeUnknownFee: boolean;
 };
 
@@ -677,6 +681,10 @@ function StatsMoneyballPanel({
   const [minMinutes, setMinMinutes] = useState(900);
   const [maxFee, setMaxFee] = useState<number | null>(null);
   const [maxWage, setMaxWage] = useState<number | null>(null);
+  const [contractBefore, setContractBefore] = useState("");
+  const [market, setMarket] = useState("all");
+  const [minConfidence, setMinConfidence] = useState<number | null>(null);
+  const [injuryFilter, setInjuryFilter] = useState<"all" | "fit" | "noHistory">("all");
   const [includeUnknownFee, setIncludeUnknownFee] = useState(false);
   const [page, setPage] = useState(0);
   const [sortBy, setSortBy] = useState("score");
@@ -696,6 +704,10 @@ function StatsMoneyballPanel({
     minMinutes,
     maxFee,
     maxWage,
+    contractBefore,
+    market,
+    minConfidence,
+    injuryFilter,
     includeUnknownFee,
     sortBy,
     sortDir,
@@ -716,6 +728,11 @@ function StatsMoneyballPanel({
             min_minutes: minMinutes,
             max_fee: maxFee,
             max_wage: maxWage,
+            contract_end_before: contractBefore || null,
+            listings: market === "all" ? [] : [market],
+            min_confidence: minConfidence,
+            exclude_injured: injuryFilter !== "all",
+            exclude_injury_history: injuryFilter === "noHistory",
             include_unknown_fee: includeUnknownFee,
             sort_by: sortBy,
             sort_dir: sortDir,
@@ -732,6 +749,10 @@ function StatsMoneyballPanel({
       minMinutes,
       maxFee,
       maxWage,
+      contractBefore,
+      market,
+      minConfidence,
+      injuryFilter,
       includeUnknownFee,
       sortBy,
       sortDir,
@@ -762,6 +783,10 @@ function StatsMoneyballPanel({
     setMinMinutes(900);
     setMaxFee(null);
     setMaxWage(null);
+    setContractBefore("");
+    setMarket("all");
+    setMinConfidence(null);
+    setInjuryFilter("all");
     setIncludeUnknownFee(false);
     setSortBy("score");
     setSortDir("desc");
@@ -773,6 +798,10 @@ function StatsMoneyballPanel({
     setPosition("");
     setLeague("");
     setMinMinutes(900);
+    setContractBefore("");
+    setMarket("all");
+    setMinConfidence(null);
+    setInjuryFilter("all");
     setIncludeUnknownFee(false);
     setSortBy("score");
     setSortDir("desc");
@@ -809,6 +838,10 @@ function StatsMoneyballPanel({
       minMinutes,
       maxFee,
       maxWage,
+      contractBefore,
+      market,
+      minConfidence,
+      injuryFilter,
       includeUnknownFee,
     };
     const next = [...savedViews, view].slice(-20);
@@ -827,6 +860,10 @@ function StatsMoneyballPanel({
     setMinMinutes(view.minMinutes);
     setMaxFee(view.maxFee);
     setMaxWage(view.maxWage);
+    setContractBefore(view.contractBefore ?? "");
+    setMarket(view.market ?? "all");
+    setMinConfidence(view.minConfidence ?? null);
+    setInjuryFilter(view.injuryFilter ?? "all");
     setIncludeUnknownFee(view.includeUnknownFee);
     setSortBy("score");
     setSortDir("desc");
@@ -889,7 +926,7 @@ function StatsMoneyballPanel({
             max={50}
             onChange={setMaxAge}
           />
-          <NumberField
+          <DebouncedNumberField
             label={t("analysis.stats.minMinutes")}
             value={minMinutes}
             min={0}
@@ -922,6 +959,56 @@ function StatsMoneyballPanel({
               className="h-7 w-[96px] font-mono text-[10px]"
             />
           </label>
+          <label className="space-y-1">
+            <span className="block text-[9px] uppercase tracking-wider text-[var(--muted)]">
+              {t("analysis.stats.contractBefore")}
+            </span>
+            <Input
+              type="date"
+              value={contractBefore}
+              onChange={(event) => setContractBefore(event.target.value)}
+              className="h-7 w-[142px] text-[10px]"
+            />
+          </label>
+          <ValueFilter label={t("analysis.stats.market")} className="w-[150px]">
+            <Select
+              value={market}
+              onChange={(event) => setMarket(event.target.value)}
+              className="h-7 text-[10px]"
+            >
+              <option value="all">{t("analysis.stats.marketAll")}</option>
+              <option value="sale">{t("analysis.stats.marketSale")}</option>
+              <option value="loan">{t("analysis.stats.marketLoan")}</option>
+              <option value="free">{t("analysis.stats.marketFree")}</option>
+            </Select>
+          </ValueFilter>
+          <ValueFilter label={t("analysis.stats.injury")} className="w-[150px]">
+            <Select
+              value={injuryFilter}
+              onChange={(event) =>
+                setInjuryFilter(event.target.value as "all" | "fit" | "noHistory")
+              }
+              className="h-7 text-[10px]"
+            >
+              <option value="all">{t("analysis.stats.injuryAll")}</option>
+              <option value="fit">{t("analysis.stats.injuryFit")}</option>
+              <option value="noHistory">{t("analysis.stats.injuryNoHistory")}</option>
+            </Select>
+          </ValueFilter>
+          <ValueFilter label={t("analysis.stats.minConfidence")} className="w-[132px]">
+            <Select
+              value={minConfidence == null ? "" : String(minConfidence)}
+              onChange={(event) =>
+                setMinConfidence(event.target.value ? Number(event.target.value) : null)
+              }
+              className="h-7 text-[10px]"
+            >
+              <option value="">{t("analysis.stats.confidenceAny")}</option>
+              <option value="0.7">≥ 70%</option>
+              <option value="0.85">≥ 85%</option>
+              <option value="0.9">≥ 90%</option>
+            </Select>
+          </ValueFilter>
           <label className="flex h-7 items-center gap-1.5 text-[10px] text-[var(--muted)]">
             <input
               type="checkbox"
@@ -1373,6 +1460,9 @@ function ValueFinderPanel({
   const [maxFee, setMaxFee] = useState<number | null>(null);
   const [maxWage, setMaxWage] = useState<number | null>(null);
   const [market, setMarket] = useState("all");
+  const [contractBefore, setContractBefore] = useState("");
+  const [minConfidence, setMinConfidence] = useState<number | null>(null);
+  const [injuryFilter, setInjuryFilter] = useState<"all" | "fit" | "noHistory">("all");
   const [includeUnknownFee, setIncludeUnknownFee] = useState(false);
   const [page, setPage] = useState(0);
   const [sortBy, setSortBy] = useState("score");
@@ -1390,6 +1480,9 @@ function ValueFinderPanel({
     maxFee,
     maxWage,
     market,
+    contractBefore,
+    minConfidence,
+    injuryFilter,
     includeUnknownFee,
     sortBy,
     sortDir,
@@ -1408,7 +1501,11 @@ function ValueFinderPanel({
             role_min: minRole,
             max_fee: maxFee,
             max_wage: maxWage,
+            contract_end_before: contractBefore || null,
             listings: market === "all" ? [] : [market],
+            min_confidence: minConfidence,
+            exclude_injured: injuryFilter !== "all",
+            exclude_injury_history: injuryFilter === "noHistory",
             include_unknown_fee: includeUnknownFee,
             sort_by: sortBy,
             sort_dir: sortDir,
@@ -1425,6 +1522,9 @@ function ValueFinderPanel({
       maxFee,
       maxWage,
       market,
+      contractBefore,
+      minConfidence,
+      injuryFilter,
       includeUnknownFee,
       sortBy,
       sortDir,
@@ -1455,6 +1555,9 @@ function ValueFinderPanel({
     setMaxFee(null);
     setMaxWage(null);
     setMarket("all");
+    setContractBefore("");
+    setMinConfidence(null);
+    setInjuryFilter("all");
     setIncludeUnknownFee(false);
     setSortBy("score");
     setSortDir("desc");
@@ -1561,6 +1664,44 @@ function ValueFinderPanel({
               <option value="sale">{t("analysis.value.marketSale")}</option>
               <option value="loan">{t("analysis.value.marketLoan")}</option>
               <option value="free">{t("analysis.value.marketFree")}</option>
+            </Select>
+          </ValueFilter>
+          <label className="space-y-1">
+            <span className="block text-[9px] uppercase tracking-wider text-[var(--muted)]">
+              {t("analysis.value.contractBefore")}
+            </span>
+            <Input
+              type="date"
+              value={contractBefore}
+              onChange={(event) => setContractBefore(event.target.value)}
+              className="h-7 w-[142px] text-[10px]"
+            />
+          </label>
+          <ValueFilter label={t("analysis.value.injury")} className="w-[150px]">
+            <Select
+              value={injuryFilter}
+              onChange={(event) =>
+                setInjuryFilter(event.target.value as "all" | "fit" | "noHistory")
+              }
+              className="h-7 text-[10px]"
+            >
+              <option value="all">{t("analysis.value.injuryAll")}</option>
+              <option value="fit">{t("analysis.value.injuryFit")}</option>
+              <option value="noHistory">{t("analysis.value.injuryNoHistory")}</option>
+            </Select>
+          </ValueFilter>
+          <ValueFilter label={t("analysis.value.minConfidence")} className="w-[132px]">
+            <Select
+              value={minConfidence == null ? "" : String(minConfidence)}
+              onChange={(event) =>
+                setMinConfidence(event.target.value ? Number(event.target.value) : null)
+              }
+              className="h-7 text-[10px]"
+            >
+              <option value="">{t("analysis.value.confidenceAny")}</option>
+              <option value="0.7">≥ 70%</option>
+              <option value="0.85">≥ 85%</option>
+              <option value="0.9">≥ 90%</option>
             </Select>
           </ValueFilter>
           <label className="flex h-7 items-center gap-1.5 text-[10px] text-[var(--muted)]">
@@ -1958,6 +2099,28 @@ function NumberField({
       />
     </label>
   );
+}
+
+function DebouncedNumberField(props: {
+  label: string;
+  value: number;
+  min: number;
+  max: number;
+  onChange: (value: number) => void;
+}) {
+  const [draft, setDraft] = useState(props.value);
+
+  useEffect(() => {
+    setDraft(props.value);
+  }, [props.value]);
+
+  useEffect(() => {
+    if (draft === props.value) return;
+    const timer = window.setTimeout(() => props.onChange(draft), 350);
+    return () => window.clearTimeout(timer);
+  }, [draft, props.value, props.onChange]);
+
+  return <NumberField {...props} value={draft} onChange={setDraft} />;
 }
 
 function LoadingBlock() {

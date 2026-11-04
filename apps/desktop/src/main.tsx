@@ -2,7 +2,10 @@ import React from "react";
 import ReactDOM from "react-dom/client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import App from "./App";
+import { installPerfDiagnostics } from "./lib/perf";
 import "./styles.css";
+
+installPerfDiagnostics();
 
 // Suppress the webview context menu on non-editable content so the UI behaves
 // like a native app. Text fields keep their menu for cut/copy/paste.

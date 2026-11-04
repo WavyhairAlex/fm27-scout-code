@@ -3,6 +3,7 @@
 //! The core is platform independent and shared by the CLI and the Tauri app.
 
 pub mod ability;
+mod bytes;
 pub mod club_editor;
 pub mod clubs;
 pub mod competitions;

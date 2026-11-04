@@ -6,6 +6,7 @@
 
 use std::collections::{HashMap, HashSet};
 
+use crate::bytes::find_bytes;
 use crate::clubs::ClubIndex;
 use crate::layout::{MISSING_U32, StadiumLayout, decode_date, read_u8, read_u16, read_u32};
 use crate::model::Stadium;
@@ -14,11 +15,14 @@ use crate::model::Stadium;
 pub struct StadiumIndex {
     pub stadiums: Vec<Stadium>,
     pub row_offsets: HashMap<u32, usize>,
+    position_by_uid: HashMap<u32, usize>,
 }
 
 impl StadiumIndex {
     pub fn stadium(&self, uid: u32) -> Option<&Stadium> {
-        self.stadiums.iter().find(|stadium| stadium.uid == uid)
+        self.position_by_uid
+            .get(&uid)
+            .and_then(|position| self.stadiums.get(*position))
     }
 
     pub fn row_offset(&self, uid: u32) -> Option<usize> {
@@ -34,6 +38,7 @@ pub fn read_stadium_index(game_db: &[u8], club_index: &ClubIndex) -> StadiumInde
     };
     let mut stadiums = Vec::new();
     let mut row_offsets = HashMap::new();
+    let mut position_by_uid = HashMap::new();
     let mut seen = HashSet::new();
     let mut row_offset = head;
     let mut ordinal = 1u32;
@@ -52,6 +57,7 @@ pub fn read_stadium_index(game_db: &[u8], club_index: &ClubIndex) -> StadiumInde
             .and_then(|uid| club_index.club(uid))
             .map(|club| club.name.clone());
         row_offsets.insert(stadium.uid, row_offset);
+        position_by_uid.insert(stadium.uid, stadiums.len());
         stadiums.push(stadium);
         row_offset += row_length;
         ordinal += 1;
@@ -59,6 +65,7 @@ pub fn read_stadium_index(game_db: &[u8], club_index: &ClubIndex) -> StadiumInde
     StadiumIndex {
         stadiums,
         row_offsets,
+        position_by_uid,
     }
 }
 
@@ -178,16 +185,4 @@ fn reached_table_end(game_db: &[u8], row_offset: usize, expected_ordinal: u32) -
         && uid_copy == uid
         && game_db.get(marker_start..marker_end) == Some(&StadiumLayout::CLOSING_MARKER)
         && read_u32(game_db, uid_start) == Some(uid)
-}
-
-fn find_bytes(haystack: &[u8], needle: &[u8]) -> Option<usize> {
-    if needle.is_empty() {
-        return Some(0);
-    }
-    if haystack.len() < needle.len() {
-        return None;
-    }
-    haystack
-        .windows(needle.len())
-        .position(|window| window == needle)
 }

@@ -1,6 +1,9 @@
+use std::borrow::Cow;
 use std::collections::BTreeMap;
+use std::fmt;
 
 use chrono::{Datelike, NaiveDate};
+use serde::de::{MapAccess, Visitor};
 use serde::{Deserialize, Serialize, Serializer, ser::SerializeMap};
 
 use crate::layout::{ATTRIBUTE_KEYS, POSITION_KEYS};
@@ -12,6 +15,14 @@ pub const GENERATED_UNIQUE_ID_MINIMUM: u32 = 2_002_000_000;
 
 pub fn is_generated_unique_id(unique_id: Option<u32>) -> bool {
     unique_id.is_some_and(|id| id >= GENERATED_UNIQUE_ID_MINIMUM)
+}
+
+pub fn attribute_index(key: &str) -> Option<usize> {
+    ATTRIBUTE_KEYS.iter().position(|name| *name == key)
+}
+
+pub fn position_index(key: &str) -> Option<usize> {
+    POSITION_KEYS.iter().position(|name| *name == key)
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -27,10 +38,7 @@ impl Default for Attributes {
 
 impl Attributes {
     pub fn get(&self, key: &str) -> Option<u8> {
-        ATTRIBUTE_KEYS
-            .iter()
-            .position(|name| *name == key)
-            .map(|index| self.values[index])
+        attribute_index(key).map(|index| self.values[index])
     }
 
     pub fn to_map(&self) -> BTreeMap<&'static str, u8> {
@@ -43,15 +51,36 @@ impl Attributes {
 }
 
 impl<'de> Deserialize<'de> for Attributes {
-    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let map = BTreeMap::<String, u8>::deserialize(deserializer)?;
-        let mut values = [0u8; 52];
-        for (index, key) in ATTRIBUTE_KEYS.iter().enumerate() {
-            if let Some(value) = map.get(*key) {
-                values[index] = *value;
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        struct AttributesVisitor;
+
+        impl<'de> Visitor<'de> for AttributesVisitor {
+            type Value = Attributes;
+
+            fn expecting(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+                formatter.write_str("a map of attribute names to values")
+            }
+
+            fn visit_map<A>(self, mut map: A) -> Result<Self::Value, A::Error>
+            where
+                A: MapAccess<'de>,
+            {
+                let mut values = [0u8; 52];
+                while let Some(key) = map.next_key::<Cow<'de, str>>()? {
+                    let value = map.next_value::<u8>()?;
+                    if let Some(index) = attribute_index(key.as_ref()) {
+                        // Duplicate keys keep the last value, matching serde's map behavior.
+                        values[index] = value;
+                    }
+                }
+                Ok(Attributes { values })
             }
         }
-        Ok(Self { values })
+
+        deserializer.deserialize_map(AttributesVisitor)
     }
 }
 
@@ -80,15 +109,35 @@ impl Positions {
 }
 
 impl<'de> Deserialize<'de> for Positions {
-    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let map = BTreeMap::<String, u8>::deserialize(deserializer)?;
-        let mut values = [0u8; 15];
-        for (index, key) in POSITION_KEYS.iter().enumerate() {
-            if let Some(value) = map.get(*key) {
-                values[index] = *value;
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        struct PositionsVisitor;
+
+        impl<'de> Visitor<'de> for PositionsVisitor {
+            type Value = Positions;
+
+            fn expecting(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+                formatter.write_str("a map of position names to values")
+            }
+
+            fn visit_map<A>(self, mut map: A) -> Result<Self::Value, A::Error>
+            where
+                A: MapAccess<'de>,
+            {
+                let mut values = [0u8; 15];
+                while let Some(key) = map.next_key::<Cow<'de, str>>()? {
+                    let value = map.next_value::<u8>()?;
+                    if let Some(index) = position_index(key.as_ref()) {
+                        values[index] = value;
+                    }
+                }
+                Ok(Positions { values })
             }
         }
-        Ok(Self { values })
+
+        deserializer.deserialize_map(PositionsVisitor)
     }
 }
 
@@ -304,20 +353,6 @@ impl Player {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn generated_unique_ids_start_at_the_game_allocation_range() {
-        assert!(!is_generated_unique_id(None));
-        assert!(!is_generated_unique_id(Some(
-            GENERATED_UNIQUE_ID_MINIMUM - 1
-        )));
-        assert!(is_generated_unique_id(Some(GENERATED_UNIQUE_ID_MINIMUM)));
-    }
-}
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Club {
     pub uid: u32,
@@ -465,4 +500,70 @@ pub struct ParseReport {
     pub players_with_contract: usize,
     pub elapsed_ms: u128,
     pub warnings: Vec<String>,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn generated_unique_ids_start_at_the_game_allocation_range() {
+        assert!(!is_generated_unique_id(None));
+        assert!(!is_generated_unique_id(Some(
+            GENERATED_UNIQUE_ID_MINIMUM - 1
+        )));
+        assert!(is_generated_unique_id(Some(GENERATED_UNIQUE_ID_MINIMUM)));
+    }
+
+    #[test]
+    fn attributes_deserialize_without_intermediate_owned_map() {
+        let attributes: Attributes =
+            serde_json::from_str(r#"{"crossing":12,"crossing":13,"unknown":99,"flair":7}"#)
+                .expect("attributes");
+        assert_eq!(
+            attributes.values[attribute_index("crossing").expect("crossing")],
+            13
+        );
+        assert_eq!(
+            attributes.values[attribute_index("flair").expect("flair")],
+            7
+        );
+        assert_eq!(
+            attributes.values[attribute_index("finishing").expect("finishing")],
+            0
+        );
+    }
+
+    #[test]
+    fn attributes_still_reject_invalid_known_and_unknown_values() {
+        assert!(serde_json::from_str::<Attributes>(r#"{"crossing":300}"#).is_err());
+        assert!(serde_json::from_str::<Attributes>(r#"{"unknown":300}"#).is_err());
+    }
+
+    #[test]
+    fn positions_deserialize_with_last_value_winning() {
+        let positions: Positions =
+            serde_json::from_str(r#"{"gk":20,"gk":19,"unknown":99,"stc":17}"#).expect("positions");
+        assert_eq!(positions.values[position_index("gk").expect("gk")], 19);
+        assert_eq!(positions.values[position_index("stc").expect("stc")], 17);
+        assert_eq!(positions.values[position_index("dc").expect("dc")], 0);
+    }
+
+    #[test]
+    fn attribute_and_position_json_round_trip() {
+        let attributes = Attributes { values: [7; 52] };
+        let positions = Positions { values: [11; 15] };
+        assert_eq!(
+            serde_json::from_str::<Attributes>(&serde_json::to_string(&attributes).unwrap())
+                .unwrap()
+                .values,
+            attributes.values
+        );
+        assert_eq!(
+            serde_json::from_str::<Positions>(&serde_json::to_string(&positions).unwrap())
+                .unwrap()
+                .values,
+            positions.values
+        );
+    }
 }

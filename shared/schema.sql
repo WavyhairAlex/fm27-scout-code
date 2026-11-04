@@ -158,8 +158,7 @@ CREATE TABLE IF NOT EXISTS player_season_stats (
   FOREIGN KEY (save_id) REFERENCES saves(id) ON DELETE CASCADE
 );
 
-CREATE INDEX IF NOT EXISTS player_season_stats_player
-  ON player_season_stats(save_id, player_uid);
+-- (save_id, player_uid) is a prefix of the primary key and needs no second index.
 CREATE INDEX IF NOT EXISTS player_season_stats_minutes
   ON player_season_stats(save_id, kind, minutes);
 
@@ -325,8 +324,7 @@ CREATE TABLE IF NOT EXISTS club_finances (
   FOREIGN KEY (save_id) REFERENCES saves(id) ON DELETE CASCADE
 );
 
-CREATE INDEX IF NOT EXISTS club_finances_club
-  ON club_finances(save_id, club_uid, month);
+-- The primary key already covers (save_id, club_uid, month).
 
 CREATE TABLE IF NOT EXISTS stadiums (
   save_id         INTEGER NOT NULL,

@@ -9,6 +9,7 @@ use std::sync::OnceLock;
 
 use serde::{Deserialize, Serialize};
 
+use crate::bytes::find_bytes;
 use crate::error::{Error, Result};
 use crate::layout::{read_u8, read_u16, read_u32};
 
@@ -171,15 +172,6 @@ fn skip_count(
     }
     let end = cursor.checked_add(count_bytes + count.checked_mul(entry_bytes)?)?;
     (end <= game_db.len()).then_some(end)
-}
-
-fn find_bytes(haystack: &[u8], needle: &[u8]) -> Option<usize> {
-    if needle.is_empty() {
-        return Some(0);
-    }
-    haystack
-        .windows(needle.len())
-        .position(|window| window == needle)
 }
 
 fn names() -> &'static HashMap<u32, String> {

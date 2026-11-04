@@ -4,7 +4,7 @@
 //! caller hands the result to [`SaveFile::write_with_replacements`], which writes a
 //! new save file.
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::path::Path;
 
 use chrono::NaiveDate;
@@ -236,17 +236,18 @@ impl ClubEditRequest {
                 )));
             }
         }
+        let stadiums_by_uid: HashMap<u32, &crate::model::Stadium> = parsed
+            .stadiums
+            .iter()
+            .map(|stadium| (stadium.uid, stadium))
+            .collect();
         for edit in &self.stadiums {
-            let stadium = parsed
-                .stadiums
-                .iter()
-                .find(|stadium| stadium.uid == edit.stadium_uid)
-                .ok_or_else(|| {
-                    Error::parse(format!(
-                        "stadium uid {} was not found after editing",
-                        edit.stadium_uid
-                    ))
-                })?;
+            let stadium = stadiums_by_uid.get(&edit.stadium_uid).ok_or_else(|| {
+                Error::parse(format!(
+                    "stadium uid {} was not found after editing",
+                    edit.stadium_uid
+                ))
+            })?;
             if let Some(expected) = edit.all_seater_capacity
                 && stadium.all_seater_capacity != expected
             {
@@ -287,6 +288,7 @@ pub struct ClubEditor {
     game_db: Vec<u8>,
     club_index: ClubIndex,
     stadium_index: crate::stadiums::StadiumIndex,
+    facility_rows: Option<HashMap<u32, crate::facilities::FacilityRowOffsets>>,
     clock: NaiveDate,
     changes: Vec<EditChange>,
 }
@@ -319,6 +321,7 @@ impl ClubEditor {
             game_db,
             club_index,
             stadium_index,
+            facility_rows: None,
             clock,
             changes: Vec::new(),
         })
@@ -387,21 +390,27 @@ impl ClubEditor {
         if edit.is_empty() {
             return Ok(());
         }
-        let tracked: HashSet<u32> = read_club_finances(&self.game_db, &self.club_index, None)
-            .corporate_facilities
-            .into_keys()
-            .collect();
-        let row = crate::facilities::locate_facility_row(
-            &self.game_db,
-            &self.club_index,
-            club_uid,
-            &tracked,
-        )
-        .ok_or_else(|| {
-            Error::Unsupported(format!(
-                "club uid {club_uid} has no stored facility row to edit"
-            ))
-        })?;
+        if self.facility_rows.is_none() {
+            let tracked: HashSet<u32> = read_club_finances(&self.game_db, &self.club_index, None)
+                .corporate_facilities
+                .into_keys()
+                .collect();
+            self.facility_rows = Some(crate::facilities::read_facility_row_offsets(
+                &self.game_db,
+                &self.club_index,
+                &tracked,
+            ));
+        }
+        let row = self
+            .facility_rows
+            .as_ref()
+            .and_then(|rows| rows.get(&club_uid))
+            .copied()
+            .ok_or_else(|| {
+                Error::Unsupported(format!(
+                    "club uid {club_uid} has no stored facility row to edit"
+                ))
+            })?;
         if let Some(value) = edit.training_facilities {
             self.write_facility_byte(row.training_offset(), "training_facilities", value)?;
         }

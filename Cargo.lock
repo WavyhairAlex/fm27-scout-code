@@ -1017,6 +1017,7 @@ version = "1.2.0"
 dependencies = [
  "chrono",
  "csv",
+ "memchr",
  "rusqlite",
  "serde",
  "serde_json",

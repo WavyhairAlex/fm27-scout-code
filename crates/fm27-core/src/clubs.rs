@@ -5,6 +5,7 @@
 
 use std::collections::HashMap;
 
+use crate::bytes::find_bytes;
 use crate::error::{Error, Result};
 use crate::layout::{ClubLayout, MISSING_U32, read_u8, read_u16, read_u32};
 use crate::model::Club;
@@ -1014,16 +1015,4 @@ fn read_statuses(game_db: &[u8], records: &[ClubRecord]) -> Vec<ClubStatus> {
         }
     }
     statuses
-}
-
-fn find_bytes(haystack: &[u8], needle: &[u8]) -> Option<usize> {
-    if needle.is_empty() {
-        return Some(0);
-    }
-    if haystack.len() < needle.len() {
-        return None;
-    }
-    haystack
-        .windows(needle.len())
-        .position(|window| window == needle)
 }

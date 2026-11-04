@@ -5,6 +5,7 @@
 
 use std::collections::{HashMap, HashSet};
 
+use crate::bytes::find_bytes;
 use crate::error::{Error, Result};
 use crate::layout::{MISSING_U32, PlayerLayout, read_i16, read_u8, read_u16, read_u32};
 
@@ -217,15 +218,6 @@ fn signed_offset(base: usize, offset: i32) -> Option<usize> {
     } else {
         base.checked_sub(offset.unsigned_abs() as usize)
     }
-}
-
-fn find_bytes(haystack: &[u8], needle: &[u8]) -> Option<usize> {
-    if needle.is_empty() {
-        return Some(0);
-    }
-    haystack
-        .windows(needle.len())
-        .position(|window| window == needle)
 }
 
 #[cfg(test)]

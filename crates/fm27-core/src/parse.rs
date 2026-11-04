@@ -7,6 +7,7 @@ use std::time::Instant;
 use chrono::NaiveDate;
 use serde::Serialize;
 
+use crate::bytes::find_bytes;
 use crate::clubs::ClubIndex;
 use crate::competitions::CompetitionIndex;
 use crate::container::SaveFile;
@@ -15,7 +16,7 @@ use crate::error::{Error, Result};
 use crate::finances::read_club_finances;
 use crate::layout::{
     ATTRIBUTE_KEYS, MISSING_U32, PARSER_VERSION, POSITION_NAMES, PlayerLayout, decode_date,
-    read_i16, read_u8, read_u16, read_u32, scale_attribute, stored_attribute_index,
+    read_i16, read_u8, read_u16, read_u32, scale_attribute,
 };
 use crate::metadata::{SaveMetadata, read_metadata};
 use crate::model::{
@@ -308,9 +309,13 @@ pub fn parse_save_with_progress(
         let mut raw_attributes = Attributes::default();
         let mut attributes = Attributes::default();
         let attribute_start = offset + PlayerLayout::ATTRIBUTES_OFFSET;
-        for (index, key) in ATTRIBUTE_KEYS.iter().enumerate() {
+        for index in 0..ATTRIBUTE_KEYS.len() {
             // The stored 54-byte slice contains two foot bytes at indices 24 and 25.
-            let stored_index = stored_attribute_index(key).unwrap_or(index);
+            let stored_index = if index < PlayerLayout::LEFT_FOOT_INDEX {
+                index
+            } else {
+                index + 2
+            };
             let raw = read_u8(&game_db, attribute_start + stored_index).unwrap_or(0);
             raw_attributes.values[index] = raw;
             attributes.values[index] = scale_attribute(raw);
@@ -683,18 +688,6 @@ pub(crate) fn closing_person_header(
         found = Some((hit, uid));
     }
     found
-}
-
-fn find_bytes(haystack: &[u8], needle: &[u8]) -> Option<usize> {
-    if needle.is_empty() {
-        return Some(0);
-    }
-    if haystack.len() < needle.len() {
-        return None;
-    }
-    haystack
-        .windows(needle.len())
-        .position(|window| window == needle)
 }
 
 /// Cache key for parsed saves. Use [`parser_display_version`] for UI display.

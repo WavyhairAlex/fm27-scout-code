@@ -258,8 +258,8 @@ struct RawLine {
 #[derive(Debug, Clone)]
 pub struct RawSeasonRecord {
     pub key: u32,
-    pub own_lines: Vec<Option<usize>>,
-    pub other_teams: Vec<(u32, Vec<Option<usize>>)>,
+    pub own_lines: [Option<usize>; OWN_SLOTS],
+    pub other_teams: Vec<(u32, [Option<usize>; OTHER_TEAM_SLOTS])>,
 }
 
 #[derive(Debug, Clone)]
@@ -337,11 +337,11 @@ pub fn walk_season_stats(body: &[u8]) -> Result<SeasonStatsWalk> {
                 "the season-statistics records repeat player key {key}"
             )));
         }
-        let mut own_lines = Vec::with_capacity(OWN_SLOTS);
+        let mut own_lines = [None; OWN_SLOTS];
         position += 1 + 4 + HEADER_BYTES;
-        for _ in 0..OWN_SLOTS {
-            let (line, next) = read_slot(body, position)?;
-            own_lines.push(line);
+        for line in &mut own_lines {
+            let (slot, next) = read_slot(body, position)?;
+            *line = slot;
             position = next;
         }
         position += BLOCK_BYTES;
@@ -353,10 +353,10 @@ pub fn walk_season_stats(body: &[u8]) -> Result<SeasonStatsWalk> {
             let team_id = read_u32(body, team_at)
                 .ok_or_else(|| Error::parse("a season-statistics team id is truncated"))?;
             position = team_at + 4;
-            let mut lines = Vec::with_capacity(OTHER_TEAM_SLOTS);
-            for _ in 0..OTHER_TEAM_SLOTS {
-                let (line, next) = read_slot(body, position)?;
-                lines.push(line);
+            let mut lines = [None; OTHER_TEAM_SLOTS];
+            for line in &mut lines {
+                let (slot, next) = read_slot(body, position)?;
+                *line = slot;
                 position = next;
             }
             other_teams.push((team_id, lines));

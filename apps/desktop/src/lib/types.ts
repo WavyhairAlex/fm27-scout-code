@@ -376,6 +376,8 @@ export interface ValueFinderRequest {
   contract_end_before?: string | null;
   listings?: string[];
   min_confidence?: number | null;
+  exclude_injured?: boolean;
+  exclude_injury_history?: boolean;
   include_unknown_fee?: boolean;
   sort_by?: string | null;
   sort_dir?: "asc" | "desc" | null;
@@ -454,6 +456,8 @@ export interface StatsMoneyballRequest {
   contract_end_before?: string | null;
   listings?: string[];
   min_confidence?: number | null;
+  exclude_injured?: boolean;
+  exclude_injury_history?: boolean;
   include_unknown_fee?: boolean;
   sort_by?: string | null;
   sort_dir?: "asc" | "desc" | null;

@@ -60,6 +60,8 @@ pub struct StatsMoneyballRequest {
     /// Any of `sale`, `loan` and `free`.
     pub listings: Vec<String>,
     pub min_confidence: Option<f64>,
+    pub exclude_injured: bool,
+    pub exclude_injury_history: bool,
     pub include_unknown_fee: bool,
     pub sort_by: Option<String>,
     pub sort_dir: Option<String>,
@@ -694,39 +696,44 @@ fn assign_percentiles(
     output
 }
 
-fn peer_means(
+fn metric_means(
     candidates: &[StatsMoneyballCandidate],
+    indices: &[usize],
     metrics: &[(Metric, f64)],
-    basis: &str,
-) -> HashMap<String, HashMap<Metric, f64>> {
-    let mut groups: HashMap<String, Vec<usize>> = HashMap::new();
-    for (index, candidate) in candidates.iter().enumerate() {
-        let key = match basis {
-            "global" => candidate.position_group().to_owned(),
-            _ => format!(
-                "{}|{}",
-                candidate.position_group(),
-                candidate.reputation_tier()
-            ),
-        };
-        groups.entry(key).or_default().push(index);
-    }
-    let mut means: HashMap<String, HashMap<Metric, f64>> = HashMap::new();
-    for (key, indices) in groups {
-        let mut cell = HashMap::new();
-        for (metric, _) in metrics {
-            let values: Vec<f64> = indices
-                .iter()
-                .filter_map(|index| metric.value(&candidates[*index]))
-                .collect();
-            if values.is_empty() {
-                continue;
+) -> HashMap<Metric, f64> {
+    let mut cell = HashMap::new();
+    for (metric, _) in metrics {
+        let mut total = 0.0;
+        let mut count = 0usize;
+        for index in indices {
+            if let Some(value) = metric.value(&candidates[*index]) {
+                total += value;
+                count += 1;
             }
-            cell.insert(*metric, values.iter().sum::<f64>() / values.len() as f64);
         }
-        means.insert(key, cell);
+        if count > 0 {
+            cell.insert(*metric, total / count as f64);
+        }
     }
-    means
+    cell
+}
+
+fn tier_means(
+    candidates: &[StatsMoneyballCandidate],
+    indices: &[usize],
+    metrics: &[(Metric, f64)],
+) -> HashMap<&'static str, HashMap<Metric, f64>> {
+    let mut tiers: HashMap<&'static str, Vec<usize>> = HashMap::new();
+    for index in indices {
+        tiers
+            .entry(candidates[*index].reputation_tier())
+            .or_default()
+            .push(*index);
+    }
+    tiers
+        .into_iter()
+        .map(|(tier, indices)| (tier, metric_means(candidates, &indices, metrics)))
+        .collect()
 }
 
 fn model_metrics(model: &str, group: &str) -> &'static [(Metric, f64)] {
@@ -774,24 +781,19 @@ pub fn score_stats_candidates(
         for (metric, _) in metrics {
             all_metrics.insert(*metric);
         }
-        let group_means = peer_means(&candidates, metrics, "global");
-        let tier_means = peer_means(&candidates, metrics, "tier");
+        let group_means = metric_means(&candidates, &indices, metrics);
+        let tier_means_by_bucket = tier_means(&candidates, &indices, metrics);
         for index in indices {
             let candidate = &candidates[index];
-            let group_key = group.to_owned();
-            let tier_key = format!("{}|{}", group, candidate.reputation_tier());
+            let tier_key = candidate.reputation_tier();
             for (metric, _) in metrics {
                 let Some(value) = metric.value(candidate) else {
                     continue;
                 };
-                let peer = tier_means
-                    .get(&tier_key)
+                let peer = tier_means_by_bucket
+                    .get(tier_key)
                     .and_then(|cell| cell.get(metric))
-                    .or_else(|| {
-                        group_means
-                            .get(&group_key)
-                            .and_then(|cell| cell.get(metric))
-                    })
+                    .or_else(|| group_means.get(metric))
                     .copied();
                 let Some(peer) = peer else {
                     continue;
@@ -819,13 +821,9 @@ pub fn score_stats_candidates(
                 continue;
             }
             let key = if basis == "global" {
-                candidate.position_group().to_owned()
+                groups[index].to_owned()
             } else {
-                format!(
-                    "{}|{}",
-                    candidate.position_group(),
-                    candidate.reputation_tier()
-                )
+                format!("{}|{}", groups[index], candidate.reputation_tier())
             };
             buckets.entry(key).or_default().push(index);
         }
@@ -847,7 +845,7 @@ pub fn score_stats_candidates(
 
     let mut rows = Vec::with_capacity(candidates.len());
     for (index, candidate) in candidates.into_iter().enumerate() {
-        let group = candidate.position_group();
+        let group = groups[index];
         let metrics = model_metrics(&model, group);
         let (fee, fee_known) = fee_for(&candidate);
         let wage_known = candidate.wage.is_some();
@@ -858,54 +856,59 @@ pub fn score_stats_candidates(
             continue;
         }
 
-        let production = |pct: &Vec<HashMap<Metric, f64>>| -> Option<(f64, f64, Vec<StatsDriver>)> {
-            let total_weight: f64 = metrics.iter().map(|(_, weight)| *weight).sum();
-            if total_weight <= 0.0 {
-                return None;
-            }
-            let mut available_weight = 0.0;
-            let mut weighted = 0.0;
-            let mut drivers = Vec::new();
-            for (metric, weight) in metrics {
-                if let Some(value) = pct[index].get(metric) {
-                    available_weight += weight;
-                    weighted += value * weight;
-                    drivers.push(StatsDriver {
-                        key: metric.key().to_owned(),
-                        label: metric.label().to_owned(),
-                        percentile: *value,
-                        contribution: 0.0,
-                    });
+        let production =
+            |pct: &[HashMap<Metric, f64>], with_drivers: bool| -> Option<(f64, Vec<StatsDriver>)> {
+                let total_weight: f64 = metrics.iter().map(|(_, weight)| *weight).sum();
+                if total_weight <= 0.0 {
+                    return None;
                 }
-            }
-            let coverage = available_weight / total_weight;
-            let minimum = if model == "advanced" { 0.99 } else { 0.60 };
-            if coverage < minimum {
-                return None;
-            }
-            let production = weighted / available_weight;
-            for driver in &mut drivers {
-                let weight = metrics
-                    .iter()
-                    .find(|(metric, _)| metric.key() == driver.key)
-                    .map(|(_, weight)| *weight)
-                    .unwrap_or(0.0);
-                driver.contribution = driver.percentile * weight / available_weight;
-            }
-            drivers.sort_by(|left, right| {
-                right
-                    .contribution
-                    .partial_cmp(&left.contribution)
-                    .unwrap_or(Ordering::Equal)
-            });
-            drivers.truncate(3);
-            Some((production, coverage, drivers))
-        };
+                let mut available_weight = 0.0;
+                let mut weighted = 0.0;
+                let mut drivers = Vec::new();
+                for (metric, weight) in metrics {
+                    if let Some(value) = pct[index].get(metric) {
+                        available_weight += weight;
+                        weighted += value * weight;
+                        if with_drivers {
+                            drivers.push(StatsDriver {
+                                key: metric.key().to_owned(),
+                                label: metric.label().to_owned(),
+                                percentile: *value,
+                                contribution: 0.0,
+                            });
+                        }
+                    }
+                }
+                let coverage = available_weight / total_weight;
+                let minimum = if model == "advanced" { 0.99 } else { 0.60 };
+                if coverage < minimum {
+                    return None;
+                }
+                let production = weighted / available_weight;
+                if with_drivers {
+                    for driver in &mut drivers {
+                        let weight = metrics
+                            .iter()
+                            .find(|(metric, _)| metric.key() == driver.key)
+                            .map(|(_, weight)| *weight)
+                            .unwrap_or(0.0);
+                        driver.contribution = driver.percentile * weight / available_weight;
+                    }
+                    drivers.sort_by(|left, right| {
+                        right
+                            .contribution
+                            .partial_cmp(&left.contribution)
+                            .unwrap_or(Ordering::Equal)
+                    });
+                    drivers.truncate(3);
+                }
+                Some((production, drivers))
+            };
 
-        let Some((production_global, _coverage_global, _)) = production(&pct_global) else {
+        let Some((production_global, _)) = production(&pct_global, false) else {
             continue;
         };
-        let Some((production_tier, _coverage_tier, drivers)) = production(&pct_tier) else {
+        let Some((production_tier, drivers)) = production(&pct_tier, true) else {
             continue;
         };
         let cost_pct_global = cost_pct_global[index];
@@ -1092,6 +1095,12 @@ pub fn apply_stats_request(
             {
                 return false;
             }
+            if request.exclude_injured && row.injury_status == "injured" {
+                return false;
+            }
+            if request.exclude_injury_history && row.recent_injury.is_some() {
+                return false;
+            }
             true
         })
         .collect();
@@ -1237,6 +1246,35 @@ mod tests {
         assert_eq!(page.total, 2);
         assert_eq!(page.rows[0].uid, 1);
         assert!(page.rows[0].score.unwrap() > page.rows[1].score.unwrap());
+    }
+
+    #[test]
+    fn injury_filters_exclude_unavailable_players() {
+        let mut injured = candidate(1, 0.8, 0.4, 1800, 1_000, 100, true);
+        injured.injury_status = "injured".to_owned();
+        injured.recent_injury = Some("2026-08-01".to_owned());
+        let mut history = candidate(2, 0.8, 0.4, 1800, 1_000, 100, true);
+        history.recent_injury = Some("2026-08-01".to_owned());
+        let fit = candidate(3, 0.8, 0.4, 1800, 1_000, 100, true);
+
+        let mut request = StatsMoneyballRequest {
+            model: Some("core".to_owned()),
+            min_minutes: Some(900),
+            exclude_injured: true,
+            ..StatsMoneyballRequest::default()
+        };
+        let page = score_stats_moneyball(
+            vec![injured.clone(), history.clone(), fit.clone()],
+            &request,
+        )
+        .expect("score");
+        assert_eq!(page.total, 2);
+        assert!(page.rows.iter().all(|row| row.uid != 1));
+
+        request.exclude_injury_history = true;
+        let page = score_stats_moneyball(vec![injured, history, fit], &request).expect("score");
+        assert_eq!(page.total, 1);
+        assert_eq!(page.rows[0].uid, 3);
     }
 
     #[test]

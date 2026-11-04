@@ -60,12 +60,14 @@
 - Value finder (experimental): role/CA quality against transfer value plus three
   years of wages, with position-group percentiles, confidence, market/contract
   flags and explainable score components. It is not a stats-based model; unknown
-  fees and wages are excluded by default.
+  fees and wages are excluded by default. Contract-expiry, market, confidence and
+  injury-history filters are available.
 - Stats moneyball (experimental): this season's minutes, xG/xA, shooting, passing
   and tackling against the same three-year cost, with position-aware percentiles,
   confidence, flags and per-metric drivers. The core model scores every outfield
   player; goalkeepers are ranked separately, and the advanced model only scores
-  rows where FM recorded the advanced stat block.
+  rows where FM recorded the advanced stat block. Contract, market, confidence
+  and injury-history filters are available.
 - Growth history: each parse records a snapshot keyed by save name + game date;
   the detail panel shows CA / PA / value history.
 - Linked filtering: club, nationality, gender and status counts update live with

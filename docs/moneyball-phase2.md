@@ -257,7 +257,7 @@ FM27_TEST_SAVE="/path/to/save.fm" \
 
 ## 4. 下一步
 
-Phase 2 功能已基本收尾；剩余工作主要是 Phase 3 / 数据条件限制：
+Phase 2 功能已基本收尾；Phase 3 的筛选、独立生涯验证、npxG 和权重敏感性实验见 [`moneyball-phase3.md`](moneyball-phase3.md)。剩余工作主要是数据条件限制：
 
 1. **联赛强度**：FM27 存档只给 5 个顶级联赛名，其他联赛无法可靠映射；当前以俱乐部声望层级做 peer group，避免假精度。要接 league table/fixtures 需要额外解析器或外部联赛系数。
 2. **更长周期结果回测**：v03→v02 只有约一周，已确认没有样本断崖；需要在更长生涯间隔上验证评分与未来分钟/CA/身价变化。
@@ -265,7 +265,7 @@ Phase 2 功能已基本收尾；剩余工作主要是 Phase 3 / 数据条件限�
 
 ### Phase 2 完成清单
 
-已完成：容器 unlisted frame、season stats parser、`player_season_stats`、core/advanced 评分、Tauri/UI Stats tab、位置快捷 tab、门将分离、Why 详情、Win-now/Resale/Budget 预设、本地自定义视图、内存 + `player_metrics` 持久化、SQL 读取方法、多存档 top 50 回测、短期结果回测、release notes。
+已完成：容器 unlisted frame、season stats parser、`player_season_stats`、core/advanced 评分、Tauri/UI Stats tab、位置快捷 tab、门将分离、Why 详情、Win-now/Resale/Budget 预设、本地自定义视图、合同/市场/置信度/伤病筛选、内存 + `player_metrics` 持久化、SQL 读取方法、多存档 top 50 回测、短期结果回测、release notes。
 
 按用户要求不做：CSV/JSON 导出。
 

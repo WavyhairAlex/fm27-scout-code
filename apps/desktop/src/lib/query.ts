@@ -273,8 +273,10 @@ export function useFilterOptions() {
   const filters = useAppStore((state) => state.filters);
   const sort = useAppStore((state) => state.sort);
   const hiddenEnabled = useAppStore((state) => state.hiddenEnabled);
+  // Filter options do not depend on table sorting; excluding it avoids a full
+  // facet recomputation whenever the user changes the sort order.
   const query = saveId
-    ? buildPlayerQuery(saveId, filters, sort, 0, 1, hiddenEnabled)
+    ? buildPlayerQuery(saveId, filters, [], 0, 1, hiddenEnabled)
     : null;
   return useQuery({
     queryKey: ["filter-options", query],

@@ -15,6 +15,7 @@ Experimental only; this is not a promise of transfer-market accuracy.
   - position-aware percentiles against three-year cost;
   - position quick tabs and separate goalkeepers;
   - Win-now / Resale / Budget presets and local saved views;
+  - contract-expiry, market-status, minimum-confidence and injury-history filters;
   - expandable “Why?” panel with drivers, sample, confidence and cost breakdown.
 - `player_metrics` materialized table plus in-memory cache; scores survive a
   restart and can be queried directly with SQL.

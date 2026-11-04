@@ -211,16 +211,17 @@ fn main() -> Result<()> {
         }
         Command::Index { save, db, force } => {
             let started = std::time::Instant::now();
-            let parsed = parse_save(&save)?;
             let mut store = Store::open(&db)?;
             if !force {
+                let inspected = inspect_save(&save)?;
                 if let Some(id) =
-                    store.find_cached(&parsed.summary.fingerprint, fm27_core::parser_version())?
+                    store.find_cached(&inspected.fingerprint, fm27_core::parser_version())?
                 {
                     println!("cached save_id={id}");
                     return Ok(());
                 }
             }
+            let parsed = parse_save(&save)?;
             let id = store.insert_parsed(&parsed)?;
             println!(
                 "{}",

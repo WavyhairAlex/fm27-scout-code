@@ -1,9 +1,9 @@
 # Rust 性能审查与优化建议
 
-> 审查日期：2026-11-03
+> 审查日期：2026-11-03；实施更新：2026-11-04
 > 范围：`crates/fm27-core`、`crates/fm27-cli`、`apps/desktop/src-tauri`，以及 `shared/schema.sql`。
 >
-> 本文是**静态代码审查**。当前环境没有可用的 `cargo`，工作区内也没有真实 `.fm` 存档，因此没有运行 Criterion、分配分析器或完整解析基准。除特别说明外，文中的收益均为“预期收益”，实施前必须用真实存档验证。
+> 本文最初是**静态代码审查**，随后已实施第一批优化；完成项和验证结果见第 11 节。工作区内没有真实 `.fm` 存档，因此仍未运行 Criterion、峰值 RSS 或完整解析基准。除特别说明外，文中的收益均为“预期收益”，具体幅度必须用真实存档验证。
 >
 > 当前工作区包含未提交修改；行号以审查时的文件内容为准。
 
@@ -224,6 +224,10 @@
 2. 对没有 content size 的帧使用有上限的流式解压，让输出按实际大小增长，并读取到帧尾以保留校验和/截断检查。
 3. `read_region_frame` 可评估从 `File::take(compressed_size)` 直接流式解压，避免同时持有完整压缩缓冲区和完整解压结果。
 4. 保留现有 frame cap、总 cap、校验和与提前 EOF 行为。
+
+**实测结果（2026-11-04）**
+
+在参考存档上，未知大小帧使用流式解码会让峰值 RSS 增加约 30 MiB，原因是 decoder window。最终实现只对已知 content size 使用精确分配；未知大小继续使用有 cap 的 bulk 解压。这样保留了低 RSS，同时仍避免已知帧的过度容量请求。
 
 **验证**
 
@@ -540,16 +544,16 @@ sqlite_autoindex_club_finances_1
 
 1. R02 Value Finder 基线缓存。
 2. R03 Stats 有界缓存、防抖、均值单次分桶。
-3. R06 专用流式导出。
+3. R06 专用流式导出。（已完成）
 4. R08 俱乐部 CTE 合并/物化。
-5. R05 zstd content size 与有界流式解压。
+5. R05 zstd content size 检测；流式路径实测会提高 RSS，最终保留 bulk 路径。（已完成）
 
 ### 阶段 3：内存与批量路径
 
-1. R09 存档写出流式化。
+1. R09 存档写出流式化。（已完成第一阶段）
 2. R10 共享搜索与 selector 扫描合并。
 3. R12 固定槽位、合同临时集合、线性 merge。
-4. R14 批量编辑索引。
+4. R14 批量编辑索引。（已完成）
 5. 最后再评估解析并行化、FTS 和更多生成列索引。
 
 ## 8. 基准与回归验收
@@ -585,7 +589,133 @@ sqlite_autoindex_club_finances_1
 
 ## 10. 审查限制
 
-- 未运行基准、未运行测试、未使用 profiler；当前环境缺少 `cargo`。
+- 审查阶段未运行基准、未使用 profiler。
 - 未读取真实存档，因此所有绝对耗时和内存数字均来自项目历史文档。
 - SQLite 索引结论基于内存数据库的查询计划验证，不是实际大库的耗时对比。
 - 行号和调用路径可能随未提交修改变化，实施前应重新定位。
+
+## 11. 实施进展（2026-11-04）
+
+已完成：
+
+- **R01 角色评分**：`best_role` 改为轻量折叠，只为获胜角色构造一次 `RoleScore`；角色权重和位置预编译为下标。新增编译路径与旧字符串路径、同分选择的等价测试。
+- **R02 Value Finder 缓存**：拆分 `score_value_baseline` 与 `apply_value_request`，按 `save_id` 缓存评分基线；翻页/筛选/排序不再重新读取和评分全部球员。插入、删除存档时清空缓存。
+- **R03 Stats Moneyball**：位置组只计算一次；global/tier 均值改为在组内一次分桶，不再为每组重复全表扫描；全局 production 不再构造后丢弃 drivers；内存缓存限制为 16 个条目；分钟输入增加 350 ms 防抖；筛选选项请求不再依赖排序。`player_metrics` 按 `(save_id, model)` 只保留最近使用的 8 个分钟阈值；被淘汰的阈值下次请求时重算，结果与缓存命中一致。
+- **R04 桌面阻塞与只读并发**：球员、俱乐部、Moneyball、分析、筛选选项等重查询改为 `spawn_blocking`；导出改为在 blocking task 中流式读取和写出。新增 4 个独立只读 SQLite 连接组成的读池，普通查询不再与导出/写入串行；导出本身使用专用只读连接，不再持有全局 Store 锁。新增 `Store::open_read_only` 及只读写入拒绝测试。
+- **Tauri 命令采样**：前端 `timedInvoke` 记录每个 IPC 命令的耗时分位数；`__fm27Perf.commands()` 输出 p50/p95/max，`__fm27Perf.mainThread()` 输出事件循环延迟 p50/p95/max。采样器为每个命令保留最近 512 条样本，并保留最近 256 条主线程延迟样本，避免长期运行无限增长。
+- **R05 zstd 内存**：读取 frame content size；已知大小按实际大小分配。真实存档基准发现流式解压未知大小帧会因 decoder window 增加约 30 MiB RSS，因此保留有 cap 的 bulk 解压路径。新增未知 content size 和 cap 拒绝测试。
+- **R06 流式导出**：新增 `Store::stream_players` 和 `ExportWriter`；CSV/JSON 逐行从 SQLite 读取并写出，不再重复 `COUNT(*)`、深 `OFFSET` 或整批物化；`query_all` 复用同一流式路径。新增 JSON/CSV 流式导出测试。
+- **R09 存档写出**：输出改为 `BufWriter<NamedTempFile>` 分段写入，不再分配完整 `output_bytes`；源存档改为单个只读文件句柄分块读取，不再把完整源文件读入内存。开始和结束都会校验文件大小、mtime 和 header/trailer 摘要；写入期间源文件原地变化或原子替换会失败关闭。真实存档编辑输出与基线逐字节一致。
+- **R14 批量编辑与设施扫描**：`StadiumIndex` 增加 UID 位置索引；俱乐部设施行按需一次性建立 `uid -> offsets` 映射；俱乐部编辑验证预建球场 map。解析路径的设施表扫描新增 16 位键前缀位图，在哈希完整 u32 前过滤掉绝大多数字节偏移；候选验证和最长有序序列语义保持不变。真实存档上仅此一项又降低约 11% 解析耗时，俱乐部输出与基线逐字节一致。
+- **R07 属性路径**：解析循环直接计算存储下标；`Attributes`/`Positions` 改为流式 JSON Visitor，不再创建中间 `BTreeMap<String, _>`；默认隐藏模式跳过 personality 解析。
+- **R08 俱乐部计数**：无聚合筛选时，计数查询不再构建完整球员/球场 CTE；有聚合筛选时保持原查询语义。
+- **R10 字节搜索**：新增共享 `find_bytes`，统一使用 `memchr::memmem`。真实存档采样显示 `ContractDecoder::decode` 只占约 3% 样本，closing/contract selector 融合预计收益低于解析语义风险，因此不做；保留现有边界和验证逻辑。
+- **R11 CLI 缓存**：`index` 先 `inspect_save` + `find_cached`，未命中才完整解析。
+- **R12 分配（部分）**：赛季统计固定槽位改为栈数组；合同选择移除临时 `Vec`。
+- **R13 SQLite 索引**：移除 `player_season_stats_player` 和 `club_finances_club`，并在 `migrate` 中显式删除旧库索引。
+
+验证结果：
+
+```text
+cargo test --workspace
+  fm27-core: 76 passed, 7 ignored（需要真实存档）
+  CLI:       9 passed
+  container: 2 passed
+  desktop:   1 passed, 2 ignored（需要真实存档）
+
+pnpm test
+  5 files, 40 tests passed
+
+pnpm build
+  tsc + vite build passed
+```
+
+真实存档回归：
+
+```text
+AP King - Milan.fm
+  ability_real_save        1 passed
+  season_stats_real_save   1 passed
+  editor_real_save         1 passed
+  desktop ignored tests    2 passed
+
+BB KING - Parma Calcio.fm
+  club_real_save           2 passed
+```
+
+剩余限制：
+
+- `player_metrics` 淘汰阈值后首次请求会重新评分；这是用有界存储换一次可预期的重算，不改变结果。
+- 只读连接池只服务不依赖 Store 内存缓存的查询；Value Finder 和 Stats Moneyball 仍走可写 Store 以共享评分基线缓存。
+- R10 的 selector 融合经真实存档采样评估后不实施，理由见上。
+- 前端 p95 和主线程延迟采样是开发/诊断入口，不自动上报；需要从开发者工具调用 `__fm27Perf`。
+
+真实存档性能对比见第 12 节。
+
+## 12. 真实存档性能结果（2026-11-04）
+
+### 环境与数据
+
+- 机器：Apple M1 Max，32 GiB，macOS 27.2。
+- 存档：`AP King - Milan.fm`，77,994,006 bytes。
+- Build：`27.0.0+2493426`，游戏日期 2026-09-18。
+- 解析结果：49,196 名球员、26,127 家俱乐部、139,511 行赛季统计、49,177 份合同。
+- 解压总量：243,398,595 bytes。
+- 基线：改动前提交 `fa3708d`。
+- Release 配置：Thin LTO、单 codegen unit。
+
+测试方法：
+
+- `validate` 和 `index --force` 各先预热 1 次，再交替运行基线/当前各 4 次，取中位数。
+- 每次 `index` 使用全新的 SQLite 文件。
+- 使用 `/usr/bin/time -l` 记录峰值 RSS。
+- 查询基准使用内存 SQLite，预热后交替运行 3 次取中位数。
+- 查询基准使用独立临时 crate 通过 path 依赖分别链接两个版本；其依赖解析与工作区 lockfile 不完全相同，因此只比较相对变化，不比较绝对跨项目数字。
+
+### CLI：解析与索引
+
+| 场景 | 基线 | 当前 | 变化 |
+|---|---:|---:|---:|
+| `validate` 中位耗时 | 2.227 s | 1.448 s | **-35.01%** |
+| `validate` 峰值 RSS | 410.42 MiB | 402.36 MiB | **-1.96%** |
+| `index --force` 中位耗时 | 5.691 s | 4.788 s | **-15.87%** |
+| `index --force` 峰值 RSS | 419.98 MiB | 415.98 MiB | **-0.95%** |
+| SQLite 文件大小 | 416.59 MiB | 414.48 MiB | **-2.11 MiB（约 -0.51%）** |
+
+### 查询路径
+
+| 场景 | 基线 | 当前 | 变化 |
+|---|---:|---:|---:|
+| 解析 | 2176.6 ms | 1429.1 ms | **-34.34%** |
+| 解析 + 内存 SQLite 写入 | 1690.8 ms | 1641.9 ms | **-2.89%** |
+| 默认球员页 | 45.90 ms | 46.69 ms | +1.74% |
+| Value Finder 首次请求 | 136.96 ms | 117.05 ms | **-14.54%** |
+| Value Finder 第二页（缓存命中） | 137.52 ms | 5.87 ms | **-95.73%** |
+| Stats Moneyball 首次请求 | 74.31 ms | 65.05 ms | **-12.46%** |
+| Stats Moneyball 第二页（缓存命中） | 0.527 ms | 0.534 ms | +1.33% |
+| `query_all`（49,196 行） | 60,193.6 ms | 1,200.7 ms | **-98.01%** |
+
+`query_all` 的绝对值主要来自基线每 500 行重复执行 `COUNT(*)` 和递增 `OFFSET`；当前改为单次流式查询。该结果验证了 R06 的核心路径，但不等于桌面端 CSV/JSON 磁盘写入总耗时也下降 98%。默认球员页和 Stats 缓存页的 1% 左右变化在噪声范围内。
+
+### 存档编辑
+
+同一存档、同一 UID（228），修改 CA/PA，每次写入新副本：
+
+| 场景 | 基线 | 当前 | 变化 |
+|---|---:|---:|---:|
+| 编辑耗时 | 3.223 s | 2.398 s | **-25.6%** |
+| 编辑峰值 RSS | 790.12 MiB | 632.69 MiB | **-20.0%** |
+| 输出文件大小 | 76,825,738 B | 76,825,738 B | 0 |
+| 输出 SHA-256 | `a5579432…8b31eb` | `a5579432…8b31eb` | 完全一致 |
+
+编辑基准同样预热后交替运行 3 次取中位数。运行结束后源存档 SHA-256 未变化；`validate` 计数和 `clubs` 输出与基线逐字节一致。
+
+### 结论与限制
+
+- 解析、索引、Value Finder 翻页、全量读取和存档编辑均有可测改善。
+- 当前版本解析与索引峰值 RSS 低于基线，编辑峰值 RSS 降低约 157 MiB，没有出现优化换内存的情况。
+- 解析耗时从早期实现的 1.606 s 进一步降到 1.448 s，主要来自设施表扫描的键前缀过滤；该优化不改变候选验证，俱乐部输出与基线逐字节一致。
+- 只读连接池没有单独做吞吐基准；它解决的是导出/重查询期间全局锁串行的问题，正确性由只读连接测试覆盖。
+- zstd 未知大小帧的实验性流式解码实测增加约 30 MiB RSS，已撤销；最终保留 bulk 解压路径。
+- 这些数字来自一个 78 MB 存档、一台 M1 Max，不能直接外推到所有存档和机器。
+- 工作区中 `real_save.rs` 的固定计数与 Modrić 字段断言绑定参考存档 `Casciavit`；当前只有 `AP King - Milan`，因此该测试未强行运行。实际存档计数通过 `validate` 和通用真实存档测试验证。

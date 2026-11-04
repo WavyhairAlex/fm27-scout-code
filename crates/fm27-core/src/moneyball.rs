@@ -32,6 +32,8 @@ pub struct ValueFinderRequest {
     /// Any of `sale`, `loan` and `free`.
     pub listings: Vec<String>,
     pub min_confidence: Option<f64>,
+    pub exclude_injured: bool,
+    pub exclude_injury_history: bool,
     pub include_unknown_fee: bool,
     pub sort_by: Option<String>,
     pub sort_dir: Option<String>,
@@ -269,15 +271,6 @@ fn confidence_for(candidate: &ValueFinderCandidate, fee_known: bool, wage_known:
     confidence.clamp(0.0, 1.0)
 }
 
-fn matches_listing(candidate: &ValueFinderCandidate, listing: &str) -> bool {
-    match listing {
-        "sale" => candidate.transfer_listed,
-        "loan" => candidate.loan_listed,
-        "free" => candidate.club_uid.is_none(),
-        _ => false,
-    }
-}
-
 fn sort_value(row: &ValueFinderRow, by: &str) -> Option<f64> {
     match by {
         "score" => Some(row.score),
@@ -326,20 +319,22 @@ fn compare_rows(
     }
 }
 
-/// Score candidates and return one page. The caller loads every player once so
-/// percentile ranks are stable while the user changes filters.
-pub fn score_value_finder(
-    candidates: Vec<ValueFinderCandidate>,
-    request: &ValueFinderRequest,
-) -> Result<ValueFinderPage> {
-    let position_filter = request
+/// Request-independent Value Finder scoring. Percentiles are computed from the
+/// complete candidate set, so request filters can be applied without moving ranks.
+#[derive(Debug, Clone)]
+pub struct ValueFinderBaseline {
+    rows: Vec<ValueFinderRow>,
+    leagues: Vec<String>,
+}
+
+pub fn validate_value_request(request: &ValueFinderRequest) -> Result<()> {
+    if let Some(group) = request
         .position_group
         .as_deref()
         .map(str::trim)
         .filter(|value| !value.is_empty())
-        .map(|value| value.to_ascii_uppercase());
-    if let Some(group) = position_filter.as_deref()
-        && !matches!(group, "GK" | "DC" | "FB" | "MID" | "AM" | "ST")
+        .map(|value| value.to_ascii_uppercase())
+        && !matches!(group.as_str(), "GK" | "DC" | "FB" | "MID" | "AM" | "ST")
     {
         return Err(Error::parse(format!("unknown position group {group:?}")));
     }
@@ -348,7 +343,10 @@ pub fn score_value_finder(
             return Err(Error::parse(format!("unknown listing filter {listing:?}")));
         }
     }
+    Ok(())
+}
 
+pub fn score_value_baseline(candidates: Vec<ValueFinderCandidate>) -> ValueFinderBaseline {
     let groups: Vec<&'static str> = candidates
         .iter()
         .map(|candidate| position_group(candidate.role_position.as_deref()))
@@ -430,9 +428,6 @@ pub fn score_value_finder(
         let group = position_group(candidate.role_position.as_deref());
         let (fee, fee_known) = fee_for(&candidate);
         let wage_known = candidate.wage.is_some();
-        if !request.include_unknown_fee && !fee_known {
-            continue;
-        }
         let Some(cost) = cost_for(fee, candidate.wage) else {
             continue;
         };
@@ -460,79 +455,6 @@ pub fn score_value_finder(
             .league_name
             .as_deref()
             .and_then(|league| league_medians.get(league).copied());
-
-        // Filters are applied after scoring so percentiles do not move when the
-        // user narrows the list.
-        if let Some(group_filter) = position_filter.as_deref()
-            && group != group_filter
-        {
-            continue;
-        }
-        if let Some(league) = request.league.as_deref()
-            && candidate.league_name.as_deref() != Some(league)
-        {
-            continue;
-        }
-        if let Some(min) = request.age_min
-            && candidate.age.is_none_or(|age| age < min)
-        {
-            continue;
-        }
-        if let Some(max) = request.age_max
-            && candidate.age.is_none_or(|age| age > max)
-        {
-            continue;
-        }
-        if let Some(min) = request.ca_min
-            && candidate.ca < min
-        {
-            continue;
-        }
-        if let Some(max) = request.ca_max
-            && candidate.ca > max
-        {
-            continue;
-        }
-        if let Some(min) = request.role_min
-            && candidate.role_score.is_none_or(|score| score < min)
-        {
-            continue;
-        }
-        if let Some(max_fee) = request.max_fee {
-            match fee {
-                Some(value) if value <= max_fee => {}
-                Some(_) => continue,
-                None if request.include_unknown_fee => {}
-                None => continue,
-            }
-        }
-        if let Some(max_wage) = request.max_wage {
-            match candidate.wage {
-                Some(value) if value as u64 <= max_wage => {}
-                _ => continue,
-            }
-        }
-        if let Some(before) = request.contract_end_before.as_deref()
-            && candidate
-                .contract_end
-                .as_deref()
-                .is_none_or(|end| end > before)
-        {
-            continue;
-        }
-        if !request.listings.is_empty()
-            && !request
-                .listings
-                .iter()
-                .any(|listing| matches_listing(&candidate, listing))
-        {
-            continue;
-        }
-        if let Some(min) = request.min_confidence
-            && confidence < min
-        {
-            continue;
-        }
 
         rows.push(ValueFinderRow {
             uid: candidate.uid,
@@ -574,6 +496,118 @@ pub fn score_value_finder(
         });
     }
 
+    ValueFinderBaseline { rows, leagues }
+}
+
+fn matches_value_request(
+    row: &ValueFinderRow,
+    request: &ValueFinderRequest,
+    position_filter: Option<&str>,
+) -> bool {
+    if !request.include_unknown_fee && !row.fee_known {
+        return false;
+    }
+    if let Some(group) = position_filter
+        && row.position_group != group
+    {
+        return false;
+    }
+    if let Some(league) = request.league.as_deref()
+        && row.league_name.as_deref() != Some(league)
+    {
+        return false;
+    }
+    if let Some(min) = request.age_min
+        && row.age.is_none_or(|age| age < min)
+    {
+        return false;
+    }
+    if let Some(max) = request.age_max
+        && row.age.is_none_or(|age| age > max)
+    {
+        return false;
+    }
+    if let Some(min) = request.ca_min
+        && row.ca < min
+    {
+        return false;
+    }
+    if let Some(max) = request.ca_max
+        && row.ca > max
+    {
+        return false;
+    }
+    if let Some(min) = request.role_min
+        && row.role_score.is_none_or(|score| score < min)
+    {
+        return false;
+    }
+    if let Some(max_fee) = request.max_fee {
+        match row.fee {
+            Some(value) if value <= max_fee => {}
+            Some(_) => return false,
+            None if request.include_unknown_fee => {}
+            None => return false,
+        }
+    }
+    if let Some(max_wage) = request.max_wage
+        && row.wage.is_none_or(|value| value as u64 > max_wage)
+    {
+        return false;
+    }
+    if let Some(before) = request.contract_end_before.as_deref()
+        && row.contract_end.as_deref().is_none_or(|end| end > before)
+    {
+        return false;
+    }
+    if !request.listings.is_empty()
+        && !request
+            .listings
+            .iter()
+            .any(|listing| matches_row_listing(row, listing))
+    {
+        return false;
+    }
+    if let Some(min) = request.min_confidence
+        && row.confidence < min
+    {
+        return false;
+    }
+    if request.exclude_injured && row.injury_status == "injured" {
+        return false;
+    }
+    if request.exclude_injury_history && row.recent_injury.is_some() {
+        return false;
+    }
+    true
+}
+
+fn matches_row_listing(row: &ValueFinderRow, listing: &str) -> bool {
+    match listing {
+        "sale" => row.transfer_listed,
+        "loan" => row.loan_listed,
+        "free" => row.club_uid.is_none(),
+        _ => false,
+    }
+}
+
+pub fn apply_value_request(
+    baseline: &ValueFinderBaseline,
+    request: &ValueFinderRequest,
+) -> Result<ValueFinderPage> {
+    validate_value_request(request)?;
+    let position_filter = request
+        .position_group
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(|value| value.to_ascii_uppercase());
+
+    let mut rows: Vec<&ValueFinderRow> = baseline
+        .rows
+        .iter()
+        .filter(|row| matches_value_request(row, request, position_filter.as_deref()))
+        .collect();
     let filtered = rows.len();
     let by = request.sort_by.as_deref().unwrap_or("score");
     let ascending = request
@@ -588,9 +622,11 @@ pub fn score_value_finder(
     let rows = if start >= rows.len() {
         Vec::new()
     } else {
-        rows[start..(start + page_size as usize).min(rows.len())].to_vec()
+        rows[start..(start + page_size as usize).min(rows.len())]
+            .iter()
+            .map(|row| (*row).clone())
+            .collect()
     };
-    let scored = filtered;
     Ok(ValueFinderPage {
         total: filtered,
         page,
@@ -598,12 +634,23 @@ pub fn score_value_finder(
         rows,
         meta: ValueFinderMeta {
             model: VALUE_FINDER_MODEL.to_owned(),
-            scored,
+            scored: filtered,
             filtered,
             cost_horizon_years: COST_HORIZON_YEARS,
-            leagues,
+            leagues: baseline.leagues.clone(),
         },
     })
+}
+
+/// Score candidates and return one page. Kept as a convenience for callers that
+/// do not need to reuse the baseline across requests.
+pub fn score_value_finder(
+    candidates: Vec<ValueFinderCandidate>,
+    request: &ValueFinderRequest,
+) -> Result<ValueFinderPage> {
+    validate_value_request(request)?;
+    let baseline = score_value_baseline(candidates);
+    apply_value_request(&baseline, request)
 }
 
 #[cfg(test)]
@@ -695,6 +742,28 @@ mod tests {
         let page =
             score_value_finder(vec![candidate(1, 14, 130, 0, 0)], &request()).expect("score");
         assert_eq!(page.total, 0);
+    }
+
+    #[test]
+    fn injury_filters_exclude_unavailable_players() {
+        let mut injured = candidate(1, 16, 150, 1_000_000, 20_000);
+        injured.injury_status = "injured".to_owned();
+        injured.recent_injury = Some("2026-08-01".to_owned());
+        let mut history = candidate(2, 16, 150, 1_000_000, 20_000);
+        history.recent_injury = Some("2026-08-01".to_owned());
+        let fit = candidate(3, 16, 150, 1_000_000, 20_000);
+
+        let mut query = request();
+        query.exclude_injured = true;
+        let page = score_value_finder(vec![injured.clone(), history.clone(), fit.clone()], &query)
+            .expect("score");
+        assert_eq!(page.total, 2);
+        assert!(page.rows.iter().all(|row| row.uid != 1));
+
+        query.exclude_injury_history = true;
+        let page = score_value_finder(vec![injured, history, fit], &query).expect("score");
+        assert_eq!(page.total, 1);
+        assert_eq!(page.rows[0].uid, 3);
     }
 
     #[test]
