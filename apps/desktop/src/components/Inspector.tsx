@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import {
   BriefcaseBusiness,
@@ -11,7 +11,6 @@ import {
   Copy,
   GitCompareArrows,
   HeartPulse,
-  LockKeyhole,
   Maximize2,
   Pencil,
   Ruler,
@@ -58,7 +57,6 @@ export function Inspector() {
   const selectedUid = useAppStore((state) => state.selectedUid);
   const setSelectedUid = useAppStore((state) => state.setSelectedUid);
   const hiddenEnabled = useAppStore((state) => state.hiddenEnabled);
-  const setHiddenEnabled = useAppStore((state) => state.setHiddenEnabled);
   const setEditOpen = useAppStore((state) => state.setEditOpen);
   const pendingEdits = useAppStore((state) => state.pendingEdits);
   const setViewMode = useAppStore((state) => state.setViewMode);
@@ -74,10 +72,29 @@ export function Inspector() {
   const { data: growth } = useGrowthHistory(selectedUid);
   const [tab, setTab] = useState<Tab>("attributes");
   const [nameCopied, setNameCopied] = useState(false);
+  const tabBarRef = useRef<HTMLDivElement>(null);
+  const [tabBarWidth, setTabBarWidth] = useState(0);
 
   useEffect(() => {
     if (!hiddenEnabled && tab === "hidden") setTab("attributes");
   }, [hiddenEnabled, tab]);
+
+  useLayoutEffect(() => {
+    const element = tabBarRef.current;
+    if (!element) return;
+    const styles = window.getComputedStyle(element);
+    const gap = Number.parseFloat(styles.columnGap) || 0;
+    const padding =
+      (Number.parseFloat(styles.paddingLeft) || 0) +
+      (Number.parseFloat(styles.paddingRight) || 0);
+    const buttons = Array.from(element.children) as HTMLElement[];
+    const width = Math.ceil(
+      buttons.reduce((sum, button) => sum + button.getBoundingClientRect().width, 0) +
+        gap * Math.max(0, buttons.length - 1) +
+        padding,
+    );
+    setTabBarWidth((current) => (current === width ? current : width));
+  }, [hiddenEnabled, locale, selectedUid, isLoading]);
 
   useEffect(() => {
     if (!nameCopied) return;
@@ -113,6 +130,17 @@ export function Inspector() {
 
   const attributes = displayMode === "display" ? player.attributes : player.raw_attributes;
   const maxValue = displayMode === "display" ? 20 : 100;
+  const hiddenTab: Array<[Tab, string]> = hiddenEnabled
+    ? [["hidden", t("inspector.tab.hidden")]]
+    : [];
+  const tabs: Array<[Tab, string]> = [
+    ["attributes", t("inspector.tab.attributes")],
+    ["roles", t("inspector.tab.roles")],
+    ["positions", t("inspector.tab.positions")],
+    ["growth", t("inspector.tab.growth")],
+    ...hiddenTab,
+    ["contract", t("inspector.tab.contract")],
+  ];
 
   const copyName = async () => {
     const name = player.name;
@@ -127,7 +155,10 @@ export function Inspector() {
   };
 
   return (
-    <aside className="flex h-full w-[372px] shrink-0 flex-col border-l border-[var(--line)] bg-[var(--surface)]">
+    <aside
+      className="flex h-full w-[372px] shrink-0 flex-col border-l border-[var(--line)] bg-[var(--surface)]"
+      style={tabBarWidth > 0 ? { minWidth: tabBarWidth } : undefined}
+    >
       <div className="flex items-center justify-between border-b border-[var(--line)] px-3 py-2">
         <div className="flex items-center gap-2 text-[11px] font-semibold text-[var(--muted)]">
           <ClipboardList size={13} className="text-[var(--accent)]" />
@@ -362,21 +393,17 @@ export function Inspector() {
           </div>
         )}
 
-        <div className="sticky top-0 z-10 flex flex-wrap gap-0.5 border-b border-[var(--line)] bg-[var(--surface)] px-2 py-1.5">
-          {[
-            ["attributes", t("inspector.tab.attributes")],
-            ["roles", t("inspector.tab.roles")],
-            ["positions", t("inspector.tab.positions")],
-            ["growth", t("inspector.tab.growth")],
-            ["hidden", t("inspector.tab.hidden")],
-            ["contract", t("inspector.tab.contract")],
-          ].map(([key, label]) => (
+        <div
+          ref={tabBarRef}
+          className="sticky top-0 z-10 flex gap-0.5 overflow-hidden border-b border-[var(--line)] bg-[var(--surface)] px-2 py-1.5"
+        >
+          {tabs.map(([key, label]) => (
             <button
               key={key}
               type="button"
-              onClick={() => setTab(key as Tab)}
+              onClick={() => setTab(key)}
               className={cn(
-                "focus-ring whitespace-nowrap rounded-[6px] px-2 py-1 text-[10px] font-medium transition-colors",
+                "focus-ring shrink-0 whitespace-nowrap rounded-[6px] px-2 py-1 text-[10px] font-medium transition-colors",
                 tab === key
                   ? "bg-[var(--accent-soft)] text-[var(--accent-strong)]"
                   : "text-[var(--muted)] hover:bg-[var(--surface-2)] hover:text-[var(--ink)]",
@@ -401,13 +428,7 @@ export function Inspector() {
           />
         )}
         {tab === "hidden" && (
-          <HiddenPanel
-            player={player}
-            attributes={attributes}
-            max={maxValue}
-            hiddenEnabled={hiddenEnabled}
-            onEnable={() => setHiddenEnabled(true)}
-          />
+          <HiddenPanel player={player} attributes={attributes} max={maxValue} />
         )}
         {tab === "positions" && <PositionsPanel positions={player.positions} />}
         {tab === "contract" && <ContractPanel player={player} />}
@@ -541,30 +562,12 @@ function HiddenPanel({
   player,
   attributes,
   max,
-  hiddenEnabled,
-  onEnable,
 }: {
   player: Player;
   attributes: Attributes;
   max: number;
-  hiddenEnabled: boolean;
-  onEnable: () => void;
 }) {
   const { t, locale } = useI18n();
-  if (!hiddenEnabled) {
-    return (
-      <div className="flex flex-col items-center gap-2 px-6 py-10 text-center">
-        <LockKeyhole size={20} className="text-[var(--muted)]" />
-        <div className="text-xs font-semibold text-[var(--ink)]">{t("inspector.hiddenOff")}</div>
-        <p className="max-w-[240px] text-[11px] leading-relaxed text-[var(--muted)]">
-          {t("inspector.hiddenOffDescription")}
-        </p>
-        <Button size="sm" variant="gold" onClick={onEnable}>
-          {t("inspector.enableHidden")}
-        </Button>
-      </div>
-    );
-  }
   const hidden = attributes;
   return (
     <div className="space-y-4 px-4 py-3">
