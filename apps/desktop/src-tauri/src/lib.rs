@@ -2,13 +2,13 @@ use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 
-use fm27_core::ability::{CaEstimate, estimate_positions};
+use fm27_core::ability::{CaEstimate, estimate_ca, estimate_positions};
 use fm27_core::club_editor::{ClubEditRequest, ClubEditor};
 use fm27_core::container::SaveFile;
 use fm27_core::editor::{EditChange, PlayerEditRequest, PlayerEditor};
 use fm27_core::export::write_export;
 use fm27_core::metadata::read_metadata;
-use fm27_core::model::{Attributes, ClubDetail};
+use fm27_core::model::{Attributes, ClubDetail, Positions};
 use fm27_core::store::{
     AnalysisOverview, ClubFilterOptions, ClubPage, ClubQuery, FilterOptions, PlayerPage,
     PlayerQuery, SaveRecord, SnapshotPoint, SquadAnalysis, Store,
@@ -47,9 +47,16 @@ struct TraitOption {
 
 #[derive(Debug, Deserialize)]
 struct CaEstimateRequest {
-    positions: Vec<String>,
+    /// Internal 1–100 attribute values keyed by attribute name.
     attributes: BTreeMap<String, u8>,
-    weaker_foot: u8,
+    /// Full 15-position familiarity table (0–20).
+    positions: BTreeMap<String, u8>,
+    /// Optional single position; omitted means best RCA across all positions.
+    #[serde(default)]
+    position: Option<String>,
+    /// Internal 1–100 foot values.
+    left_foot: u8,
+    right_foot: u8,
 }
 
 #[derive(Debug, Deserialize)]
@@ -306,15 +313,35 @@ fn club_filter_options(
 fn estimate_player_ca(request: CaEstimateRequest) -> Result<CaEstimate, String> {
     let mut attributes = Attributes::default();
     for (index, key) in fm27_core::layout::ATTRIBUTE_KEYS.iter().enumerate() {
-        if let Some(value) = request.attributes.get(*key) {
-            attributes.values[index] = *value;
-        }
+        attributes.values[index] = request.attributes.get(*key).copied().unwrap_or(1).max(1);
     }
-    for value in &mut attributes.values {
-        *value = (*value).max(1);
+
+    let mut positions = Positions::default();
+    for (index, key) in fm27_core::layout::POSITION_KEYS.iter().enumerate() {
+        positions.values[index] = request.positions.get(*key).copied().unwrap_or(0).min(20);
     }
-    estimate_positions(&attributes, request.weaker_foot, &request.positions)
-        .ok_or_else(|| format!("cannot estimate CA for positions {:?}", request.positions))
+
+    let estimate = match request.position.as_deref() {
+        Some(position) if !position.eq_ignore_ascii_case("AUTO") => estimate_ca(
+            &attributes,
+            &positions,
+            request.left_foot,
+            request.right_foot,
+            position,
+        ),
+        _ => estimate_positions(
+            &attributes,
+            &positions,
+            request.left_foot,
+            request.right_foot,
+        ),
+    };
+    estimate.ok_or_else(|| {
+        format!(
+            "cannot estimate CA: no valid position in player position table (requested {:?})",
+            request.position
+        )
+    })
 }
 
 #[tauri::command]
@@ -938,18 +965,25 @@ mod tests {
     use super::*;
 
     #[test]
-    fn estimates_ca_from_a_display_attribute_map() {
+    fn estimates_ca_from_internal_attributes_and_position_table() {
         let request = CaEstimateRequest {
-            positions: vec!["SC".to_owned()],
             attributes: fm27_core::layout::ATTRIBUTE_KEYS
                 .iter()
-                .map(|key| ((*key).to_owned(), 12))
+                .map(|key| ((*key).to_owned(), 65))
                 .collect(),
-            weaker_foot: 12,
+            positions: fm27_core::layout::POSITION_KEYS
+                .iter()
+                .map(|key| ((*key).to_owned(), if *key == "stc" { 20 } else { 0 }))
+                .collect(),
+            position: Some("STC".to_owned()),
+            left_foot: 100,
+            right_foot: 50,
         };
         let estimate = estimate_player_ca(request).expect("estimate");
-        assert_eq!(estimate.position, "SC");
-        assert_eq!(estimate.estimated_ca, 120);
+        assert_eq!(estimate.position, "STC");
+        assert_eq!(estimate.estimated_ca, 135);
+        assert_eq!(estimate.initial_ca, 136);
+        assert_eq!(estimate.position_cost, 0);
     }
 
     #[test]

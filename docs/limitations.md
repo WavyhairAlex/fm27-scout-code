@@ -65,6 +65,10 @@
 - Save editing is experimental. A malformed or unsupported edit can corrupt the
   output save or make it unreadable. Keep a backup and verify the result in game
   before relying on it.
+- The CA budget estimator implements a community reconstruction of FM's
+  recommended-CA calculation, not an official formula. It matches FM27 closely,
+  but the stored CA remains authoritative and developed or custom/edited players
+  can differ from the RCA.
 
 ## Roadmap
 

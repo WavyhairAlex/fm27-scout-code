@@ -659,23 +659,23 @@ const en = {
   "edit.attributeBudget":
     "CA is the attribute budget. FM rebalances CA-weighted attributes over roughly a month; hidden attributes, determination, natural fitness, flair, aggression, personality and traits are stable. Editing CA-weighted attributes without CA is temporary.",
   "edit.budget.title": "CA budget",
-  "edit.budget.estimated": "Estimated from attributes",
-  "edit.budget.estimatedShort": "Est. CA {value}",
-  "edit.budget.average": "avg {value}",
+  "edit.budget.estimated": "Recommended CA from attributes (RCA)",
+  "edit.budget.estimatedShort": "RCA {value}",
+  "edit.budget.average": "weighted avg (0–100) {value}",
   "edit.budget.position": "Position basis",
-  "edit.budget.auto": "Auto (natural positions)",
-  "edit.budget.basis": "Basis: {position} · weaker foot {foot}",
+  "edit.budget.auto": "Auto (all valid positions)",
+  "edit.budget.basis": "Basis: {position} · feet {left}/{right} · position cost {cost}",
   "edit.budget.currentCa": "Current CA {value}",
   "edit.budget.over":
-    "Attributes imply about {estimate} CA, above {ca}. FM may trim attributes; raise CA to about {estimate} or reduce attributes.",
+    "Attributes imply about {estimate} RCA, above {ca}. FM may trim attributes; raise CA to about {estimate} or reduce attributes.",
   "edit.budget.under":
-    "CA {ca} is above the attribute estimate of about {estimate}; FM may raise attributes over time.",
+    "CA {ca} is above the attribute RCA of about {estimate}; FM may raise attributes over time.",
   "edit.budget.balanced": "Attributes and CA balance within about 3 points.",
   "edit.budget.outlier":
-    "Large disagreement: attributes imply {estimate} CA, but the stored CA is {ca}. Custom or edited data can cause this; the stored CA is authoritative. Treat the estimate as a budget signal.",
+    "Large disagreement: attributes imply {estimate} RCA, but the stored CA is {ca}. Custom or edited data can cause this; the stored CA is authoritative. Treat the estimate as a budget signal.",
   "edit.budget.use": "Use estimate {value}",
   "edit.budget.note":
-    "Approximate estimate using community FM weights; typical error is ~3 CA, but custom/edited players and extreme attributes can differ more.",
+    "Exact FM RCA formula from the community reverse-engineering: internal 1–100 attributes, both feet, position-combination cost and familiarity scaling. The stored CA remains authoritative.",
   "edit.budget.loading": "Estimating…",
   "edit.warning.ca":
     "FM treats CA as the attribute budget and rebalances visible attributes over roughly a month.",
@@ -1359,23 +1359,23 @@ const zhCN: Record<TranslationKey, string> = {
   "edit.attributeBudget":
     "CA 是属性预算。FM 会在大约一个月内重新分配参与 CA 计算的属性；隐藏属性、Determination、Natural Fitness、Flair、Aggression、性格和习惯保持稳定。只改参与 CA 的可见属性而不改 CA，是临时的。",
   "edit.budget.title": "CA 预算",
-  "edit.budget.estimated": "按属性估算",
-  "edit.budget.estimatedShort": "估算 CA {value}",
-  "edit.budget.average": "均值 {value}",
+  "edit.budget.estimated": "按属性计算的推荐 CA（RCA）",
+  "edit.budget.estimatedShort": "RCA {value}",
+  "edit.budget.average": "加权均值（0–100）{value}",
   "edit.budget.position": "位置基准",
-  "edit.budget.auto": "自动（全部自然位置）",
-  "edit.budget.basis": "基准：{position} · 弱势脚 {foot}",
+  "edit.budget.auto": "自动（全部有效位置）",
+  "edit.budget.basis": "基准：{position} · 双脚 {left}/{right} · 位置成本 {cost}",
   "edit.budget.currentCa": "当前 CA {value}",
   "edit.budget.over":
-    "属性大约对应 CA {estimate}，高于 {ca}。FM 可能会压缩属性；建议把 CA 提高到约 {estimate}，或降低属性。",
+    "属性对应约 {estimate} RCA，高于 {ca}。FM 可能会压缩属性；建议把 CA 提高到约 {estimate}，或降低属性。",
   "edit.budget.under":
-    "CA {ca} 高于属性估算值 {estimate}；FM 可能随时间提升属性。",
-  "edit.budget.balanced": "属性与 CA 大致平衡（误差约 3 点以内）。",
+    "CA {ca} 高于属性 RCA {estimate}；FM 可能随时间提升属性。",
+  "edit.budget.balanced": "属性 RCA 与 CA 大致平衡（误差约 3 点以内）。",
   "edit.budget.outlier":
-    "偏差较大：属性估算为 {estimate} CA，但存档 CA 为 {ca}。自定义/编辑过的数据会导致这种情况；以存档 CA 为准，估算值只作为预算参考。",
+    "偏差较大：属性 RCA 为 {estimate}，但存档 CA 为 {ca}。自定义/编辑过的数据会导致这种情况；以存档 CA 为准，估算值只作为预算参考。",
   "edit.budget.use": "使用估算 {value}",
   "edit.budget.note":
-    "基于社区 FM 权重估算，典型误差约 3 CA；自定义/编辑球员和极端属性可能偏差更大。",
+    "采用社区逆向的 FM RCA 精确公式：内部 1–100 属性、双脚、位置组合成本与熟练度折减。存档 CA 仍为准。",
   "edit.budget.loading": "正在估算…",
   "edit.warning.ca": "CA 是属性预算，FM 会在大约一个月内重新分配可见属性。",
   "edit.warning.caAttrs":

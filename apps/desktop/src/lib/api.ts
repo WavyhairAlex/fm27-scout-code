@@ -30,6 +30,7 @@ import type {
   SquadAnalysis,
   TraitOption,
 } from "./types";
+import { estimateCaExact } from "./ca";
 import {
   MOCK_PLAYERS,
   MOCK_SAVE,
@@ -213,25 +214,7 @@ export async function getTraitOptions(): Promise<TraitOption[]> {
 export async function estimatePlayerCa(
   request: CaEstimateRequest,
 ): Promise<CaEstimate | null> {
-  if (!isTauri) {
-    const values = Object.values(request.attributes);
-    const weighted_average = values.length
-      ? values.reduce((sum, value) => sum + value, 0) / values.length
-      : 0;
-    const excess_average = values.length
-      ? values.reduce((sum, value) => sum + Math.max(0, value - 16), 0) / values.length
-      : 0;
-    return {
-      position: request.positions.join("/"),
-      estimated_ca: Math.max(
-        1,
-        Math.min(200, Math.round(18.13 * weighted_average + 18.74 * excess_average - 97.6)),
-      ),
-      weighted_average,
-      excess_average,
-      total_weight: 0,
-    };
-  }
+  if (!isTauri) return estimateCaExact(request);
   return invoke<CaEstimate>("estimate_player_ca", { request });
 }
 

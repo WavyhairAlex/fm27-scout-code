@@ -18,7 +18,7 @@ A macOS scouting workbench for Football Manager 27 with an optional, experimenta
 - Club workspace: searchable club table, squad summary, monthly finances, owned stadiums and facility ratings (corporate, training, youth, junior coaching, youth recruitment and youth level). Finance rows and detailed facility ratings exist only for the league nations the save tracks.
 - Optional save editor for CA/PA, attributes, hidden attributes, determination, personality and traits. Edits are staged across players and written in one batch to a new save.
 - Low-risk club edits: club reputation, latest-month finance snapshot (balance, transfer budget, wage budget), corporate facilities, training/youth/junior-coaching/youth-recruitment ratings and owned-stadium capacities. The source save is never modified.
-- CA budget estimator using community position weights, with over/under-budget guidance.
+- CA budget estimator using the reverse-engineered FM RCA formula (position weights, both feet, multi-position cost), with over/under-budget guidance.
 - English / Simplified Chinese UI that follows the system language.
 - Universal macOS release published by CI, with optional Developer ID signing/notarization.
 

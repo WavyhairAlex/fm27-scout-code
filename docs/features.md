@@ -67,8 +67,10 @@
 - CA/PA, attributes, hidden attributes, determination, personality and traits.
 - Edits are staged per player and written together to one new save file.
 - CA rebalancing warnings before writing.
-- CA budget estimator: live estimate from edited attributes using community FM
-  position weights, with over/under-budget guidance and position selection.
+- CA budget estimator: live RCA estimate from edited attributes using the
+  reverse-engineered FM formula (position weights, both feet, position-combination
+  cost and familiarity scaling), with over/under-budget guidance and position
+  selection.
 - Low-risk club edits: reputation, latest-month balance, transfer budget
   remaining, weekly wage budget, corporate facilities, training/youth/
   junior-coaching/youth-recruitment ratings and owned-stadium capacities. Club

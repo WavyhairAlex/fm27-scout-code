@@ -173,44 +173,49 @@ warning.
 
 ## CA budget estimate
 
-The desktop editor's **Ability** tab estimates current ability from the edited
-attributes:
+The desktop editor's **Ability** tab estimates the game's recommended current
+ability (RCA) from the edited attributes. It is a direct implementation of the
+community reverse-engineering of FM's CA calculation:
+<https://www.playgm.cc/thread-986285-1-1.html>.
 
-- It uses the community FM position-weight table and an FM27-calibrated fit:
-  `CA ≈ 18.13 × weighted-average + 18.74 × weighted-excess-above-16 − 97.60`,
-  clamped to 1–200.
-- The excess term captures the extra cost of high attributes (17+).
-- Attributes are the displayed 1–20 values; the **weaker foot** is included with
-  its position-specific weight (`min(left foot, right foot)`).
-- The player's natural/accomplished position can be selected as the basis.
-- **Auto** uses all natural positions and takes the highest weight for each
-  attribute across them, matching FM's multi-position behaviour. A single
-  natural or accomplished position can still be selected manually.
+- It uses the corrected community position-weight table (GK, DL/DR, DC, WBL/WBR,
+  DM, ML/MR, MC, AML/AMR, AMC, ST).
+- Attributes are the internal 1–100 values (the game displays 1–20). The feet
+  follow the game's rule: when one foot is 100, only the other foot is counted;
+  otherwise both feet are counted, each with the position-specific foot weight.
+- The calculation starts from a weighted average, then runs the game's
+  distribution-correction loop. Attributes that deviate far enough from the
+  candidate's baseline contribute a signed excess, which is folded back into the
+  average. The loop follows the same truncation and per-round limit rules as the
+  reconstructed code.
+- Multi-position players pay a position-combination cost derived from the full
+  15-position familiarity table. The cost is deducted from the CA budget before
+  the baseline is rebuilt.
+- The result is scaled by the position-familiarity retention table (100% at
+  18–20 down to 1% at 2–3).
+- **Auto** evaluates every position with familiarity at least 2 and keeps the
+  highest RCA. A specific position can still be selected; the position cost
+  still uses the whole familiarity table.
 - Zero-weight attributes (aggression, determination, flair, natural fitness and
   hidden attributes) do not change the estimate.
 - The estimate updates live while CA or attributes are edited.
-- The card shows the active basis, including the combined position label and the
-  weaker-foot value used.
+- The card shows the selected basis, the counted foot values and the
+  position-combination cost.
 
 The card shows the estimate, a marker for the current/edited CA, and one of:
 
-- **over budget**: attributes imply more CA than the stored value; FM may trim
+- **over budget**: attributes imply more RCA than the stored value; FM may trim
   attributes, so raise CA or lower attributes;
-- **under budget**: CA is above the attribute estimate; FM may raise attributes
-  over time;
+- **under budget**: CA is above the attribute RCA; FM may raise attributes over
+  time;
 - **balanced**: within roughly 3 CA points.
 
-Calibration used 48,026 players from a reference save. On a UID-split holdout the
-mean absolute error was **3.3 CA**; players with CA 170+ had a mean absolute error
-of about **4.3 CA**, down from 7.6 with the simple linear fit. A second reference
-save gave 3.26 CA mean absolute error. This remains an estimate, not an official
-formula.
-
-A disagreement above about 8 CA is flagged in the dialog. Large disagreements
-usually mean the save contains custom/edited players whose attributes and stored
-CA were set independently; in that case the stored CA is authoritative and the
-estimate should only be used as a budget signal. Typical players are within a few
-CA points.
+The stored CA is authoritative. On a reference save of over 48,000 players the
+mean absolute RCA–CA error was **0.8 CA**; 75–80% of players were within 1 point
+and 100% were within 5. Developed players can still differ because FM stores CA
+independently from the recommended value. A disagreement above about 8 CA is
+flagged in the dialog; custom/edited players can also cause this. This is a
+community reconstruction, not an official formula.
 
 See [editor-test-plan.md](editor-test-plan.md) for the controlled A/B/C comparison
 of CA-only, attributes-only and CA-plus-attributes edits.

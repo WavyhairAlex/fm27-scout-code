@@ -96,9 +96,15 @@ export interface BatchEditResult {
 }
 
 export interface CaEstimateRequest {
-  positions: string[];
+  /** Internal 1–100 attribute values keyed by attribute name. */
   attributes: Record<string, number>;
-  weaker_foot: number;
+  /** Full 15-position familiarity table (0–20). */
+  positions: Positions;
+  /** Optional single position; omitted means the best position. */
+  position?: string | null;
+  /** Internal 1–100 foot values. */
+  left_foot: number;
+  right_foot: number;
 }
 
 export interface CaEstimate {
@@ -107,6 +113,11 @@ export interface CaEstimate {
   weighted_average: number;
   excess_average: number;
   total_weight: number;
+  position_cost: number;
+  initial_ca: number;
+  iterations: number;
+  left_foot: number;
+  right_foot: number;
 }
 
 export interface RoleScore {
