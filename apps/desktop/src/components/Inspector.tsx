@@ -432,6 +432,7 @@ export function Inspector() {
             key={selectedUid}
             points={growth ?? []}
             gameDate={gameDate}
+            injuries={player.injuries}
           />
         )}
         {tab === "hidden" && (
@@ -682,75 +683,130 @@ function RolesPanel({ roles, bestId }: { roles: RoleScore[]; bestId: string | nu
   );
 }
 
-function GrowthPanel({ points, gameDate }: { points: SnapshotPoint[]; gameDate: string | null }) {
-  const { t } = useI18n();
+function GrowthPanel({
+  points,
+  gameDate,
+  injuries,
+}: {
+  points: SnapshotPoint[];
+  gameDate: string | null;
+  injuries: Player["injuries"];
+}) {
+  const { t, locale } = useI18n();
   const [expanded, setExpanded] = useState(false);
-  if (points.length < 2) {
-    return (
-      <div className="flex flex-col items-center gap-2 px-6 py-10 text-center">
-        <TrendingUp size={20} className="text-[var(--muted)]" />
-        <div className="text-xs font-semibold text-[var(--ink)]">{t("inspector.noGrowth")}</div>
-        <p className="max-w-[250px] text-[11px] leading-relaxed text-[var(--muted)]">
-          {t("inspector.noGrowthDescription")}
-          {gameDate ? t("inspector.currentSnapshot", { date: gameDate }) : ""}
-        </p>
-      </div>
-    );
-  }
+  const hasGrowth = points.length >= 2;
   const first = points[0];
   const last = points[points.length - 1];
-  const caDelta = (last.ca ?? 0) - (first.ca ?? 0);
+  const caDelta = hasGrowth ? (last.ca ?? 0) - (first.ca ?? 0) : 0;
   return (
     <div className="space-y-3 px-4 py-3">
-      <div className="rounded-xl border border-[var(--line)] bg-[var(--surface-2)] p-2">
-        <div className="mb-1 flex items-center justify-between px-1 text-[9px] text-[var(--muted)]">
-          <span>{t("inspector.growthTitle")}</span>
-          <span className={caDelta >= 0 ? "text-[var(--success)]" : "text-[var(--danger)]"}>
-            CA {caDelta >= 0 ? "+" : ""}
-            {caDelta}
-          </span>
+      {!hasGrowth && (
+        <div className="flex flex-col items-center gap-2 px-6 py-8 text-center">
+          <TrendingUp size={20} className="text-[var(--muted)]" />
+          <div className="text-xs font-semibold text-[var(--ink)]">{t("inspector.noGrowth")}</div>
+          <p className="max-w-[250px] text-[11px] leading-relaxed text-[var(--muted)]">
+            {t("inspector.noGrowthDescription")}
+            {gameDate ? t("inspector.currentSnapshot", { date: gameDate }) : ""}
+          </p>
         </div>
-        <button
-          type="button"
-          onClick={() => setExpanded(true)}
-          className="focus-ring group relative block w-full cursor-zoom-in rounded-md"
-          aria-label={t("inspector.growthExpand")}
-          title={t("inspector.growthExpand")}
-        >
-          <GrowthChart points={points} />
-          <span className="pointer-events-none absolute inset-0 flex items-center justify-center rounded-md bg-black/0 opacity-0 transition-opacity group-hover:bg-black/5 group-hover:opacity-100 dark:group-hover:bg-black/20">
-            <span className="flex h-7 w-7 items-center justify-center rounded-full border border-[var(--line)] bg-[var(--surface)]/95 text-[var(--ink)] shadow-sm">
-              <Maximize2 size={13} />
-            </span>
-          </span>
-        </button>
-        <div className="flex items-center gap-3 px-1 text-[9px] text-[var(--muted)]">
-          <span className="inline-flex items-center gap-1"><span className="h-0.5 w-3 bg-[var(--success)]" /> CA</span>
-          <span className="inline-flex items-center gap-1"><span className="h-0.5 w-3 bg-[var(--gold)]" /> PA</span>
-          <span className="ml-auto">{first.game_date} → {last.game_date}</span>
-        </div>
-      </div>
-      <div className="space-y-1">
-        { [...points].reverse().map((point) => (
-          <div key={point.game_date} className="flex items-center justify-between rounded-[6px] border border-[var(--line)] bg-[var(--surface-2)] px-2 py-1.5 text-[10px]">
-            <div className="min-w-0">
-              <div className="font-mono text-[var(--ink)]">{point.game_date}</div>
-              <div className="truncate text-[9px] text-[var(--muted)]">
-                {point.club_name ?? t("common.freeAgent")}
-              </div>
+      )}
+      {hasGrowth && (
+        <>
+          <div className="rounded-xl border border-[var(--line)] bg-[var(--surface-2)] p-2">
+            <div className="mb-1 flex items-center justify-between px-1 text-[9px] text-[var(--muted)]">
+              <span>{t("inspector.growthTitle")}</span>
+              <span className={caDelta >= 0 ? "text-[var(--success)]" : "text-[var(--danger)]"}>
+                CA {caDelta >= 0 ? "+" : ""}
+                {caDelta}
+              </span>
             </div>
-            <div className="flex items-center gap-3 font-mono">
-              <span className="text-[var(--success)]">CA {point.ca ?? "—"}</span>
-              <span className="text-[var(--gold)]">PA {point.pa ?? "—"}</span>
-              <span className="text-[var(--muted)]">{formatValue(point.transfer_value)}</span>
+            <button
+              type="button"
+              onClick={() => setExpanded(true)}
+              className="focus-ring group relative block w-full cursor-zoom-in rounded-md"
+              aria-label={t("inspector.growthExpand")}
+              title={t("inspector.growthExpand")}
+            >
+              <GrowthChart points={points} />
+              <span className="pointer-events-none absolute inset-0 flex items-center justify-center rounded-md bg-black/0 opacity-0 transition-opacity group-hover:bg-black/5 group-hover:opacity-100 dark:group-hover:bg-black/20">
+                <span className="flex h-7 w-7 items-center justify-center rounded-full border border-[var(--line)] bg-[var(--surface)]/95 text-[var(--ink)] shadow-sm">
+                  <Maximize2 size={13} />
+                </span>
+              </span>
+            </button>
+            <div className="flex items-center gap-3 px-1 text-[9px] text-[var(--muted)]">
+              <span className="inline-flex items-center gap-1"><span className="h-0.5 w-3 bg-[var(--success)]" /> CA</span>
+              <span className="inline-flex items-center gap-1"><span className="h-0.5 w-3 bg-[var(--gold)]" /> PA</span>
+              <span className="ml-auto">{first.game_date} → {last.game_date}</span>
             </div>
           </div>
-        ))}
-      </div>
-      <p className="text-[9px] leading-relaxed text-[var(--muted)]">
-        {t("inspector.growthNote")}
-      </p>
-      {expanded && <GrowthChartDialog points={points} onClose={() => setExpanded(false)} />}
+          <div className="space-y-1">
+            { [...points].reverse().map((point) => (
+              <div key={point.game_date} className="flex items-center justify-between rounded-[6px] border border-[var(--line)] bg-[var(--surface-2)] px-2 py-1.5 text-[10px]">
+                <div className="min-w-0">
+                  <div className="font-mono text-[var(--ink)]">{point.game_date}</div>
+                  <div className="truncate text-[9px] text-[var(--muted)]">
+                    {point.club_name ?? t("common.freeAgent")}
+                  </div>
+                </div>
+                <div className="flex items-center gap-3 font-mono">
+                  <span className="text-[var(--success)]">CA {point.ca ?? "—"}</span>
+                  <span className="text-[var(--gold)]">PA {point.pa ?? "—"}</span>
+                  <span className="text-[var(--muted)]">{formatValue(point.transfer_value)}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+          <p className="text-[9px] leading-relaxed text-[var(--muted)]">
+            {t("inspector.growthNote")}
+          </p>
+        </>
+      )}
+      {injuries.length > 0 && (
+        <div>
+          <div className="mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-[var(--muted)]">
+            {t("inspector.injuryHistory")}
+          </div>
+          <div className="space-y-1">
+            {[...injuries]
+              .sort((left, right) =>
+                (right.date ?? right.expected_return ?? "").localeCompare(
+                  left.date ?? left.expected_return ?? "",
+                ),
+              )
+              .slice(0, 6)
+              .map((injury, index) => (
+                <div
+                  key={`${injury.date ?? injury.expected_return}-${index}`}
+                  className="flex items-center justify-between rounded-[6px] border border-[var(--line)] bg-[var(--surface-2)] px-2 py-1.5 text-[10px]"
+                >
+                  <div className="min-w-0">
+                    <div className="font-mono text-[var(--ink)]">
+                      {injury.kind === "current"
+                        ? t("inspector.expectedReturn", {
+                            date: injury.expected_return ?? "—",
+                          })
+                        : (injury.date ?? t("inspector.unknownDate"))}
+                    </div>
+                    <div className="truncate text-[9px] text-[var(--muted)]">
+                      {injury.club_name ?? t("common.unknownClub")}
+                      {injury.cause != null
+                        ? ` · ${injury.cause === 1 ? t("inspector.matchCause") : t("inspector.trainingCause")}`
+                        : ""}
+                    </div>
+                  </div>
+                  <Badge tone={injury.severity != null && injury.severity >= 2 ? "danger" : "outline"}>
+                    {injury.severity != null
+                      ? (severityLabel(injury.severity, locale) ??
+                        t("inspector.severityFallback", { level: injury.severity }))
+                      : (injury.type_name ?? t("inspector.injury"))}
+                  </Badge>
+                </div>
+              ))}
+          </div>
+        </div>
+      )}
+      {expanded && hasGrowth && <GrowthChartDialog points={points} onClose={() => setExpanded(false)} />}
     </div>
   );
 }
@@ -1048,51 +1104,6 @@ function ContractPanel({ player }: { player: Player }) {
           </div>
         </div>
       </div>
-
-      {player.injuries.length > 0 && (
-        <div>
-          <div className="mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-[var(--muted)]">
-            {t("inspector.injuryHistory")}
-          </div>
-          <div className="space-y-1">
-            {[...player.injuries]
-              .sort((left, right) =>
-                (right.date ?? right.expected_return ?? "").localeCompare(
-                  left.date ?? left.expected_return ?? "",
-                ),
-              )
-              .slice(0, 6)
-              .map((injury, index) => (
-                <div
-                  key={`${injury.date ?? injury.expected_return}-${index}`}
-                  className="flex items-center justify-between rounded-[6px] border border-[var(--line)] bg-[var(--surface-2)] px-2 py-1.5 text-[10px]"
-                >
-                  <div className="min-w-0">
-                    <div className="font-mono text-[var(--ink)]">
-                      {injury.kind === "current"
-                        ? t("inspector.expectedReturn", {
-                            date: injury.expected_return ?? "—",
-                          })
-                        : (injury.date ?? t("inspector.unknownDate"))}
-                    </div>
-                    <div className="truncate text-[9px] text-[var(--muted)]">
-                      {injury.club_name ?? t("common.unknownClub")}
-                      {injury.cause != null
-                        ? ` · ${injury.cause === 1 ? t("inspector.matchCause") : t("inspector.trainingCause")}`
-                        : ""}
-                    </div>
-                  </div>
-                  <Badge tone={injury.severity != null && injury.severity >= 2 ? "danger" : "outline"}>
-                    {injury.severity != null
-                      ? (severityLabel(injury.severity, locale) ??
-                        t("inspector.severityFallback", { level: injury.severity }))
-                      : (injury.type_name ?? t("inspector.injury"))}
-                  </Badge>
-                </div>
-              ))}
-          </div>
-        </div>
-      )}
 
       {player.suspensions.length > 0 && (
         <div>
