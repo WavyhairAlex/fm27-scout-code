@@ -66,6 +66,24 @@ describe("mock player query", () => {
     expect(suspensions.rows.every((row) => row.suspension_count > 0)).toBe(true);
   });
 
+  it("filters generated players", () => {
+    const generated = mockQuery({
+      save_id: MOCK_SAVE_ID,
+      generated: true,
+      page_size: 500,
+    });
+    expect(generated.total).toBeGreaterThan(0);
+    expect(generated.rows.every((row) => row.generated)).toBe(true);
+
+    const database = mockQuery({
+      save_id: MOCK_SAVE_ID,
+      generated: false,
+      page_size: 500,
+    });
+    expect(database.total).toBeGreaterThan(0);
+    expect(database.rows.every((row) => !row.generated)).toBe(true);
+  });
+
   it("filters transfer and loan listings", () => {
     const sale = mockQuery({
       save_id: MOCK_SAVE_ID,

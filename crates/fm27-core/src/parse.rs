@@ -428,6 +428,7 @@ pub fn parse_save_with_progress(
         players.push(Player {
             uid: record.uid,
             unique_id,
+            generated: crate::model::is_generated_unique_id(unique_id),
             name: person_name,
             first_name,
             last_name,

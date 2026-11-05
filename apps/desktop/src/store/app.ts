@@ -39,6 +39,7 @@ export interface Filters {
   paMax: number | null;
   paCaGapMin: number | null;
   paUnknown: boolean | null;
+  generated: boolean | null;
   positions: string[];
   positionMin: number;
   attributes: AttributeRule[];
@@ -119,6 +120,7 @@ export const EMPTY_FILTERS: Filters = {
   paMax: null,
   paCaGapMin: null,
   paUnknown: null,
+  generated: null,
   positions: [],
   positionMin: 15,
   attributes: [],

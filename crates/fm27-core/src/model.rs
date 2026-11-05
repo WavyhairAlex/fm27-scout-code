@@ -5,6 +5,15 @@ use serde::{Deserialize, Serialize, Serializer, ser::SerializeMap};
 
 use crate::layout::{ATTRIBUTE_KEYS, POSITION_KEYS};
 
+/// The game allocates Unique IDs to people it creates after the save starts from this
+/// range. Database people stay below it, including the 2,000,000,000+ IDs FM27 uses for
+/// its own records.
+pub const GENERATED_UNIQUE_ID_MINIMUM: u32 = 2_002_000_000;
+
+pub fn is_generated_unique_id(unique_id: Option<u32>) -> bool {
+    unique_id.is_some_and(|id| id >= GENERATED_UNIQUE_ID_MINIMUM)
+}
+
 #[derive(Debug, Clone, Copy)]
 pub struct Attributes {
     pub values: [u8; 52],
@@ -209,6 +218,9 @@ pub struct Suspension {
 pub struct Player {
     pub uid: u32,
     pub unique_id: Option<u32>,
+    /// True when the game generated this player after the save started (a newgen).
+    #[serde(default)]
+    pub generated: bool,
     pub name: Option<String>,
     pub first_name: Option<String>,
     pub last_name: Option<String>,
@@ -289,6 +301,20 @@ impl Player {
             age -= 1;
         }
         age
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn generated_unique_ids_start_at_the_game_allocation_range() {
+        assert!(!is_generated_unique_id(None));
+        assert!(!is_generated_unique_id(Some(
+            GENERATED_UNIQUE_ID_MINIMUM - 1
+        )));
+        assert!(is_generated_unique_id(Some(GENERATED_UNIQUE_ID_MINIMUM)));
     }
 }
 

@@ -11,8 +11,9 @@ use serde::{Deserialize, Serialize};
 use crate::error::{Error, Result};
 use crate::layout::{ATTRIBUTE_KEYS, HIDDEN_ATTRIBUTE_KEYS, PERSONALITY_KEYS, POSITION_KEYS};
 use crate::model::{
-    Attributes, Club, ClubDetail, ClubLink, Competition, Contract, FinanceMonth, ParseReport,
-    Personality, Player, Positions, SaveSummary, Stadium, Trait,
+    Attributes, Club, ClubDetail, ClubLink, Competition, Contract, FinanceMonth,
+    GENERATED_UNIQUE_ID_MINIMUM, ParseReport, Personality, Player, Positions, SaveSummary, Stadium,
+    Trait, is_generated_unique_id,
 };
 use crate::parse::ParsedSave;
 
@@ -80,6 +81,8 @@ pub struct PlayerQuery {
     /// Minimum (potential - current) ability gap, used by the wonderkid view.
     pub pa_ca_gap_min: Option<u16>,
     pub pa_unknown: Option<bool>,
+    /// `true` keeps only system-generated players, `false` keeps only database players.
+    pub generated: Option<bool>,
     pub positions: Vec<String>,
     pub position_min: Option<u8>,
     pub attributes: Vec<AttributeFilter>,
@@ -101,6 +104,7 @@ pub struct PlayerQuery {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PlayerRow {
     pub uid: u32,
+    pub generated: bool,
     pub name: Option<String>,
     pub age: Option<i32>,
     pub club_uid: Option<u32>,
@@ -793,7 +797,8 @@ impl Store {
                     c.end_date, p.height_cm, p.left_foot, p.right_foot, c.on_loan, p.traits_json,
                     p.nation_name, p.gender, p.best_role_id, p.best_role_name,
                     p.best_role_score, p.best_role_position, p.injury_status, p.injury_until,
-                    p.recent_injury, p.suspension_count, p.transfer_listed, p.loan_listed
+                    p.recent_injury, p.suspension_count, p.transfer_listed, p.loan_listed,
+                    p.unique_id
              FROM players p
              LEFT JOIN contracts c ON c.save_id = p.save_id AND c.player_uid = p.uid
              WHERE {where_sql}
@@ -807,6 +812,7 @@ impl Store {
         let rows = statement.query_map(params_from_iter(page_params.iter()), |row| {
             Ok(PlayerRow {
                 uid: row.get(0)?,
+                generated: is_generated_unique_id(row.get::<_, Option<u32>>(36)?),
                 name: row.get(1)?,
                 age: row.get(2)?,
                 club_uid: row.get(3)?,
@@ -905,6 +911,8 @@ impl Store {
             .map(|text| serde_json::from_str::<Player>(&text).map_err(Error::from))
             .transpose()?;
         if let Some(player) = &mut player {
+            // Cached rows written before the flag existed still carry the Unique ID.
+            player.generated = is_generated_unique_id(player.unique_id);
             if !include_hidden {
                 redact_player(player);
             }
@@ -2178,6 +2186,15 @@ fn build_where(query: &PlayerQuery, params: &mut Vec<Value>) -> Result<String> {
             "p.pa IS NOT NULL".to_owned()
         });
     }
+    if let Some(generated) = query.generated {
+        if generated {
+            clauses.push("p.unique_id >= ?".to_owned());
+            params.push(Value::Integer(GENERATED_UNIQUE_ID_MINIMUM as i64));
+        } else {
+            clauses.push("(p.unique_id IS NULL OR p.unique_id < ?)".to_owned());
+            params.push(Value::Integer(GENERATED_UNIQUE_ID_MINIMUM as i64));
+        }
+    }
     let threshold = query.position_min.unwrap_or(15);
     for position in &query.positions {
         if !POSITION_KEYS.contains(&position.as_str()) {
@@ -2478,5 +2495,28 @@ mod tests {
         };
         let mut params = Vec::new();
         assert!(build_where(&query, &mut params).is_err());
+    }
+
+    #[test]
+    fn filters_generated_players_by_unique_id() {
+        let query = PlayerQuery {
+            generated: Some(true),
+            ..PlayerQuery::default()
+        };
+        let mut params = Vec::new();
+        let sql = build_where(&query, &mut params).expect("generated filter should be valid");
+        assert!(sql.contains("p.unique_id >= ?"));
+        assert!(matches!(
+            params.last(),
+            Some(Value::Integer(value)) if *value == GENERATED_UNIQUE_ID_MINIMUM as i64
+        ));
+
+        let query = PlayerQuery {
+            generated: Some(false),
+            ..PlayerQuery::default()
+        };
+        let mut params = Vec::new();
+        let sql = build_where(&query, &mut params).expect("database filter should be valid");
+        assert!(sql.contains("p.unique_id IS NULL OR p.unique_id < ?"));
     }
 }

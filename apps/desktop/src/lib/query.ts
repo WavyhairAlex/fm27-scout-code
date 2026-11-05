@@ -42,6 +42,7 @@ export function buildPlayerQuery(
     pa_max: filters.paMax,
     pa_ca_gap_min: filters.paCaGapMin,
     pa_unknown: filters.paUnknown,
+    generated: filters.generated,
     positions: filters.positions,
     position_min: filters.positionMin,
     attributes: filters.attributes.map((rule) => ({

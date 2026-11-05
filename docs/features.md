@@ -53,6 +53,8 @@
   a wonderkid radar (age + PA + CA gap).
 - Quick filters: wonderkids, expiring contracts, high potential, injured /
   injury history / suspended / on loan / free agent / available.
+- Player origin: system-generated newgens are marked in the table and profile and
+  can be included, excluded or isolated with the player-origin filter.
 - Role scores: 29 FM-style roles weighted by key attributes and combined with
   position familiarity; the detail panel shows every role and the best role.
 - Growth history: each parse records a snapshot keyed by save name + game date;

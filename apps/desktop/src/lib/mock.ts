@@ -154,9 +154,11 @@ function buildPlayer(index: number): Player {
   const contractEnd = index === 0 ? "2027-06-30" : `${2027 + (index % 4)}-06-30`;
   const wage = index === 0 ? 106965 : Math.round(500 + random() * 80000);
   const value = index === 0 ? 4408650 : Math.round(10000 + random() * 60000000);
+  const generated = index > 0 && index % 11 === 0;
   return {
     uid: 100000 + index,
-    unique_id: 653054 + index,
+    unique_id: generated ? 2_002_000_000 + index : 653054 + index,
+    generated,
     name: index === 0 ? "Luka Modrić" : `${first} ${last}`,
     first_name: first,
     last_name: last,
@@ -328,6 +330,7 @@ export function mockPlayerRow(player: Player): PlayerRow {
   const positionsText = player.natural_positions.join(" / ");
   return {
     uid: player.uid,
+    generated: player.generated,
     name: player.name,
     age: player.age,
     club_uid: player.club_uid,
@@ -522,6 +525,8 @@ export function mockQuery(query: PlayerQuery): {
     rows = rows.filter((row) => row.pa != null && row.pa - row.ca >= query.pa_ca_gap_min!);
   }
   if (query.pa_unknown === true) rows = rows.filter((row) => row.pa_range_code != null);
+  if (query.generated === true) rows = rows.filter((row) => row.generated);
+  if (query.generated === false) rows = rows.filter((row) => !row.generated);
   if (query.positions?.length) {
     const threshold = query.position_min ?? 15;
     rows = rows.filter((row) =>

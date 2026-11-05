@@ -256,17 +256,24 @@ export function Inspector() {
                     )}
                   </div>
                 </div>
-                <div className="flex shrink-0 gap-1">
-                  <span className={cn("flex h-8 min-w-10 flex-col items-center justify-center rounded-lg border px-1.5", caTone(player.ca))}>
-                    <span className="text-[8px] font-bold uppercase opacity-60">CA</span>
-                    <span className="font-mono text-[12px] font-bold leading-none">{player.ca}</span>
-                  </span>
-                  <span className="flex h-8 min-w-10 flex-col items-center justify-center rounded-lg border border-[var(--line)] bg-[var(--surface-2)] px-1.5 text-[var(--muted)]">
-                    <span className="text-[8px] font-bold uppercase opacity-60">PA</span>
-                    <span className="font-mono text-[12px] font-bold leading-none">
-                      {player.pa ?? (player.pa_range_code != null ? "?" : "—")}
+                <div className="flex shrink-0 flex-col items-end gap-1">
+                  <div className="flex gap-1">
+                    <span className={cn("flex h-8 min-w-10 flex-col items-center justify-center rounded-lg border px-1.5", caTone(player.ca))}>
+                      <span className="text-[8px] font-bold uppercase opacity-60">CA</span>
+                      <span className="font-mono text-[12px] font-bold leading-none">{player.ca}</span>
                     </span>
-                  </span>
+                    <span className="flex h-8 min-w-10 flex-col items-center justify-center rounded-lg border border-[var(--line)] bg-[var(--surface-2)] px-1.5 text-[var(--muted)]">
+                      <span className="text-[8px] font-bold uppercase opacity-60">PA</span>
+                      <span className="font-mono text-[12px] font-bold leading-none">
+                        {player.pa ?? (player.pa_range_code != null ? "?" : "—")}
+                      </span>
+                    </span>
+                  </div>
+                  {player.generated && (
+                    <Badge tone="gold" className="px-1.5 py-0 text-[9px]">
+                      {t("inspector.generatedBadge")}
+                    </Badge>
+                  )}
                 </div>
               </div>
             </div>

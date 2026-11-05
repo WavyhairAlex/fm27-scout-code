@@ -198,6 +198,8 @@ export interface Reputation {
 export interface Player {
   uid: number;
   unique_id: number | null;
+  /** True when the game generated this player after the save started. */
+  generated: boolean;
   name: string | null;
   first_name: string | null;
   last_name: string | null;
@@ -262,6 +264,7 @@ export interface Player {
 
 export interface PlayerRow {
   uid: number;
+  generated: boolean;
   name: string | null;
   age: number | null;
   club_uid: number | null;
@@ -321,6 +324,8 @@ export interface PlayerQuery {
   pa_max?: number | null;
   pa_ca_gap_min?: number | null;
   pa_unknown?: boolean | null;
+  /** `true` keeps only system-generated players, `false` keeps only database players. */
+  generated?: boolean | null;
   positions?: string[];
   position_min?: number | null;
   attributes?: { key: string; min?: number | null; max?: number | null }[];

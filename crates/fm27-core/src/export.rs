@@ -35,6 +35,7 @@ fn write_csv(path: &Path, rows: &[PlayerRow]) -> Result<()> {
     let mut writer = csv::Writer::from_path(path)?;
     let mut header = vec![
         "uid".to_owned(),
+        "generated".to_owned(),
         "name".to_owned(),
         "age".to_owned(),
         "club".to_owned(),
@@ -63,6 +64,7 @@ fn write_csv(path: &Path, rows: &[PlayerRow]) -> Result<()> {
     for row in rows {
         let mut record = vec![
             row.uid.to_string(),
+            if row.generated { "yes" } else { "no" }.to_owned(),
             row.name.clone().unwrap_or_default(),
             row.age.map(|value| value.to_string()).unwrap_or_default(),
             row.club_name.clone().unwrap_or_default(),

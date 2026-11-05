@@ -118,6 +118,14 @@ export function PlayerTable() {
                     {t("table.female")}
                   </span>
                 )}
+                {row.original.generated && (
+                  <span
+                    title={t("table.generatedTitle")}
+                    className="rounded bg-[var(--gold-soft)] px-1 text-[8px] font-semibold text-[var(--gold)]"
+                  >
+                    {t("table.generated")}
+                  </span>
+                )}
               </div>
             </div>
           </div>

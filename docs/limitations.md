@@ -37,6 +37,9 @@
   windows, so it no longer depends on the typed array being populated.
 - Contract clauses, loans and contract chains are parsed; a few unobserved
   fallback structures are explicitly left blank.
+- System-generated players are identified by the game's Unique ID range
+  (`2,002,000,000` and above). A generated person that reuses a deleted database
+  ID cannot be told apart from a database person by the save alone.
 - Monthly club finances, corporate facilities and the detailed facility ratings
   exist only for the league nations the save tracks. In the reference FM27 save
   that is 122 clubs out of more than 26,000; other clubs show their basic

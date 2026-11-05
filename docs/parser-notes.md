@@ -90,6 +90,11 @@ records in the reference save.
 Attribute display values use `max(1, (raw + 2) / 5)`. Natural positions are ratings
 ≥18; accomplished are 15–17, both sorted by rating descending.
 
+The player's game Unique ID comes from the closing person header. The game allocates
+IDs from `2,002,000,000` upward to people it creates after the save starts, so players
+at or above that threshold are system-generated newgens. FM27 database people stay
+below it even when their IDs are in the `2,000,000,000` range.
+
 ## Person block
 
 The block is found by a zero byte followed by eight personality bytes in `1..=20`.

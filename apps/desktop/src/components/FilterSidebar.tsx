@@ -6,6 +6,7 @@ import {
   Plus,
   RotateCcw,
   SlidersHorizontal,
+  Sparkles,
   X,
 } from "lucide-react";
 import { useFilterOptions } from "@/lib/query";
@@ -65,6 +66,7 @@ export function FilterSidebar() {
       filters.paUnknown != null
     )
       count++;
+    if (filters.generated != null) count++;
     if (filters.positions.length) count++;
     if (filters.attributes.length) count += filters.attributes.length;
     if (filters.valueMin != null || filters.valueMax != null) count++;
@@ -369,6 +371,17 @@ export function FilterSidebar() {
               );
             })}
           </div>
+        </Section>
+
+        <Section title={t("filter.origin")} icon={<Sparkles size={12} />}>
+          <Checkbox
+            checked={filters.generated === true}
+            onChange={(checked) => patchFilters({ generated: checked ? true : null })}
+            label={t("filter.generatedOnly")}
+          />
+          <p className="text-[10px] leading-snug text-[var(--muted)]">
+            {t("filter.originHint")}
+          </p>
         </Section>
 
         <Section title={t("filter.listing")} icon={<SlidersHorizontal size={12} />}>
