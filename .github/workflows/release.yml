@@ -14,20 +14,32 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
-  build:
-    runs-on: macos-15
+  prepare:
+    name: Prepare frontend and release metadata
+    runs-on: ubuntu-latest
     outputs:
       release_tag: ${{ steps.meta.outputs.release_tag }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           ref: ${{ inputs.tag || github.ref }}
 
-      - name: Install Node
-        uses: actions/setup-node@v4
+      - name: Install pnpm
+        uses: pnpm/action-setup@v6
         with:
-          node-version: 24
+          version: 12.3.4
+
+      - name: Install Node
+        uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+          cache-dependency-path: apps/desktop/pnpm-lock.yaml
 
       - name: Check version consistency
         run: node scripts/version.mjs --check
@@ -51,48 +63,200 @@ jobs:
           fi
           echo "release_tag=$TAG" >> "$GITHUB_OUTPUT"
 
-      - name: Install Rust
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: aarch64-apple-darwin,x86_64-apple-darwin
-
-      - name: Cache Cargo
-        uses: Swatinem/rust-cache@v2
-
-      - name: Rust tests
-        run: cargo test -p fm27-core
-
-      - name: Install pnpm
-        run: npm install -g pnpm@12.3.4
-
       - name: Install frontend dependencies
         working-directory: apps/desktop
         run: pnpm install --frozen-lockfile
+
+      - name: Frontend build
+        working-directory: apps/desktop
+        run: pnpm build
 
       - name: Frontend tests
         working-directory: apps/desktop
         run: pnpm test
 
-      - name: Build Universal bundles
+      - name: Upload frontend bundle
+        uses: actions/upload-artifact@v7
+        with:
+          name: frontend-dist
+          path: apps/desktop/dist
+          retention-days: 1
+          if-no-files-found: error
+
+  verify:
+    name: Rust tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          prefix-key: v1-release-verify
+          cache-bin: false
+          save-if: false
+
+      - name: Rust tests
+        run: cargo test -p fm27-core
+
+  build:
+    name: Build ${{ matrix.target }}
+    needs: prepare
+    strategy:
+      fail-fast: false
+      matrix:
+        target:
+          - aarch64-apple-darwin
+          - x86_64-apple-darwin
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v6
+        with:
+          version: 12.3.4
+
+      - name: Install Node
+        uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+          cache-dependency-path: apps/desktop/pnpm-lock.yaml
+
+      - name: Install frontend dependencies
         working-directory: apps/desktop
+        run: pnpm install --frozen-lockfile
+
+      - name: Download frontend bundle
+        uses: actions/download-artifact@v8
+        with:
+          name: frontend-dist
+          path: apps/desktop/dist
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      # Release builds run from tags, whose cache scope does not help the next
+      # release anyway. Keep them out of the repository's 10 GB cache budget.
+      - name: Cache Cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          prefix-key: v1-release
+          key: ${{ matrix.target }}
+          cache-bin: false
+          save-if: false
+
+      - name: Build ${{ matrix.target }} binary
         env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
           FM27_UPDATER_PUBKEY: ${{ secrets.FM27_UPDATER_PUBKEY }}
         run: |
+          CONFIG="$RUNNER_TEMP/tauri.release.json"
+          if [[ -n "$TAURI_SIGNING_PRIVATE_KEY" && -n "$FM27_UPDATER_PUBKEY" ]]; then
+            jq -n --arg pubkey "$FM27_UPDATER_PUBKEY" \
+              '{build:{beforeBuildCommand:""},bundle:{createUpdaterArtifacts:true},plugins:{updater:{pubkey:$pubkey}}}' \
+              > "$CONFIG"
+          else
+            jq -n '{build:{beforeBuildCommand:""}}' > "$CONFIG"
+          fi
+          cd apps/desktop
+          pnpm tauri build --target ${{ matrix.target }} --no-bundle --config "$CONFIG"
+
+      - name: Upload ${{ matrix.target }} binary
+        uses: actions/upload-artifact@v7
+        with:
+          name: fm27-binary-${{ matrix.target }}
+          path: target/${{ matrix.target }}/release/fm27-scout-desktop
+          retention-days: 1
+          if-no-files-found: error
+
+  merge:
+    name: Bundle universal DMG
+    needs: [prepare, verify, build]
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v6
+        with:
+          version: 12.3.4
+
+      - name: Install Node
+        uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+          cache-dependency-path: apps/desktop/pnpm-lock.yaml
+
+      - name: Install frontend dependencies
+        working-directory: apps/desktop
+        run: pnpm install --frozen-lockfile
+
+      - name: Download frontend bundle
+        uses: actions/download-artifact@v8
+        with:
+          name: frontend-dist
+          path: apps/desktop/dist
+
+      - name: Download arm64 binary
+        uses: actions/download-artifact@v8
+        with:
+          name: fm27-binary-aarch64-apple-darwin
+          path: artifacts/aarch64
+
+      - name: Download x86_64 binary
+        uses: actions/download-artifact@v8
+        with:
+          name: fm27-binary-x86_64-apple-darwin
+          path: artifacts/x86_64
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Merge universal binary
+        run: |
+          mkdir -p target/universal-apple-darwin/release
+          lipo -create \
+            artifacts/aarch64/fm27-scout-desktop \
+            artifacts/x86_64/fm27-scout-desktop \
+            -output target/universal-apple-darwin/release/fm27-scout-desktop
+          chmod +x target/universal-apple-darwin/release/fm27-scout-desktop
+          lipo -info target/universal-apple-darwin/release/fm27-scout-desktop
+
+      - name: Bundle universal app and DMG
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          FM27_UPDATER_PUBKEY: ${{ secrets.FM27_UPDATER_PUBKEY }}
+        run: |
+          CONFIG="$RUNNER_TEMP/tauri.release.json"
           if [[ -n "$TAURI_SIGNING_PRIVATE_KEY" && -n "$FM27_UPDATER_PUBKEY" ]]; then
             echo "Updater signing configured; building signed updater artifacts."
-            UPDATER_CONFIG="$RUNNER_TEMP/tauri.updater.json"
             jq -n --arg pubkey "$FM27_UPDATER_PUBKEY" \
-              '{bundle:{createUpdaterArtifacts:true},plugins:{updater:{pubkey:$pubkey}}}' \
-              > "$UPDATER_CONFIG"
-            pnpm tauri build --target universal-apple-darwin --bundles app,dmg \
-              --config "$UPDATER_CONFIG"
+              '{build:{beforeBuildCommand:""},bundle:{createUpdaterArtifacts:true},plugins:{updater:{pubkey:$pubkey}}}' \
+              > "$CONFIG"
             echo "UPDATER=1" >> "$GITHUB_ENV"
           else
             echo "::warning::Updater secrets are not configured; building without signed updater artifacts."
-            pnpm tauri build --target universal-apple-darwin --bundles app,dmg
+            jq -n '{build:{beforeBuildCommand:""}}' > "$CONFIG"
           fi
+          cd apps/desktop
+          pnpm tauri bundle --target universal-apple-darwin --bundles app,dmg \
+            --config "$CONFIG"
 
       - name: Verify universal binary and DMG
         run: |
@@ -107,7 +271,7 @@ jobs:
 
       - name: Prepare release assets
         env:
-          TAG: ${{ steps.meta.outputs.release_tag }}
+          TAG: ${{ needs.prepare.outputs.release_tag }}
         run: |
           mkdir -p release-assets
 
@@ -161,21 +325,22 @@ jobs:
           shasum -a 256 "${files[@]}" > SHA256SUMS.txt
 
       - name: Upload release assets
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: fm27-scout-release-assets
           path: release-assets/
           if-no-files-found: error
 
   release:
-    needs: build
-    if: needs.build.outputs.release_tag != ''
+    name: Publish GitHub release
+    needs: [prepare, verify, merge]
+    if: needs.prepare.outputs.release_tag != ''
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
       - name: Download release assets
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: fm27-scout-release-assets
           path: release-assets
@@ -184,7 +349,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
-          TAG: ${{ needs.build.outputs.release_tag }}
+          TAG: ${{ needs.prepare.outputs.release_tag }}
           RELEASE_NOTES: |
             > [!WARNING]
             > 此版本未签名、未公证，首次打开会被 macOS 拦截。

@@ -306,15 +306,15 @@ fn compare_rows(
     let right_value = sort_value(right, by);
     // Unknown values sort last regardless of direction.
     match (left_value, right_value) {
-        (None, None) => return left.uid.cmp(&right.uid),
-        (None, Some(_)) => return Ordering::Greater,
-        (Some(_), None) => return Ordering::Less,
+        (None, None) => left.uid.cmp(&right.uid),
+        (None, Some(_)) => Ordering::Greater,
+        (Some(_), None) => Ordering::Less,
         (Some(left_number), Some(right_number)) => {
             let order = left_number
                 .partial_cmp(&right_number)
                 .unwrap_or(Ordering::Equal);
             let order = if ascending { order } else { order.reverse() };
-            return order.then_with(|| left.uid.cmp(&right.uid));
+            order.then_with(|| left.uid.cmp(&right.uid))
         }
     }
 }

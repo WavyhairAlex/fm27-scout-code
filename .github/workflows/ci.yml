@@ -4,12 +4,57 @@ on:
   push:
     branches: [main]
   pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pull-requests: read
+
+# Cancel superseded pull-request runs, but never a push to main: every main
+# commit must keep a complete run for releases and audits.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
-  test:
-    runs-on: macos-15
+  changes:
+    name: Detect changed areas
+    runs-on: ubuntu-latest
+    outputs:
+      code: ${{ steps.flag.outputs.code }}
     steps:
-      - uses: actions/checkout@v4
+      - name: Detect docs-only pull request
+        id: filter
+        if: github.event_name == 'pull_request'
+        uses: dorny/paths-filter@v4
+        with:
+          predicate-quantifier: some-with-excludes
+          filters: |
+            code:
+              - '**'
+              - '!*.md'
+              - '!**/*.md'
+              - '!docs/**'
+              - '!LICENSE'
+      - name: Set code flag
+        id: flag
+        env:
+          IS_PR: ${{ github.event_name == 'pull_request' }}
+          CODE_CHANGED: ${{ steps.filter.outputs.code }}
+        run: |
+          if [[ "$IS_PR" != "true" || "$CODE_CHANGED" == "true" ]]; then
+            echo "code=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "code=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  rust:
+    name: Rust checks
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
@@ -18,20 +63,41 @@ jobs:
 
       - name: Cache Cargo
         uses: Swatinem/rust-cache@v2
+        with:
+          prefix-key: v1-ci-rust
+          cache-bin: false
+
+      - name: Check formatting
+        run: cargo fmt --all -- --check
+
+      - name: Clippy
+        run: cargo clippy -p fm27-core -p fm27-cli --all-targets -- -D warnings
 
       - name: Rust tests
         run: cargo test -p fm27-core
 
-      - name: Install Node
-        uses: actions/setup-node@v4
+  frontend:
+    name: Frontend tests
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v6
         with:
-          node-version: 24
+          version: 12.3.4
+
+      - name: Install Node
+        uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+          cache-dependency-path: apps/desktop/pnpm-lock.yaml
 
       - name: Check version consistency
         run: node scripts/version.mjs --check
-
-      - name: Install pnpm
-        run: npm install -g pnpm@12.3.4
 
       - name: Install frontend dependencies
         working-directory: apps/desktop
@@ -45,5 +111,65 @@ jobs:
         working-directory: apps/desktop
         run: pnpm test
 
+  desktop:
+    name: Desktop backend
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          prefix-key: v1-ci-desktop
+          cache-bin: false
+
+      # tauri-build only requires frontendDist to exist for cargo check. The
+      # real production bundle is built and tested in the Ubuntu frontend job.
+      - name: Prepare Tauri frontend context
+        run: mkdir -p apps/desktop/dist
+
       - name: Check desktop backend
         run: cargo check -p fm27-scout-desktop
+
+  # Require only this job in branch protection. Heavy checks may be skipped for
+  # docs-only pull requests, but this aggregate check always reports a result.
+  ci-required:
+    name: ci-required
+    needs: [changes, rust, frontend, desktop]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify required jobs
+        env:
+          CODE: ${{ needs.changes.outputs.code }}
+          CHANGES: ${{ needs.changes.result }}
+          RUST: ${{ needs.rust.result }}
+          FRONTEND: ${{ needs.frontend.result }}
+          DESKTOP: ${{ needs.desktop.result }}
+        run: |
+          set -euo pipefail
+          if [[ "$CHANGES" != "success" ]]; then
+            echo "changes job did not succeed: $CHANGES"
+            exit 1
+          fi
+          if [[ "$CODE" == "true" ]]; then
+            for result in "rust:$RUST" "frontend:$FRONTEND" "desktop:$DESKTOP"; do
+              if [[ "${result#*:}" != "success" ]]; then
+                echo "${result%%:*} job did not succeed: ${result#*:}"
+                exit 1
+              fi
+            done
+          else
+            for result in "rust:$RUST" "frontend:$FRONTEND" "desktop:$DESKTOP"; do
+              if [[ "${result#*:}" != "skipped" ]]; then
+                echo "${result%%:*} unexpectedly ran for a docs-only change: ${result#*:}"
+                exit 1
+              fi
+            done
+          fi
+          echo "All required checks passed (code=$CODE)."

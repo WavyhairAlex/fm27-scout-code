@@ -320,10 +320,8 @@ fn merge_duplicate_rows(rows: Vec<SeasonStatRow>) -> Vec<SeasonStatRow> {
 fn merge_row(target: &mut SeasonStatRow, source: SeasonStatRow) {
     let target_rated = target.rated_appearances;
     let source_rated = source.rated_appearances;
-    let target_rating_sum =
-        target.average_rating.unwrap_or(0.0) * f64::from(target_rated);
-    let source_rating_sum =
-        source.average_rating.unwrap_or(0.0) * f64::from(source_rated);
+    let target_rating_sum = target.average_rating.unwrap_or(0.0) * f64::from(target_rated);
+    let source_rating_sum = source.average_rating.unwrap_or(0.0) * f64::from(source_rated);
     let total_rated = target_rated + source_rated;
 
     target.player_name = target.player_name.take().or(source.player_name);
@@ -335,8 +333,8 @@ fn merge_row(target: &mut SeasonStatRow, source: SeasonStatRow) {
     target.substitute_appearances += source.substitute_appearances;
     target.minutes += source.minutes;
     target.rated_appearances += source.rated_appearances;
-    target.average_rating = (total_rated > 0)
-        .then(|| (target_rating_sum + source_rating_sum) / f64::from(total_rated));
+    target.average_rating =
+        (total_rated > 0).then(|| (target_rating_sum + source_rating_sum) / f64::from(total_rated));
     target.player_of_the_match += source.player_of_the_match;
     target.goals += source.goals;
     target.assists += source.assists;
@@ -816,9 +814,7 @@ mod tests {
         body.extend_from_slice(&[0u8; HEADER_BYTES]);
         let line_offset = body.len();
         body.extend_from_slice(&line());
-        for _ in 1..OWN_SLOTS {
-            body.push(0);
-        }
+        body.extend(std::iter::repeat_n(0, OWN_SLOTS - 1));
         body.extend_from_slice(&[0u8; BLOCK_BYTES]);
         body.extend_from_slice(&0u32.to_le_bytes()); // other teams
         body.extend_from_slice(&0u32.to_le_bytes()); // rating items
@@ -887,17 +883,13 @@ mod tests {
         body.extend_from_slice(&[0u8; HEADER_BYTES]);
         let line = line();
         body.extend_from_slice(&line); // own line, non-competitive slot
-        for _ in 1..OWN_SLOTS {
-            body.push(0);
-        }
+        body.extend(std::iter::repeat_n(0, OWN_SLOTS - 1));
         body.extend_from_slice(&[0u8; BLOCK_BYTES]);
         body.extend_from_slice(&1u32.to_le_bytes()); // one other team
         body.push(0); // other-team lead byte
         body.extend_from_slice(&123u32.to_le_bytes());
         body.extend_from_slice(&line); // same team and kind again
-        for _ in 1..OTHER_TEAM_SLOTS {
-            body.push(0);
-        }
+        body.extend(std::iter::repeat_n(0, OTHER_TEAM_SLOTS - 1));
         body.extend_from_slice(&0u32.to_le_bytes()); // rating items
         body.push(0); // form entries
         body.push(RECORD_END);

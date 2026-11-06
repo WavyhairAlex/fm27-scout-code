@@ -392,7 +392,7 @@ impl StatsMoneyballCandidate {
             .map(str::trim)
             .filter(|value| !value.is_empty())
             .collect();
-        if positions.iter().any(|position| *position == "GK") {
+        if positions.contains(&"GK") {
             return "GK";
         }
         let Some(first) = positions.first() else {
@@ -777,7 +777,7 @@ pub fn score_stats_candidates(
         if indices.is_empty() {
             continue;
         }
-        let metrics = model_metrics(&model, group);
+        let metrics = model_metrics(model, group);
         for (metric, _) in metrics {
             all_metrics.insert(*metric);
         }
@@ -846,7 +846,7 @@ pub fn score_stats_candidates(
     let mut rows = Vec::with_capacity(candidates.len());
     for (index, candidate) in candidates.into_iter().enumerate() {
         let group = groups[index];
-        let metrics = model_metrics(&model, group);
+        let metrics = model_metrics(model, group);
         let (fee, fee_known) = fee_for(&candidate);
         let wage_known = candidate.wage.is_some();
         let Some(cost) = cost_for(fee, candidate.wage) else {

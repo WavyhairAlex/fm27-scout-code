@@ -25,6 +25,7 @@ pub struct ExportWriter {
     destination: Destination,
 }
 
+#[allow(clippy::large_enum_variant)]
 enum Destination {
     Csv(csv::Writer<BufWriter<File>>),
     Json(BufWriter<File>),
