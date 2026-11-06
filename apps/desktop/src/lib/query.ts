@@ -12,8 +12,16 @@ import {
   listSaves,
   queryClubs,
   queryPlayers,
+  queryStatsMoneyball,
+  queryValueFinder,
 } from "./api";
-import type { ClubQuery, PlayerQuery, SortRule } from "./types";
+import type {
+  ClubQuery,
+  PlayerQuery,
+  SortRule,
+  StatsMoneyballRequest,
+  ValueFinderRequest,
+} from "./types";
 import { useAppStore, type ClubFilters, type Filters } from "@/store/app";
 
 export function buildPlayerQuery(
@@ -143,6 +151,26 @@ export function usePlayerPage() {
   });
 }
 
+export function useValueFinder(request: ValueFinderRequest | null) {
+  return useQuery({
+    queryKey: ["value-finder", request],
+    queryFn: () => queryValueFinder(request!),
+    enabled: request != null,
+    placeholderData: keepPreviousData,
+    staleTime: 30_000,
+  });
+}
+
+export function useStatsMoneyball(request: StatsMoneyballRequest | null) {
+  return useQuery({
+    queryKey: ["stats-moneyball", request],
+    queryFn: () => queryStatsMoneyball(request!),
+    enabled: request != null,
+    placeholderData: keepPreviousData,
+    staleTime: 30_000,
+  });
+}
+
 export function useClubPage() {
   const saveId = useAppStore((state) => state.saveId);
   const filters = useAppStore((state) => state.clubFilters);
@@ -245,8 +273,10 @@ export function useFilterOptions() {
   const filters = useAppStore((state) => state.filters);
   const sort = useAppStore((state) => state.sort);
   const hiddenEnabled = useAppStore((state) => state.hiddenEnabled);
+  // Filter options do not depend on table sorting; excluding it avoids a full
+  // facet recomputation whenever the user changes the sort order.
   const query = saveId
-    ? buildPlayerQuery(saveId, filters, sort, 0, 1, hiddenEnabled)
+    ? buildPlayerQuery(saveId, filters, [], 0, 1, hiddenEnabled)
     : null;
   return useQuery({
     queryKey: ["filter-options", query],

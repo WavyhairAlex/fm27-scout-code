@@ -19,6 +19,8 @@ macOS 上的 Football Manager 27 球探工作台，带可选的实验性存档�
 - 可选存档编辑器：CA/PA、属性、隐藏属性、Determination、性格和习惯。修改按球员暂存，最后统一写入一个新存档。
 - 低风险俱乐部编辑：俱乐部声望、最新月份财政快照（余额、转会预算、周薪预算）、公司设施、训练/青训/青年队教练/青年队招募评分和自有球场容量。源存档永远不会被修改。
 - CA 预算助手：按社区逆向的 FM RCA 公式（位置权重、双脚、多位置成本）实时估算，并提示超预算/低预算。
+- 实验性性价比球探：用角色/CA 质量对比转会费和工资，带置信度与风险标记。
+- 实验性数据版 Moneyball：用本赛季 xG/xA、射门、传球和抢断对比三年总成本，按位置计算百分位。Core 模型覆盖全部外场球员；门将单独排名；Advanced 模型只覆盖存档记录了高级统计的球员。
 - 英语 / 简体中文界面，默认跟随系统语言。
 - CI 发布 Universal macOS 版本；可选 Developer ID 签名/公证。
 
@@ -43,6 +45,7 @@ pnpm tauri dev
 ## 文档
 
 - [功能与解析覆盖](docs/features.md)
+- [实验性数据版 Moneyball 发布说明](docs/release-notes.md)
 - [存档编辑器](docs/editor.md)
 - [开发、CLI 与验证](docs/development.md)
 - [安全边界、已知限制与后续计划](docs/limitations.md)

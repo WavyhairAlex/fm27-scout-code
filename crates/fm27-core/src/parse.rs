@@ -7,6 +7,7 @@ use std::time::Instant;
 use chrono::NaiveDate;
 use serde::Serialize;
 
+use crate::bytes::find_bytes;
 use crate::clubs::ClubIndex;
 use crate::competitions::CompetitionIndex;
 use crate::container::SaveFile;
@@ -15,7 +16,7 @@ use crate::error::{Error, Result};
 use crate::finances::read_club_finances;
 use crate::layout::{
     ATTRIBUTE_KEYS, MISSING_U32, PARSER_VERSION, POSITION_NAMES, PlayerLayout, decode_date,
-    read_i16, read_u8, read_u16, read_u32, scale_attribute, stored_attribute_index,
+    read_i16, read_u8, read_u16, read_u32, scale_attribute,
 };
 use crate::metadata::{SaveMetadata, read_metadata};
 use crate::model::{
@@ -26,6 +27,7 @@ use crate::names::NamePools;
 use crate::nations::NationIndex;
 use crate::persons::{ClubLookup, PersonDecoder};
 use crate::player_scan::PlayerRecords;
+use crate::season_stats::{SeasonPlayer, SeasonStatRow};
 use crate::stadiums::read_stadium_index;
 
 #[derive(Debug, Clone, Serialize)]
@@ -42,6 +44,7 @@ pub struct ParsedSave {
     pub summary: SaveSummary,
     pub players: Vec<Player>,
     pub clubs: Vec<Club>,
+    pub season_stats: Vec<SeasonStatRow>,
     pub competitions: Vec<Competition>,
     pub club_finances: Vec<FinanceMonth>,
     pub stadiums: Vec<Stadium>,
@@ -306,9 +309,13 @@ pub fn parse_save_with_progress(
         let mut raw_attributes = Attributes::default();
         let mut attributes = Attributes::default();
         let attribute_start = offset + PlayerLayout::ATTRIBUTES_OFFSET;
-        for (index, key) in ATTRIBUTE_KEYS.iter().enumerate() {
+        for index in 0..ATTRIBUTE_KEYS.len() {
             // The stored 54-byte slice contains two foot bytes at indices 24 and 25.
-            let stored_index = stored_attribute_index(key).unwrap_or(index);
+            let stored_index = if index < PlayerLayout::LEFT_FOOT_INDEX {
+                index
+            } else {
+                index + 2
+            };
             let raw = read_u8(&game_db, attribute_start + stored_index).unwrap_or(0);
             raw_attributes.values[index] = raw;
             attributes.values[index] = scale_attribute(raw);
@@ -505,6 +512,45 @@ pub fn parse_save_with_progress(
     }
 
     progress(ParseProgress {
+        stage: "season_stats".to_owned(),
+        current: 0,
+        total: 0,
+        message: "正在解析赛季统计".to_owned(),
+    });
+    let mut season_players = HashMap::with_capacity(record_index.records.len());
+    for record in &record_index.records {
+        let Some(position) = record_index.by_pindex.get(&record.pindex) else {
+            continue;
+        };
+        let Some(player) = players.get(*position) else {
+            continue;
+        };
+        let Some(key) = record.pindex.checked_add(1) else {
+            continue;
+        };
+        season_players.insert(
+            key,
+            SeasonPlayer {
+                uid: player.uid,
+                name: player.name.clone(),
+                team_id: player.team_id,
+                goalkeeper: player
+                    .natural_positions
+                    .iter()
+                    .any(|position| position == "GK"),
+            },
+        );
+    }
+    let season_stats = match crate::season_stats::read_season_stats(&save, &season_players, &clubs)
+    {
+        Ok(rows) => rows,
+        Err(error) => {
+            warnings.push(format!("season statistics unavailable: {error}"));
+            Vec::new()
+        }
+    };
+
+    progress(ParseProgress {
         stage: "done".to_owned(),
         current: players.len(),
         total: players.len(),
@@ -554,6 +600,7 @@ pub fn parse_save_with_progress(
         save: summary.clone(),
         players: players.len(),
         clubs: clubs.clubs.len(),
+        season_stats: season_stats.len(),
         contracts,
         competitions: competitions.competitions.len(),
         competition_stages: competitions.stage_count,
@@ -576,6 +623,7 @@ pub fn parse_save_with_progress(
         summary,
         players,
         clubs: clubs.clubs,
+        season_stats,
         competitions: competitions.competitions,
         club_finances: finance_data.months,
         stadiums,
@@ -640,18 +688,6 @@ pub(crate) fn closing_person_header(
         found = Some((hit, uid));
     }
     found
-}
-
-fn find_bytes(haystack: &[u8], needle: &[u8]) -> Option<usize> {
-    if needle.is_empty() {
-        return Some(0);
-    }
-    if haystack.len() < needle.len() {
-        return None;
-    }
-    haystack
-        .windows(needle.len())
-        .position(|window| window == needle)
 }
 
 /// Cache key for parsed saves. Use [`parser_display_version`] for UI display.

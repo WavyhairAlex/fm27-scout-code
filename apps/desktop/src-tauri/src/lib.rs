@@ -1,12 +1,13 @@
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 use fm27_core::ability::{CaEstimate, estimate_ca, estimate_positions};
 use fm27_core::club_editor::{ClubEditRequest, ClubEditor};
 use fm27_core::container::SaveFile;
 use fm27_core::editor::{EditChange, PlayerEditRequest, PlayerEditor};
-use fm27_core::export::write_export;
+use fm27_core::export::ExportWriter;
 use fm27_core::metadata::read_metadata;
 use fm27_core::model::{Attributes, ClubDetail, Positions};
 use fm27_core::store::{
@@ -21,9 +22,43 @@ use serde::{Deserialize, Serialize};
 use tauri::menu::{Menu, MenuItem, PredefinedMenuItem, Submenu};
 use tauri::{AppHandle, Emitter, Manager, State};
 
+const READ_POOL_SIZE: usize = 4;
+
 struct AppState {
     store: std::sync::Arc<Mutex<Store>>,
+    /// Independent read-only connections for queries that do not depend on the
+    /// writable store's in-memory caches. WAL keeps these reads concurrent.
+    readers: std::sync::Arc<ReadPool>,
     data_dir: std::path::PathBuf,
+}
+
+struct ReadPool {
+    stores: Vec<Mutex<Store>>,
+    next: AtomicUsize,
+}
+
+impl ReadPool {
+    fn open(path: &Path, size: usize) -> Result<Self, String> {
+        let mut stores = Vec::with_capacity(size);
+        for _ in 0..size {
+            stores.push(Mutex::new(
+                Store::open_read_only(path).map_err(error_string)?,
+            ));
+        }
+        Ok(Self {
+            stores,
+            next: AtomicUsize::new(0),
+        })
+    }
+
+    fn with<T>(&self, operation: impl FnOnce(&Store) -> Result<T, String>) -> Result<T, String> {
+        if self.stores.is_empty() {
+            return Err("the read-only connection pool is empty".to_owned());
+        }
+        let index = self.next.fetch_add(1, Ordering::Relaxed) % self.stores.len();
+        let store = self.stores[index].lock().map_err(error_string)?;
+        operation(&store)
+    }
 }
 
 /// File-open events can arrive before the webview has registered its listener, and on
@@ -123,6 +158,31 @@ fn updater_info(app: AppHandle) -> UpdaterInfo {
 
 fn error_string(error: impl std::fmt::Display) -> String {
     error.to_string()
+}
+
+async fn run_store_command<T, F>(state: State<'_, AppState>, operation: F) -> Result<T, String>
+where
+    T: Send + 'static,
+    F: FnOnce(&Store) -> Result<T, String> + Send + 'static,
+{
+    let store = std::sync::Arc::clone(&state.store);
+    tauri::async_runtime::spawn_blocking(move || {
+        let store = store.lock().map_err(error_string)?;
+        operation(&store)
+    })
+    .await
+    .map_err(error_string)?
+}
+
+async fn run_read_command<T, F>(state: State<'_, AppState>, operation: F) -> Result<T, String>
+where
+    T: Send + 'static,
+    F: FnOnce(&Store) -> Result<T, String> + Send + 'static,
+{
+    let readers = std::sync::Arc::clone(&state.readers);
+    tauri::async_runtime::spawn_blocking(move || readers.with(operation))
+        .await
+        .map_err(error_string)?
 }
 
 fn append_log(app: &AppHandle, line: &str) {
@@ -266,47 +326,82 @@ async fn open_save(
 }
 
 #[tauri::command]
-fn query_players(state: State<'_, AppState>, query: PlayerQuery) -> Result<PlayerPage, String> {
-    let store = state.store.lock().map_err(error_string)?;
-    store.query_players(&query).map_err(error_string)
+async fn query_players(
+    state: State<'_, AppState>,
+    query: PlayerQuery,
+) -> Result<PlayerPage, String> {
+    run_read_command(state, move |store| {
+        store.query_players(&query).map_err(error_string)
+    })
+    .await
 }
 
 #[tauri::command]
-fn get_player(
+async fn value_finder(
+    state: State<'_, AppState>,
+    request: fm27_core::moneyball::ValueFinderRequest,
+) -> Result<fm27_core::moneyball::ValueFinderPage, String> {
+    run_store_command(state, move |store| {
+        store.value_finder(&request).map_err(error_string)
+    })
+    .await
+}
+
+#[tauri::command]
+async fn stats_moneyball(
+    state: State<'_, AppState>,
+    request: fm27_core::stats_moneyball::StatsMoneyballRequest,
+) -> Result<fm27_core::stats_moneyball::StatsMoneyballPage, String> {
+    run_store_command(state, move |store| {
+        store.stats_moneyball(&request).map_err(error_string)
+    })
+    .await
+}
+
+#[tauri::command]
+async fn get_player(
     state: State<'_, AppState>,
     save_id: i64,
     uid: u32,
     include_hidden: bool,
 ) -> Result<Option<Player>, String> {
-    let store = state.store.lock().map_err(error_string)?;
-    store
-        .get_player(save_id, uid, include_hidden)
-        .map_err(error_string)
+    run_read_command(state, move |store| {
+        store
+            .get_player(save_id, uid, include_hidden)
+            .map_err(error_string)
+    })
+    .await
 }
 
 #[tauri::command]
-fn query_clubs(state: State<'_, AppState>, query: ClubQuery) -> Result<ClubPage, String> {
-    let store = state.store.lock().map_err(error_string)?;
-    store.query_clubs(&query).map_err(error_string)
+async fn query_clubs(state: State<'_, AppState>, query: ClubQuery) -> Result<ClubPage, String> {
+    run_read_command(state, move |store| {
+        store.query_clubs(&query).map_err(error_string)
+    })
+    .await
 }
 
 #[tauri::command]
-fn get_club(
+async fn get_club(
     state: State<'_, AppState>,
     save_id: i64,
     uid: u32,
 ) -> Result<Option<ClubDetail>, String> {
-    let store = state.store.lock().map_err(error_string)?;
-    store.get_club(save_id, uid).map_err(error_string)
+    run_read_command(state, move |store| {
+        store.get_club(save_id, uid).map_err(error_string)
+    })
+    .await
 }
 
 #[tauri::command]
-fn club_filter_options(
+async fn club_filter_options(
     state: State<'_, AppState>,
     save_id: i64,
 ) -> Result<ClubFilterOptions, String> {
-    let store = state.store.lock().map_err(error_string)?;
-    store.club_filter_options(save_id).map_err(error_string)
+    run_read_command(state, move |store| {
+        store.club_filter_options(save_id).map_err(error_string)
+    })
+    .await
 }
 
 #[tauri::command]
@@ -586,69 +681,84 @@ fn edit_club_file(
 }
 
 #[tauri::command]
-fn player_roles(
+async fn player_roles(
     state: State<'_, AppState>,
     save_id: i64,
     uid: u32,
 ) -> Result<Vec<fm27_core::model::RoleScore>, String> {
-    let store = state.store.lock().map_err(error_string)?;
-    let player = store
-        .get_player(save_id, uid, true)
-        .map_err(error_string)?
-        .ok_or_else(|| "player not found".to_owned())?;
-    Ok(fm27_core::roles::score_roles(
-        &player.attributes,
-        &player.positions,
-    ))
+    run_read_command(state, move |store| {
+        let player = store
+            .get_player(save_id, uid, true)
+            .map_err(error_string)?
+            .ok_or_else(|| "player not found".to_owned())?;
+        Ok(fm27_core::roles::score_roles(
+            &player.attributes,
+            &player.positions,
+        ))
+    })
+    .await
 }
 
 #[tauri::command]
-fn growth_history(
+async fn growth_history(
     state: State<'_, AppState>,
     save_id: i64,
     uid: u32,
 ) -> Result<Vec<SnapshotPoint>, String> {
-    let store = state.store.lock().map_err(error_string)?;
-    store.growth_history(save_id, uid).map_err(error_string)
+    run_read_command(state, move |store| {
+        store.growth_history(save_id, uid).map_err(error_string)
+    })
+    .await
 }
 
 #[tauri::command]
-fn analysis_overview(state: State<'_, AppState>, save_id: i64) -> Result<AnalysisOverview, String> {
-    let store = state.store.lock().map_err(error_string)?;
-    store.analysis_overview(save_id).map_err(error_string)
+async fn analysis_overview(
+    state: State<'_, AppState>,
+    save_id: i64,
+) -> Result<AnalysisOverview, String> {
+    run_read_command(state, move |store| {
+        store.analysis_overview(save_id).map_err(error_string)
+    })
+    .await
 }
 
 #[tauri::command]
-fn squad_analysis(
+async fn squad_analysis(
     state: State<'_, AppState>,
     save_id: i64,
     club_uid: u32,
 ) -> Result<SquadAnalysis, String> {
-    let store = state.store.lock().map_err(error_string)?;
-    store
-        .squad_analysis(save_id, club_uid)
-        .map_err(error_string)
+    run_read_command(state, move |store| {
+        store
+            .squad_analysis(save_id, club_uid)
+            .map_err(error_string)
+    })
+    .await
 }
 
 #[tauri::command]
-fn list_competitions(
+async fn list_competitions(
     state: State<'_, AppState>,
     save_id: i64,
 ) -> Result<Vec<fm27_core::model::Competition>, String> {
-    let store = state.store.lock().map_err(error_string)?;
-    store.competitions(save_id).map_err(error_string)
+    run_read_command(state, move |store| {
+        store.competitions(save_id).map_err(error_string)
+    })
+    .await
 }
 
 #[tauri::command]
-fn get_filter_options(
+async fn get_filter_options(
     state: State<'_, AppState>,
     save_id: i64,
     query: Option<PlayerQuery>,
 ) -> Result<FilterOptions, String> {
-    let store = state.store.lock().map_err(error_string)?;
-    store
-        .filter_options_with_query(save_id, query.as_ref())
-        .map_err(error_string)
+    run_read_command(state, move |store| {
+        store
+            .filter_options_with_query(save_id, query.as_ref())
+            .map_err(error_string)
+    })
+    .await
 }
 
 #[tauri::command]
@@ -658,15 +768,26 @@ fn delete_save(state: State<'_, AppState>, save_id: i64) -> Result<(), String> {
 }
 
 #[tauri::command]
-fn export_players(
+async fn export_players(
     state: State<'_, AppState>,
     query: PlayerQuery,
     format: String,
     path: String,
 ) -> Result<fm27_core::export::ExportReport, String> {
-    let store = state.store.lock().map_err(error_string)?;
-    let rows = store.query_all(&query).map_err(error_string)?;
-    write_export(std::path::Path::new(&path), &format, &rows).map_err(error_string)
+    let db_path = state.data_dir.join("fm27scout.db");
+    tauri::async_runtime::spawn_blocking(move || {
+        let mut writer =
+            ExportWriter::create(std::path::Path::new(&path), &format).map_err(error_string)?;
+        // A dedicated read-only connection keeps the global store lock out of the
+        // whole filesystem write. WAL allows this read to overlap normal queries.
+        let store = Store::open_read_only(&db_path).map_err(error_string)?;
+        store
+            .stream_players(&query, |row| writer.write_row(&row))
+            .map_err(error_string)?;
+        writer.finish().map_err(error_string)
+    })
+    .await
+    .map_err(error_string)?
 }
 
 #[tauri::command]
@@ -908,9 +1029,13 @@ pub fn run() {
                     let _ = std::fs::remove_file(entry.path());
                 }
             }
-            let store = Store::open(data_dir.join("fm27scout.db"))?;
+            let db_path = data_dir.join("fm27scout.db");
+            let store = Store::open(&db_path)?;
+            let readers = ReadPool::open(&db_path, READ_POOL_SIZE)
+                .map_err(|error| std::io::Error::other(error))?;
             app.manage(AppState {
                 store: std::sync::Arc::new(Mutex::new(store)),
+                readers: std::sync::Arc::new(readers),
                 data_dir,
             });
             Ok(())
@@ -919,6 +1044,8 @@ pub fn run() {
             list_saves,
             open_save,
             query_players,
+            value_finder,
+            stats_moneyball,
             query_clubs,
             get_player,
             get_club,

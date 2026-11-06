@@ -362,6 +362,196 @@ export interface PlayerPage {
   rows: PlayerRow[];
 }
 
+export interface ValueFinderRequest {
+  save_id: number;
+  position_group?: string | null;
+  league?: string | null;
+  age_min?: number | null;
+  age_max?: number | null;
+  ca_min?: number | null;
+  ca_max?: number | null;
+  role_min?: number | null;
+  max_fee?: number | null;
+  max_wage?: number | null;
+  contract_end_before?: string | null;
+  listings?: string[];
+  min_confidence?: number | null;
+  exclude_injured?: boolean;
+  exclude_injury_history?: boolean;
+  include_unknown_fee?: boolean;
+  sort_by?: string | null;
+  sort_dir?: "asc" | "desc" | null;
+  page?: number | null;
+  page_size?: number | null;
+}
+
+export interface ValueFinderRow {
+  uid: number;
+  name: string | null;
+  age: number | null;
+  club_uid: number | null;
+  club_name: string | null;
+  league_name: string | null;
+  nation_name: string | null;
+  ca: number;
+  pa: number | null;
+  role_id: string | null;
+  role_name: string | null;
+  role_score: number | null;
+  role_position: string | null;
+  position_group: string;
+  transfer_value: number | null;
+  transfer_value_state: TransferValueState;
+  wage: number | null;
+  contract_end: string | null;
+  club_reputation: number | null;
+  fee: number | null;
+  cost: number;
+  fee_known: boolean;
+  wage_known: boolean;
+  role_pct: number | null;
+  ca_pct: number | null;
+  quality_pct: number;
+  cost_pct: number | null;
+  surplus: number | null;
+  score: number;
+  confidence: number;
+  league_median_ca: number | null;
+  flags: string[];
+  transfer_listed: boolean;
+  loan_listed: boolean;
+  injury_status: "injured" | "fit";
+  recent_injury: string | null;
+}
+
+export interface ValueFinderMeta {
+  model: string;
+  scored: number;
+  filtered: number;
+  cost_horizon_years: number;
+  leagues: string[];
+}
+
+export interface ValueFinderPage {
+  total: number;
+  page: number;
+  page_size: number;
+  rows: ValueFinderRow[];
+  meta: ValueFinderMeta;
+}
+
+export interface StatsMoneyballRequest {
+  save_id: number;
+  model?: "core" | "advanced" | null;
+  include_goalkeepers?: boolean;
+  position_group?: string | null;
+  league?: string | null;
+  age_min?: number | null;
+  age_max?: number | null;
+  ca_min?: number | null;
+  ca_max?: number | null;
+  min_minutes?: number | null;
+  max_fee?: number | null;
+  max_wage?: number | null;
+  contract_end_before?: string | null;
+  listings?: string[];
+  min_confidence?: number | null;
+  exclude_injured?: boolean;
+  exclude_injury_history?: boolean;
+  include_unknown_fee?: boolean;
+  sort_by?: string | null;
+  sort_dir?: "asc" | "desc" | null;
+  page?: number | null;
+  page_size?: number | null;
+}
+
+export interface StatsDriver {
+  key: string;
+  label: string;
+  percentile: number;
+  contribution: number;
+}
+
+export interface StatsMoneyballRow {
+  uid: number;
+  name: string | null;
+  age: number | null;
+  club_uid: number | null;
+  club_name: string | null;
+  league_name: string | null;
+  nation_name: string | null;
+  ca: number;
+  pa: number | null;
+  position_group: string;
+  minutes: number;
+  starts: number;
+  substitute_appearances: number;
+  average_rating: number | null;
+  goals: number;
+  assists: number;
+  expected_goals: number;
+  expected_assists: number;
+  shots: number;
+  shots_on_target: number;
+  passes_attempted: number;
+  passes_completed: number;
+  pass_completion_percent: number | null;
+  tackles_attempted: number;
+  tackles_completed: number;
+  interceptions: number | null;
+  key_passes: number | null;
+  progressive_passes: number | null;
+  headers_won: number | null;
+  aerial_challenges_attempted: number | null;
+  clearances: number | null;
+  blocks: number | null;
+  crosses_completed: number | null;
+  saves_held: number | null;
+  shots_on_target_faced: number | null;
+  save_percent: number | null;
+  expected_goals_prevented: number | null;
+  advanced_available: boolean;
+  transfer_value: number | null;
+  transfer_value_state: TransferValueState;
+  wage: number | null;
+  contract_end: string | null;
+  club_reputation: number | null;
+  fee: number | null;
+  cost: number;
+  fee_known: boolean;
+  wage_known: boolean;
+  production_global: number | null;
+  production_tier: number | null;
+  cost_pct_global: number | null;
+  cost_pct_tier: number | null;
+  surplus: number | null;
+  score: number | null;
+  confidence: number;
+  flags: string[];
+  drivers: StatsDriver[];
+  transfer_listed: boolean;
+  loan_listed: boolean;
+  injury_status: "injured" | "fit";
+  recent_injury: string | null;
+}
+
+export interface StatsMoneyballMeta {
+  model: string;
+  scored: number;
+  filtered: number;
+  min_minutes: number;
+  cost_horizon_years: number;
+  leagues: string[];
+}
+
+export interface StatsMoneyballPage {
+  total: number;
+  page: number;
+  page_size: number;
+  rows: StatsMoneyballRow[];
+  meta: StatsMoneyballMeta;
+}
+
 export interface Club {
   uid: number;
   unique_id: number | null;
@@ -605,6 +795,7 @@ export interface ParseReport {
   save: SaveSummary;
   players: number;
   clubs: number;
+  season_stats: number;
   contracts: number;
   competitions: number;
   competition_stages: number;

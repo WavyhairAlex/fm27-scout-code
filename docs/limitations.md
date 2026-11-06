@@ -50,6 +50,18 @@
   so it is blank when the game files are unavailable or the club is not English.
 - The stadium table stores ownership but no direct club -> ground pointer.
   Home-ground use would require the fixture calendar and is not implemented yet.
+- The Value finder is an experimental value-for-money ranking, not a
+  stats-based Moneyball model. It uses role/CA quality and transfer value plus
+  wages; `transfer_value` is not an actual transfer fee, players with unknown
+  fees or wages are excluded by default, and league strength is not adjusted.
+- Stats moneyball is also experimental. FM27 zeroes the advanced-stat block
+  (key passes, progressive passes, interceptions, headers, clearances, blocks,
+  sprints, saves, xGP) for about 37% of players; those zeroes are stored as
+  `NULL`, and the advanced model excludes those rows. The core model only uses
+  fields present for every player (xG/xA, shots, passing, tackles, rating).
+  Goalkeeper save/xGP coverage is lower, transfer value is still not an actual
+  fee, and league strength is proxied by club reputation rather than adjusted
+  directly.
 - Club editing is limited to fixed-width, low-risk fields: reputation, the
   latest finance snapshot, corporate facilities, training/youth/junior-coaching/
   youth-recruitment ratings and owned-stadium capacities. It does not edit names,

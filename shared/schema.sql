@@ -86,6 +86,158 @@ CREATE INDEX IF NOT EXISTS players_role_score ON players(save_id, best_role_scor
 CREATE INDEX IF NOT EXISTS players_transfer_listed ON players(save_id, transfer_listed);
 CREATE INDEX IF NOT EXISTS players_loan_listed ON players(save_id, loan_listed);
 
+CREATE TABLE IF NOT EXISTS player_season_stats (
+  save_id         INTEGER NOT NULL,
+  player_uid      INTEGER NOT NULL,
+  kind            TEXT NOT NULL,
+  team_id         INTEGER NOT NULL DEFAULT 0,
+  club_uid        INTEGER,
+  club_name       TEXT,
+  club_short_name TEXT,
+  team_slot       INTEGER,
+  minutes         INTEGER NOT NULL,
+  starts          INTEGER NOT NULL,
+  substitute_appearances INTEGER NOT NULL,
+  rated_appearances INTEGER NOT NULL,
+  average_rating  REAL,
+  player_of_the_match INTEGER NOT NULL,
+  goals           INTEGER NOT NULL,
+  assists         INTEGER NOT NULL,
+  expected_goals  REAL NOT NULL,
+  non_penalty_expected_goals REAL NOT NULL,
+  expected_assists REAL NOT NULL,
+  shots           INTEGER NOT NULL,
+  shots_on_target INTEGER NOT NULL,
+  shots_outside_box INTEGER,
+  goals_outside_box INTEGER,
+  free_kick_shots INTEGER,
+  penalties_taken INTEGER NOT NULL,
+  penalties_scored INTEGER NOT NULL,
+  passes_attempted INTEGER NOT NULL,
+  passes_completed INTEGER NOT NULL,
+  progressive_passes INTEGER,
+  key_passes      INTEGER,
+  open_play_key_passes INTEGER,
+  clear_cut_chances_created INTEGER,
+  crosses_attempted INTEGER,
+  crosses_completed INTEGER,
+  open_play_crosses_attempted INTEGER,
+  open_play_crosses_completed INTEGER,
+  dribbles        INTEGER,
+  offsides        INTEGER,
+  distance_km     REAL,
+  high_intensity_sprints INTEGER,
+  aerial_challenges_attempted INTEGER,
+  headers_won     INTEGER,
+  key_headers     INTEGER,
+  tackles_attempted INTEGER NOT NULL,
+  tackles_completed INTEGER NOT NULL,
+  key_tackles     INTEGER,
+  interceptions   INTEGER,
+  possession_won  INTEGER,
+  possession_lost INTEGER,
+  pressures_attempted INTEGER,
+  pressures_completed INTEGER,
+  blocks          INTEGER,
+  shots_blocked   INTEGER,
+  clearances      INTEGER,
+  fouls_made      INTEGER NOT NULL,
+  fouls_against   INTEGER NOT NULL,
+  yellow_cards    INTEGER NOT NULL,
+  red_cards       INTEGER NOT NULL,
+  mistakes_leading_to_goal INTEGER NOT NULL,
+  clean_sheets    INTEGER NOT NULL,
+  goals_allowed   INTEGER NOT NULL,
+  saves_held      INTEGER,
+  saves_parried   INTEGER,
+  saves_tipped    INTEGER,
+  shots_on_target_faced INTEGER,
+  expected_goals_prevented REAL,
+  advanced_available INTEGER NOT NULL DEFAULT 0,
+  PRIMARY KEY (save_id, player_uid, kind, team_id),
+  FOREIGN KEY (save_id) REFERENCES saves(id) ON DELETE CASCADE
+);
+
+-- (save_id, player_uid) is a prefix of the primary key and needs no second index.
+CREATE INDEX IF NOT EXISTS player_season_stats_minutes
+  ON player_season_stats(save_id, kind, minutes);
+
+CREATE TABLE IF NOT EXISTS player_metrics (
+  save_id         INTEGER NOT NULL,
+  player_uid      INTEGER NOT NULL,
+  model           TEXT NOT NULL,
+  min_minutes     INTEGER NOT NULL,
+  name            TEXT,
+  age             INTEGER,
+  club_uid        INTEGER,
+  club_name       TEXT,
+  league_name     TEXT,
+  nation_name     TEXT,
+  ca              INTEGER NOT NULL,
+  pa              INTEGER,
+  position_group  TEXT NOT NULL,
+  minutes         INTEGER NOT NULL,
+  starts          INTEGER NOT NULL,
+  substitute_appearances INTEGER NOT NULL,
+  average_rating  REAL,
+  goals           INTEGER NOT NULL,
+  assists         INTEGER NOT NULL,
+  expected_goals  REAL NOT NULL,
+  expected_assists REAL NOT NULL,
+  shots           INTEGER NOT NULL,
+  shots_on_target INTEGER NOT NULL,
+  passes_attempted INTEGER NOT NULL,
+  passes_completed INTEGER NOT NULL,
+  pass_completion_percent REAL,
+  tackles_attempted INTEGER NOT NULL,
+  tackles_completed INTEGER NOT NULL,
+  interceptions   INTEGER,
+  key_passes      INTEGER,
+  progressive_passes INTEGER,
+  headers_won     INTEGER,
+  aerial_challenges_attempted INTEGER,
+  clearances      INTEGER,
+  blocks          INTEGER,
+  crosses_completed INTEGER,
+  saves_held      INTEGER,
+  shots_on_target_faced INTEGER,
+  save_percent    REAL,
+  expected_goals_prevented REAL,
+  advanced_available INTEGER NOT NULL,
+  transfer_value  INTEGER,
+  transfer_value_state TEXT NOT NULL,
+  wage            INTEGER,
+  contract_end    TEXT,
+  club_reputation INTEGER,
+  fee             INTEGER,
+  cost            INTEGER NOT NULL,
+  fee_known       INTEGER NOT NULL,
+  wage_known      INTEGER NOT NULL,
+  production_global REAL NOT NULL,
+  production_tier REAL NOT NULL,
+  cost_pct_global REAL,
+  cost_pct_tier   REAL NOT NULL,
+  surplus         REAL NOT NULL,
+  score           REAL NOT NULL,
+  confidence      REAL NOT NULL,
+  flags_json      TEXT NOT NULL,
+  drivers_json    TEXT NOT NULL,
+  transfer_listed INTEGER NOT NULL,
+  loan_listed     INTEGER NOT NULL,
+  injury_status   TEXT NOT NULL,
+  recent_injury   TEXT,
+  computed_at     TEXT NOT NULL,
+  PRIMARY KEY (save_id, player_uid, model, min_minutes),
+  FOREIGN KEY (save_id) REFERENCES saves(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS player_metrics_score
+  ON player_metrics(save_id, model, min_minutes, score DESC);
+CREATE INDEX IF NOT EXISTS player_metrics_position
+  ON player_metrics(save_id, model, position_group, score DESC);
+
+DROP TABLE IF EXISTS stats_metric_cache;
+
 CREATE TABLE IF NOT EXISTS contracts (
   save_id         INTEGER NOT NULL,
   player_uid      INTEGER NOT NULL,
@@ -172,8 +324,7 @@ CREATE TABLE IF NOT EXISTS club_finances (
   FOREIGN KEY (save_id) REFERENCES saves(id) ON DELETE CASCADE
 );
 
-CREATE INDEX IF NOT EXISTS club_finances_club
-  ON club_finances(save_id, club_uid, month);
+-- The primary key already covers (save_id, club_uid, month).
 
 CREATE TABLE IF NOT EXISTS stadiums (
   save_id         INTEGER NOT NULL,

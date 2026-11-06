@@ -14,3 +14,4 @@
 *.db-wal
 .DS_Store
 *.tsbuildinfo
+HANDOFF.md

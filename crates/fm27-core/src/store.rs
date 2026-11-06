@@ -2,10 +2,11 @@
 
 use std::collections::HashMap;
 use std::path::Path;
+use std::sync::{Arc, Mutex};
 
 use chrono::{Months, NaiveDate, Utc};
 use rusqlite::types::Value;
-use rusqlite::{Connection, OptionalExtension, params, params_from_iter};
+use rusqlite::{Connection, OptionalExtension, Row, params, params_from_iter};
 use serde::{Deserialize, Serialize};
 
 use crate::error::{Error, Result};
@@ -13,7 +14,7 @@ use crate::layout::{ATTRIBUTE_KEYS, HIDDEN_ATTRIBUTE_KEYS, PERSONALITY_KEYS, POS
 use crate::model::{
     Attributes, Club, ClubDetail, ClubLink, Competition, Contract, FinanceMonth,
     GENERATED_UNIQUE_ID_MINIMUM, ParseReport, Personality, Player, Positions, SaveSummary, Stadium,
-    Trait, is_generated_unique_id,
+    Trait, attribute_index, is_generated_unique_id,
 };
 use crate::parse::ParsedSave;
 
@@ -40,8 +41,38 @@ const CLUB_CTE: &str = "WITH stats AS (
         GROUP BY owner_club_uid
       )";
 
+const MAX_STATS_CACHE_ENTRIES: usize = 16;
+/// Minute thresholds are user-controlled. Keep only the most recently used
+/// thresholds per save and model so the persisted stats cache cannot grow without
+/// bound while every recall of a threshold still returns the same rows.
+const MAX_PLAYER_METRIC_THRESHOLDS: usize = 8;
+
+const PLAYER_ROWS_SELECT: &str =
+    "SELECT p.uid, p.name, p.age, p.club_uid, p.club_name, p.league_competition_id,
+            p.league_name, p.nation_id, p.ca, p.pa,
+            p.pa_range_code, p.positions_text, p.positions_json, p.attributes_json,
+            p.personality_json, p.transfer_value, p.transfer_value_state, c.wage,
+            c.end_date, p.height_cm, p.left_foot, p.right_foot, c.on_loan, p.traits_json,
+            p.nation_name, p.gender, p.best_role_id, p.best_role_name,
+            p.best_role_score, p.best_role_position, p.injury_status, p.injury_until,
+            p.recent_injury, p.suspension_count, p.transfer_listed, p.loan_listed,
+            p.unique_id
+     FROM players p
+     LEFT JOIN contracts c ON c.save_id = p.save_id AND c.player_uid = p.uid";
+
+const MAX_EXPORT_ROWS: usize = 500_000;
+
 pub struct Store {
     conn: Connection,
+    stats_cache: Mutex<HashMap<StatsCacheKey, Arc<Vec<crate::stats_moneyball::StatsMoneyballRow>>>>,
+    value_finder_cache: Mutex<HashMap<i64, Arc<crate::moneyball::ValueFinderBaseline>>>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+struct StatsCacheKey {
+    save_id: i64,
+    model: String,
+    min_minutes: u32,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -365,13 +396,37 @@ impl Store {
         )?;
         migrate(&conn)?;
         conn.execute_batch(SCHEMA)?;
-        Ok(Self { conn })
+        Ok(Self {
+            conn,
+            stats_cache: Mutex::new(HashMap::new()),
+            value_finder_cache: Mutex::new(HashMap::new()),
+        })
+    }
+
+    /// Open an independent read-only connection to an existing cache. This is for
+    /// long reads such as exports: WAL lets them run beside the writable store
+    /// without holding its mutex, while the writer remains the only mutator.
+    pub fn open_read_only(path: impl AsRef<Path>) -> Result<Self> {
+        let conn = Connection::open_with_flags(
+            path,
+            rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY | rusqlite::OpenFlags::SQLITE_OPEN_NO_MUTEX,
+        )?;
+        conn.execute_batch("PRAGMA query_only=ON; PRAGMA busy_timeout=5000;")?;
+        Ok(Self {
+            conn,
+            stats_cache: Mutex::new(HashMap::new()),
+            value_finder_cache: Mutex::new(HashMap::new()),
+        })
     }
 
     pub fn open_in_memory() -> Result<Self> {
         let conn = Connection::open_in_memory()?;
         conn.execute_batch(SCHEMA)?;
-        Ok(Self { conn })
+        Ok(Self {
+            conn,
+            stats_cache: Mutex::new(HashMap::new()),
+            value_finder_cache: Mutex::new(HashMap::new()),
+        })
     }
 
     pub fn find_cached(&self, fingerprint: &str, parser_version: &str) -> Result<Option<i64>> {
@@ -386,6 +441,12 @@ impl Store {
     }
 
     pub fn insert_parsed(&mut self, parsed: &ParsedSave) -> Result<i64> {
+        if let Ok(mut cache) = self.stats_cache.lock() {
+            cache.clear();
+        }
+        if let Ok(mut cache) = self.value_finder_cache.lock() {
+            cache.clear();
+        }
         let career_key = career_key(parsed);
         let transaction = self.conn.transaction()?;
         transaction.execute(
@@ -559,6 +620,107 @@ impl Store {
                         serde_json::to_string(&contract.chain)?,
                     ])?;
                 }
+            }
+        }
+
+        {
+            let mut season_stmt = transaction.prepare(
+                "INSERT INTO player_season_stats
+                 (save_id, player_uid, kind, team_id, club_uid, club_name, club_short_name,
+                  team_slot, minutes, starts, substitute_appearances, rated_appearances,
+                  average_rating, player_of_the_match, goals, assists, expected_goals,
+                  non_penalty_expected_goals, expected_assists, shots, shots_on_target,
+                  shots_outside_box, goals_outside_box, free_kick_shots, penalties_taken,
+                  penalties_scored, passes_attempted, passes_completed, progressive_passes,
+                  key_passes, open_play_key_passes, clear_cut_chances_created, crosses_attempted,
+                  crosses_completed, open_play_crosses_attempted, open_play_crosses_completed,
+                  dribbles, offsides, distance_km, high_intensity_sprints,
+                  aerial_challenges_attempted, headers_won, key_headers, tackles_attempted,
+                  tackles_completed, key_tackles, interceptions, possession_won, possession_lost,
+                  pressures_attempted, pressures_completed, blocks, shots_blocked, clearances,
+                  fouls_made, fouls_against, yellow_cards, red_cards,
+                  mistakes_leading_to_goal, clean_sheets, goals_allowed, saves_held,
+                  saves_parried, saves_tipped, shots_on_target_faced, expected_goals_prevented,
+                  advanced_available)
+                 VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            )?;
+            for row in &parsed.season_stats {
+                // The save zeroes the whole advanced block for some clubs and
+                // competitions. Those zeroes are not measurements; write NULL and
+                // keep the availability flag so scoring cannot mistake them for data.
+                let advanced_u32 = |value: u32| row.advanced_available.then_some(value);
+                let advanced_f64 = |value: f64| row.advanced_available.then_some(value);
+                let advanced_opt =
+                    |value: Option<u32>| row.advanced_available.then_some(value).flatten();
+                season_stmt.execute(params![
+                    save_id,
+                    row.player_uid,
+                    row.kind.as_str(),
+                    row.team_id.unwrap_or(0),
+                    row.club_uid,
+                    row.club_name,
+                    row.club_short_name,
+                    row.team_slot,
+                    row.minutes,
+                    row.starts,
+                    row.substitute_appearances,
+                    row.rated_appearances,
+                    row.average_rating,
+                    row.player_of_the_match,
+                    row.goals,
+                    row.assists,
+                    row.expected_goals,
+                    row.non_penalty_expected_goals,
+                    row.expected_assists,
+                    row.shots,
+                    row.shots_on_target,
+                    advanced_u32(row.shots_outside_box),
+                    row.goals_outside_box,
+                    advanced_u32(row.free_kick_shots),
+                    row.penalties_taken,
+                    row.penalties_scored,
+                    row.passes_attempted,
+                    row.passes_completed,
+                    advanced_u32(row.progressive_passes),
+                    advanced_u32(row.key_passes),
+                    advanced_u32(row.open_play_key_passes),
+                    advanced_u32(row.clear_cut_chances_created),
+                    advanced_u32(row.crosses_attempted),
+                    advanced_u32(row.crosses_completed),
+                    advanced_u32(row.open_play_crosses_attempted),
+                    advanced_opt(row.open_play_crosses_completed),
+                    advanced_u32(row.dribbles),
+                    advanced_u32(row.offsides),
+                    advanced_f64(row.distance_km),
+                    advanced_u32(row.high_intensity_sprints),
+                    advanced_opt(row.aerial_challenges_attempted),
+                    advanced_opt(row.headers_won),
+                    advanced_u32(row.key_headers),
+                    row.tackles_attempted,
+                    row.tackles_completed,
+                    advanced_u32(row.key_tackles),
+                    advanced_u32(row.interceptions),
+                    advanced_u32(row.possession_won),
+                    advanced_u32(row.possession_lost),
+                    row.pressures_attempted,
+                    row.pressures_completed,
+                    advanced_opt(row.blocks),
+                    advanced_u32(row.shots_blocked),
+                    advanced_opt(row.clearances),
+                    row.fouls_made,
+                    row.fouls_against,
+                    row.yellow_cards,
+                    row.red_cards,
+                    row.mistakes_leading_to_goal,
+                    row.clean_sheets,
+                    row.goals_allowed,
+                    advanced_opt(row.saves_held),
+                    advanced_opt(row.saves_parried),
+                    advanced_opt(row.saves_tipped),
+                    advanced_opt(row.shots_on_target_faced),
+                    advanced_f64(row.expected_goals_prevented),
+                    row.advanced_available,
+                ])?;
             }
         }
 
@@ -766,7 +928,61 @@ impl Store {
             .map_err(Error::from)
     }
 
+    pub fn season_stats_count(&self, save_id: i64) -> Result<usize> {
+        self.conn
+            .query_row(
+                "SELECT COUNT(*) FROM player_season_stats WHERE save_id = ?1",
+                params![save_id],
+                |row| row.get::<_, i64>(0),
+            )
+            .map(|count| count as usize)
+            .map_err(Error::from)
+    }
+
+    pub fn player_metrics_count(
+        &self,
+        save_id: i64,
+        model: &str,
+        min_minutes: u32,
+    ) -> Result<usize> {
+        let model = crate::stats_moneyball::normalized_model(Some(model))?;
+        let model = crate::stats_moneyball::model_name(model);
+        self.conn
+            .query_row(
+                "SELECT COUNT(*) FROM player_metrics
+                 WHERE save_id = ?1 AND model = ?2 AND min_minutes = ?3",
+                params![save_id, model, min_minutes],
+                |row| row.get::<_, i64>(0),
+            )
+            .map(|count| count as usize)
+            .map_err(Error::from)
+    }
+
+    /// Read the materialized rows directly, without recomputing. Callers that
+    /// need to guarantee materialization should run `stats_moneyball` first.
+    pub fn player_metrics_rows(
+        &self,
+        save_id: i64,
+        model: &str,
+        min_minutes: u32,
+    ) -> Result<Vec<crate::stats_moneyball::StatsMoneyballRow>> {
+        let model = crate::stats_moneyball::normalized_model(Some(model))?;
+        let model = crate::stats_moneyball::model_name(model);
+        let key = StatsCacheKey {
+            save_id,
+            model: model.to_owned(),
+            min_minutes,
+        };
+        Ok(self.read_player_metrics(&key)?.unwrap_or_default())
+    }
+
     pub fn delete_save(&mut self, save_id: i64) -> Result<()> {
+        if let Ok(mut cache) = self.stats_cache.lock() {
+            cache.clear();
+        }
+        if let Ok(mut cache) = self.value_finder_cache.lock() {
+            cache.clear();
+        }
         self.conn
             .execute("DELETE FROM saves WHERE id = ?1", params![save_id])?;
         Ok(())
@@ -790,17 +1006,7 @@ impl Store {
         let page_size = query.page_size.unwrap_or(150).clamp(1, 500);
         let order = order_by(query);
         let sql = format!(
-            "SELECT p.uid, p.name, p.age, p.club_uid, p.club_name, p.league_competition_id,
-                    p.league_name, p.nation_id, p.ca, p.pa,
-                    p.pa_range_code, p.positions_text, p.positions_json, p.attributes_json,
-                    p.personality_json, p.transfer_value, p.transfer_value_state, c.wage,
-                    c.end_date, p.height_cm, p.left_foot, p.right_foot, c.on_loan, p.traits_json,
-                    p.nation_name, p.gender, p.best_role_id, p.best_role_name,
-                    p.best_role_score, p.best_role_position, p.injury_status, p.injury_until,
-                    p.recent_injury, p.suspension_count, p.transfer_listed, p.loan_listed,
-                    p.unique_id
-             FROM players p
-             LEFT JOIN contracts c ON c.save_id = p.save_id AND c.player_uid = p.uid
+            "{PLAYER_ROWS_SELECT}
              WHERE {where_sql}
              {order}
              LIMIT ? OFFSET ?"
@@ -810,61 +1016,9 @@ impl Store {
         page_params.push(Value::Integer((page as i64) * page_size as i64));
         let mut statement = self.conn.prepare(&sql)?;
         let rows = statement.query_map(params_from_iter(page_params.iter()), |row| {
-            Ok(PlayerRow {
-                uid: row.get(0)?,
-                generated: is_generated_unique_id(row.get::<_, Option<u32>>(36)?),
-                name: row.get(1)?,
-                age: row.get(2)?,
-                club_uid: row.get(3)?,
-                club_name: row.get(4)?,
-                league_competition_id: row.get(5)?,
-                league_name: row.get(6)?,
-                nation_id: row.get(7)?,
-                ca: row.get(8)?,
-                pa: row.get(9)?,
-                pa_range_code: row.get(10)?,
-                positions_text: row.get(11)?,
-                positions: parse_json_column(row.get::<_, String>(12)?, "positions"),
-                attributes: parse_json_column(row.get::<_, String>(13)?, "attributes"),
-                personality: row
-                    .get::<_, Option<String>>(14)?
-                    .and_then(|text| serde_json::from_str::<Personality>(&text).ok()),
-                transfer_value: row.get(15)?,
-                transfer_value_state: row
-                    .get::<_, Option<String>>(16)?
-                    .and_then(|text| serde_json::from_str::<String>(&text).ok())
-                    .unwrap_or_else(|| "ok".to_owned()),
-                wage: row.get(17)?,
-                contract_end: row.get(18)?,
-                height_cm: row.get(19)?,
-                left_foot: row.get(20)?,
-                right_foot: row.get(21)?,
-                on_loan: row.get(22)?,
-                traits: row
-                    .get::<_, Option<String>>(23)?
-                    .and_then(|text| serde_json::from_str::<Vec<Trait>>(&text).ok())
-                    .unwrap_or_default(),
-                nation_name: row.get(24)?,
-                gender: row.get(25)?,
-                best_role_id: row.get(26)?,
-                best_role_name: row.get(27)?,
-                best_role_score: row.get(28)?,
-                best_role_position: row.get(29)?,
-                injury_status: row.get(30)?,
-                injury_until: row.get(31)?,
-                recent_injury: row.get(32)?,
-                suspension_count: row.get(33)?,
-                transfer_listed: row.get(34)?,
-                loan_listed: row.get(35)?,
-            })
+            map_player_row(row, query.include_hidden)
         })?;
-        let mut rows = rows.collect::<std::result::Result<Vec<_>, _>>()?;
-        if !query.include_hidden {
-            for row in &mut rows {
-                redact_attributes(&mut row.attributes);
-                row.personality = None;
-            }
-        }
+        let rows = rows.collect::<std::result::Result<Vec<_>, _>>()?;
         Ok(PlayerPage {
             total,
             page,
@@ -873,24 +1027,557 @@ impl Store {
         })
     }
 
+    /// Stream every matching player through `consume` without loading the full
+    /// result set or issuing a count/offset query per page.
+    pub fn stream_players<F>(&self, query: &PlayerQuery, mut consume: F) -> Result<usize>
+    where
+        F: FnMut(PlayerRow) -> Result<()>,
+    {
+        let mut params: Vec<Value> = Vec::new();
+        let where_sql = build_where(query, &mut params)?;
+        let order = order_by(query);
+        let sql = format!(
+            "{PLAYER_ROWS_SELECT}
+             WHERE {where_sql}
+             {order}
+             LIMIT {MAX_EXPORT_ROWS}"
+        );
+        let mut statement = self.conn.prepare(&sql)?;
+        let mut rows = statement.query(params_from_iter(params.iter()))?;
+        let mut count = 0usize;
+        while let Some(row) = rows.next()? {
+            consume(map_player_row(row, query.include_hidden)?)?;
+            count += 1;
+        }
+        Ok(count)
+    }
+
     pub fn query_all(&self, query: &PlayerQuery) -> Result<Vec<PlayerRow>> {
-        let mut query = query.clone();
-        query.page = Some(0);
-        query.page_size = Some(500);
         let mut rows = Vec::new();
-        loop {
-            let page = self.query_players(&query)?;
-            let done = page.rows.is_empty() || rows.len() >= page.total as usize;
-            rows.extend(page.rows);
-            if done {
-                break;
-            }
-            query.page = Some(query.page.unwrap_or(0) + 1);
-            if rows.len() > 500_000 {
-                break;
+        self.stream_players(query, |row| {
+            rows.push(row);
+            Ok(())
+        })?;
+        Ok(rows)
+    }
+
+    /// Value Finder: load a lightweight player row once and rank it in Rust.
+    ///
+    fn read_player_metrics(
+        &self,
+        key: &StatsCacheKey,
+    ) -> Result<Option<Vec<crate::stats_moneyball::StatsMoneyballRow>>> {
+        let mut statement = self.conn.prepare(
+            "SELECT player_uid,
+                    name,
+                    age,
+                    club_uid,
+                    club_name,
+                    league_name,
+                    nation_name,
+                    ca,
+                    pa,
+                    position_group,
+                    minutes,
+                    starts,
+                    substitute_appearances,
+                    average_rating,
+                    goals,
+                    assists,
+                    expected_goals,
+                    expected_assists,
+                    shots,
+                    shots_on_target,
+                    passes_attempted,
+                    passes_completed,
+                    pass_completion_percent,
+                    tackles_attempted,
+                    tackles_completed,
+                    interceptions,
+                    key_passes,
+                    progressive_passes,
+                    headers_won,
+                    aerial_challenges_attempted,
+                    clearances,
+                    blocks,
+                    crosses_completed,
+                    saves_held,
+                    shots_on_target_faced,
+                    save_percent,
+                    expected_goals_prevented,
+                    advanced_available,
+                    transfer_value,
+                    transfer_value_state,
+                    wage,
+                    contract_end,
+                    club_reputation,
+                    fee,
+                    cost,
+                    fee_known,
+                    wage_known,
+                    production_global,
+                    production_tier,
+                    cost_pct_global,
+                    cost_pct_tier,
+                    surplus,
+                    score,
+                    confidence,
+                    flags_json,
+                    drivers_json,
+                    transfer_listed,
+                    loan_listed,
+                    injury_status,
+                    recent_injury
+             FROM player_metrics
+             WHERE save_id = ?1 AND model = ?2 AND min_minutes = ?3
+             ORDER BY score DESC",
+        )?;
+        let rows =
+            statement.query_map(params![key.save_id, key.model, key.min_minutes], |row| {
+                let flags_json: String = row.get(54)?;
+                let drivers_json: String = row.get(55)?;
+                Ok(crate::stats_moneyball::StatsMoneyballRow {
+                    uid: row.get::<_, i64>(0)? as u32,
+                    name: row.get(1)?,
+                    age: row.get(2)?,
+                    club_uid: row.get::<_, Option<i64>>(3)?.map(|value| value as u32),
+                    club_name: row.get(4)?,
+                    league_name: row.get(5)?,
+                    nation_name: row.get(6)?,
+                    ca: row.get::<_, i64>(7)? as u16,
+                    pa: row.get::<_, Option<i64>>(8)?.map(|value| value as i16),
+                    position_group: row.get(9)?,
+                    minutes: row.get::<_, i64>(10)? as u32,
+                    starts: row.get::<_, i64>(11)? as u32,
+                    substitute_appearances: row.get::<_, i64>(12)? as u32,
+                    average_rating: row.get(13)?,
+                    goals: row.get::<_, i64>(14)? as u32,
+                    assists: row.get::<_, i64>(15)? as u32,
+                    expected_goals: row.get(16)?,
+                    expected_assists: row.get(17)?,
+                    shots: row.get::<_, i64>(18)? as u32,
+                    shots_on_target: row.get::<_, i64>(19)? as u32,
+                    passes_attempted: row.get::<_, i64>(20)? as u32,
+                    passes_completed: row.get::<_, i64>(21)? as u32,
+                    pass_completion_percent: row.get(22)?,
+                    tackles_attempted: row.get::<_, i64>(23)? as u32,
+                    tackles_completed: row.get::<_, i64>(24)? as u32,
+                    interceptions: row.get::<_, Option<i64>>(25)?.map(|value| value as u32),
+                    key_passes: row.get::<_, Option<i64>>(26)?.map(|value| value as u32),
+                    progressive_passes: row.get::<_, Option<i64>>(27)?.map(|value| value as u32),
+                    headers_won: row.get::<_, Option<i64>>(28)?.map(|value| value as u32),
+                    aerial_challenges_attempted: row
+                        .get::<_, Option<i64>>(29)?
+                        .map(|value| value as u32),
+                    clearances: row.get::<_, Option<i64>>(30)?.map(|value| value as u32),
+                    blocks: row.get::<_, Option<i64>>(31)?.map(|value| value as u32),
+                    crosses_completed: row.get::<_, Option<i64>>(32)?.map(|value| value as u32),
+                    saves_held: row.get::<_, Option<i64>>(33)?.map(|value| value as u32),
+                    shots_on_target_faced: row.get::<_, Option<i64>>(34)?.map(|value| value as u32),
+                    save_percent: row.get(35)?,
+                    expected_goals_prevented: row.get(36)?,
+                    advanced_available: row.get::<_, i64>(37)? != 0,
+                    transfer_value: row.get::<_, Option<i64>>(38)?.map(|value| value as u32),
+                    transfer_value_state: row.get(39)?,
+                    wage: row.get::<_, Option<i64>>(40)?.map(|value| value as u32),
+                    contract_end: row.get(41)?,
+                    club_reputation: row.get::<_, Option<i64>>(42)?.map(|value| value as u16),
+                    fee: row.get::<_, Option<i64>>(43)?.map(|value| value as u64),
+                    cost: row.get::<_, i64>(44)? as u64,
+                    fee_known: row.get::<_, i64>(45)? != 0,
+                    wage_known: row.get::<_, i64>(46)? != 0,
+                    production_global: Some(row.get(47)?),
+                    production_tier: Some(row.get(48)?),
+                    cost_pct_global: row.get(49)?,
+                    cost_pct_tier: Some(row.get(50)?),
+                    surplus: Some(row.get(51)?),
+                    score: Some(row.get(52)?),
+                    confidence: row.get(53)?,
+                    flags: serde_json::from_str(&flags_json).unwrap_or_default(),
+                    drivers: serde_json::from_str(&drivers_json).unwrap_or_default(),
+                    transfer_listed: row.get::<_, i64>(56)? != 0,
+                    loan_listed: row.get::<_, i64>(57)? != 0,
+                    injury_status: row.get(58)?,
+                    recent_injury: row.get(59)?,
+                })
+            })?;
+        let rows = rows.collect::<std::result::Result<Vec<_>, _>>()?;
+        Ok((!rows.is_empty()).then_some(rows))
+    }
+
+    fn write_player_metrics(
+        &self,
+        key: &StatsCacheKey,
+        rows: &[crate::stats_moneyball::StatsMoneyballRow],
+    ) -> Result<()> {
+        let transaction = self.conn.unchecked_transaction()?;
+        transaction.execute(
+            "DELETE FROM player_metrics
+             WHERE save_id = ?1 AND model = ?2 AND min_minutes = ?3",
+            params![key.save_id, key.model, key.min_minutes],
+        )?;
+        {
+            let mut statement = transaction.prepare(
+                "INSERT INTO player_metrics
+                 (save_id,
+                 player_uid,
+                 model,
+                 min_minutes,
+                 name,
+                 age,
+                 club_uid,
+                 club_name,
+                 league_name,
+                 nation_name,
+                 ca,
+                 pa,
+                 position_group,
+                 minutes,
+                 starts,
+                 substitute_appearances,
+                 average_rating,
+                 goals,
+                 assists,
+                 expected_goals,
+                 expected_assists,
+                 shots,
+                 shots_on_target,
+                 passes_attempted,
+                 passes_completed,
+                 pass_completion_percent,
+                 tackles_attempted,
+                 tackles_completed,
+                 interceptions,
+                 key_passes,
+                 progressive_passes,
+                 headers_won,
+                 aerial_challenges_attempted,
+                 clearances,
+                 blocks,
+                 crosses_completed,
+                 saves_held,
+                 shots_on_target_faced,
+                 save_percent,
+                 expected_goals_prevented,
+                 advanced_available,
+                 transfer_value,
+                 transfer_value_state,
+                 wage,
+                 contract_end,
+                 club_reputation,
+                 fee,
+                 cost,
+                 fee_known,
+                 wage_known,
+                 production_global,
+                 production_tier,
+                 cost_pct_global,
+                 cost_pct_tier,
+                 surplus,
+                 score,
+                 confidence,
+                 flags_json,
+                 drivers_json,
+                 transfer_listed,
+                 loan_listed,
+                 injury_status,
+                 recent_injury,
+                 computed_at)
+                 VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            )?;
+            let computed_at = Utc::now().to_rfc3339();
+            for row in rows {
+                statement.execute(params![
+                    key.save_id,
+                    row.uid,
+                    key.model,
+                    key.min_minutes,
+                    row.name,
+                    row.age,
+                    row.club_uid,
+                    row.club_name,
+                    row.league_name,
+                    row.nation_name,
+                    row.ca,
+                    row.pa,
+                    row.position_group,
+                    row.minutes,
+                    row.starts,
+                    row.substitute_appearances,
+                    row.average_rating,
+                    row.goals,
+                    row.assists,
+                    row.expected_goals,
+                    row.expected_assists,
+                    row.shots,
+                    row.shots_on_target,
+                    row.passes_attempted,
+                    row.passes_completed,
+                    row.pass_completion_percent,
+                    row.tackles_attempted,
+                    row.tackles_completed,
+                    row.interceptions,
+                    row.key_passes,
+                    row.progressive_passes,
+                    row.headers_won,
+                    row.aerial_challenges_attempted,
+                    row.clearances,
+                    row.blocks,
+                    row.crosses_completed,
+                    row.saves_held,
+                    row.shots_on_target_faced,
+                    row.save_percent,
+                    row.expected_goals_prevented,
+                    row.advanced_available,
+                    row.transfer_value,
+                    row.transfer_value_state,
+                    row.wage,
+                    row.contract_end,
+                    row.club_reputation,
+                    row.fee.map(|value| value as i64),
+                    row.cost as i64,
+                    row.fee_known,
+                    row.wage_known,
+                    row.production_global,
+                    row.production_tier,
+                    row.cost_pct_global,
+                    row.cost_pct_tier,
+                    row.surplus,
+                    row.score,
+                    row.confidence,
+                    serde_json::to_string(&row.flags)?,
+                    serde_json::to_string(&row.drivers)?,
+                    row.transfer_listed,
+                    row.loan_listed,
+                    row.injury_status,
+                    row.recent_injury,
+                    computed_at,
+                ])?;
             }
         }
-        Ok(rows)
+        prune_player_metrics(
+            &transaction,
+            key.save_id,
+            &key.model,
+            MAX_PLAYER_METRIC_THRESHOLDS,
+        )?;
+        transaction.commit()?;
+        Ok(())
+    }
+
+    pub fn clear_stats_cache(&self) {
+        if let Ok(mut cache) = self.stats_cache.lock() {
+            cache.clear();
+        }
+    }
+
+    fn cache_stats_rows(
+        &self,
+        key: StatsCacheKey,
+        rows: Arc<Vec<crate::stats_moneyball::StatsMoneyballRow>>,
+    ) {
+        if let Ok(mut cache) = self.stats_cache.lock() {
+            if cache.len() >= MAX_STATS_CACHE_ENTRIES && !cache.contains_key(&key) {
+                // Minute thresholds are user-controlled, so keep the cache bounded.
+                cache.clear();
+            }
+            cache.insert(key, rows);
+        }
+    }
+
+    pub fn stats_moneyball(
+        &self,
+        request: &crate::stats_moneyball::StatsMoneyballRequest,
+    ) -> Result<crate::stats_moneyball::StatsMoneyballPage> {
+        let model = crate::stats_moneyball::normalized_model(request.model.as_deref())?;
+        let min_minutes = request.min_minutes.unwrap_or(900);
+        let cache_key = StatsCacheKey {
+            save_id: request.save_id,
+            model: crate::stats_moneyball::model_name(model).to_owned(),
+            min_minutes,
+        };
+        if let Ok(cache) = self.stats_cache.lock()
+            && let Some(rows) = cache.get(&cache_key)
+        {
+            return crate::stats_moneyball::apply_stats_request(rows.as_slice(), request);
+        }
+        if let Some(rows) = self.read_player_metrics(&cache_key)? {
+            let rows = Arc::new(rows);
+            self.cache_stats_rows(cache_key, Arc::clone(&rows));
+            return crate::stats_moneyball::apply_stats_request(rows.as_slice(), request);
+        }
+        let mut statement = self.conn.prepare(
+            "SELECT p.uid, p.name, p.age, p.club_uid, p.club_name, p.league_name,
+                    p.nation_name, p.ca, p.pa, p.transfer_value, p.transfer_value_state,
+                    p.transfer_listed, p.loan_listed, p.injury_status, p.recent_injury,
+                    p.positions_text, c.wage, c.end_date, cl.reputation,
+                    s.club_uid, s.minutes, s.starts, s.substitute_appearances,
+                    s.average_rating, s.goals, s.assists, s.expected_goals,
+                    s.expected_assists, s.shots, s.shots_on_target, s.passes_attempted,
+                    s.passes_completed, s.tackles_attempted, s.tackles_completed,
+                    s.goals_allowed, s.clean_sheets, s.interceptions, s.key_passes,
+                    s.progressive_passes, s.dribbles, s.headers_won,
+                    s.aerial_challenges_attempted, s.clearances, s.blocks,
+                    s.crosses_completed, s.saves_held, s.saves_parried, s.saves_tipped,
+                    s.shots_on_target_faced, s.expected_goals_prevented, s.advanced_available
+             FROM player_season_stats s
+             JOIN players p ON p.save_id = s.save_id AND p.uid = s.player_uid
+             LEFT JOIN contracts c ON c.save_id = p.save_id AND c.player_uid = p.uid
+             LEFT JOIN clubs cl ON cl.save_id = p.save_id AND cl.uid = p.club_uid
+             WHERE s.save_id = ?1 AND s.kind = 'overall' AND s.minutes >= ?2",
+        )?;
+        let rows = statement.query_map(params![request.save_id, min_minutes], |row| {
+            let transfer_value_state = row
+                .get::<_, Option<String>>(10)?
+                .and_then(|text| serde_json::from_str::<String>(&text).ok())
+                .unwrap_or_else(|| "ok".to_owned());
+            let player_club_uid: Option<u32> = row.get(3)?;
+            let stats_club_uid: Option<u32> = row.get(19)?;
+            Ok(crate::stats_moneyball::StatsMoneyballCandidate {
+                uid: row.get(0)?,
+                name: row.get(1)?,
+                age: row.get(2)?,
+                club_uid: player_club_uid,
+                club_name: row.get(4)?,
+                league_name: row.get(5)?,
+                nation_name: row.get(6)?,
+                ca: row.get(7)?,
+                pa: row.get(8)?,
+                positions_text: row.get(15)?,
+                transfer_value: row.get(9)?,
+                transfer_value_state,
+                wage: row.get(16)?,
+                contract_end: row.get(17)?,
+                club_reputation: row.get(18)?,
+                transfer_listed: row.get(11)?,
+                loan_listed: row.get(12)?,
+                injury_status: row.get(13)?,
+                recent_injury: row.get(14)?,
+                minutes: row.get(20)?,
+                starts: row.get(21)?,
+                substitute_appearances: row.get(22)?,
+                average_rating: row.get(23)?,
+                goals: row.get(24)?,
+                assists: row.get(25)?,
+                expected_goals: row.get(26)?,
+                expected_assists: row.get(27)?,
+                shots: row.get(28)?,
+                shots_on_target: row.get(29)?,
+                passes_attempted: row.get(30)?,
+                passes_completed: row.get(31)?,
+                tackles_attempted: row.get(32)?,
+                tackles_completed: row.get(33)?,
+                goals_allowed: row.get(34)?,
+                clean_sheets: row.get(35)?,
+                interceptions: row.get(36)?,
+                key_passes: row.get(37)?,
+                progressive_passes: row.get(38)?,
+                dribbles: row.get(39)?,
+                headers_won: row.get(40)?,
+                aerial_challenges_attempted: row.get(41)?,
+                clearances: row.get(42)?,
+                blocks: row.get(43)?,
+                crosses_completed: row.get(44)?,
+                saves_held: row.get(45)?,
+                saves_parried: row.get(46)?,
+                saves_tipped: row.get(47)?,
+                shots_on_target_faced: row.get(48)?,
+                expected_goals_prevented: row.get(49)?,
+                advanced_available: row.get::<_, i64>(50)? != 0,
+                current_club: player_club_uid.is_some() && player_club_uid == stats_club_uid,
+            })
+        })?;
+        let mut by_uid: HashMap<u32, crate::stats_moneyball::StatsMoneyballCandidate> =
+            HashMap::new();
+        for row in rows {
+            let candidate = row?;
+            match by_uid.entry(candidate.uid) {
+                std::collections::hash_map::Entry::Vacant(entry) => {
+                    entry.insert(candidate);
+                }
+                std::collections::hash_map::Entry::Occupied(mut entry) => {
+                    let existing = entry.get();
+                    let better = (candidate.current_club && !existing.current_club)
+                        || (candidate.current_club == existing.current_club
+                            && candidate.minutes > existing.minutes);
+                    if better {
+                        entry.insert(candidate);
+                    }
+                }
+            }
+        }
+        let scored = crate::stats_moneyball::score_stats_candidates(
+            by_uid.into_values().collect(),
+            model,
+            min_minutes,
+        )?;
+        self.write_player_metrics(&cache_key, &scored)?;
+        let rows = Arc::new(scored);
+        self.cache_stats_rows(cache_key, Arc::clone(&rows));
+        crate::stats_moneyball::apply_stats_request(rows.as_slice(), request)
+    }
+
+    /// The ranking deliberately lives outside SQL: percentile groups, missing
+    /// cost handling and the explainable score are easier to test and evolve as
+    /// pure functions. The candidate query returns one row per player, not per
+    /// contract or per match.
+    pub fn value_finder(
+        &self,
+        request: &crate::moneyball::ValueFinderRequest,
+    ) -> Result<crate::moneyball::ValueFinderPage> {
+        crate::moneyball::validate_value_request(request)?;
+        if let Ok(cache) = self.value_finder_cache.lock()
+            && let Some(baseline) = cache.get(&request.save_id)
+        {
+            return crate::moneyball::apply_value_request(baseline, request);
+        }
+        let mut statement = self.conn.prepare(
+            "SELECT p.uid, p.name, p.age, p.club_uid, p.club_name, p.league_name,
+                    p.nation_name, p.ca, p.pa, p.best_role_id, p.best_role_name,
+                    p.best_role_score, p.best_role_position, p.transfer_value,
+                    p.transfer_value_state, c.wage, c.end_date, cl.reputation,
+                    p.transfer_listed, p.loan_listed, p.injury_status, p.recent_injury
+             FROM players p
+             LEFT JOIN contracts c ON c.save_id = p.save_id AND c.player_uid = p.uid
+             LEFT JOIN clubs cl ON cl.save_id = p.save_id AND cl.uid = p.club_uid
+             WHERE p.save_id = ?1",
+        )?;
+        let rows = statement.query_map(params![request.save_id], |row| {
+            let transfer_value_state = row
+                .get::<_, Option<String>>(14)?
+                .and_then(|text| serde_json::from_str::<String>(&text).ok())
+                .unwrap_or_else(|| "ok".to_owned());
+            Ok(crate::moneyball::ValueFinderCandidate {
+                uid: row.get(0)?,
+                name: row.get(1)?,
+                age: row.get(2)?,
+                club_uid: row.get(3)?,
+                club_name: row.get(4)?,
+                league_name: row.get(5)?,
+                nation_name: row.get(6)?,
+                ca: row.get(7)?,
+                pa: row.get(8)?,
+                role_id: row.get(9)?,
+                role_name: row.get(10)?,
+                role_score: row.get(11)?,
+                role_position: row.get(12)?,
+                transfer_value: row.get(13)?,
+                transfer_value_state,
+                wage: row.get(15)?,
+                contract_end: row.get(16)?,
+                club_reputation: row.get(17)?,
+                transfer_listed: row.get(18)?,
+                loan_listed: row.get(19)?,
+                injury_status: row.get(20)?,
+                recent_injury: row.get(21)?,
+            })
+        })?;
+        let candidates = rows.collect::<std::result::Result<Vec<_>, _>>()?;
+        let baseline = Arc::new(crate::moneyball::score_value_baseline(candidates));
+        if let Ok(mut cache) = self.value_finder_cache.lock() {
+            cache.insert(request.save_id, Arc::clone(&baseline));
+        }
+        crate::moneyball::apply_value_request(&baseline, request)
     }
 
     pub fn get_player(
@@ -1231,21 +1918,30 @@ impl Store {
     }
 
     pub fn query_clubs(&self, query: &ClubQuery) -> Result<ClubPage> {
-        let mut params: Vec<Value> = Vec::new();
-        params.push(Value::Integer(query.save_id));
-        params.push(Value::Integer(query.save_id));
-        let where_sql = build_club_where(query, &mut params)?;
-        let count_sql = format!(
-            "{} SELECT COUNT(*)
-             FROM clubs c
-             LEFT JOIN stats s ON s.club_uid = c.uid
-             LEFT JOIN stads st ON st.owner_club_uid = c.uid
-             WHERE {where_sql}",
-            CLUB_CTE
-        );
+        let mut where_params: Vec<Value> = Vec::new();
+        let where_sql = build_club_where(query, &mut where_params)?;
+        let uses_aggregate_filters = club_query_uses_aggregate_filters(query);
+        let count_sql = if uses_aggregate_filters {
+            format!(
+                "{} SELECT COUNT(*)
+                 FROM clubs c
+                 LEFT JOIN stats s ON s.club_uid = c.uid
+                 LEFT JOIN stads st ON st.owner_club_uid = c.uid
+                 WHERE {where_sql}",
+                CLUB_CTE
+            )
+        } else {
+            format!("SELECT COUNT(*) FROM clubs c WHERE {where_sql}")
+        };
+        let mut count_params = Vec::with_capacity(where_params.len() + 2);
+        if uses_aggregate_filters {
+            count_params.push(Value::Integer(query.save_id));
+            count_params.push(Value::Integer(query.save_id));
+        }
+        count_params.extend(where_params.iter().cloned());
         let total: u64 =
             self.conn
-                .query_row(&count_sql, params_from_iter(params.iter()), |row| {
+                .query_row(&count_sql, params_from_iter(count_params.iter()), |row| {
                     row.get(0)
                 })?;
 
@@ -1270,7 +1966,10 @@ impl Store {
              LIMIT ? OFFSET ?",
             CLUB_CTE
         );
-        let mut page_params = params;
+        let mut page_params = Vec::with_capacity(where_params.len() + 4);
+        page_params.push(Value::Integer(query.save_id));
+        page_params.push(Value::Integer(query.save_id));
+        page_params.extend(where_params);
         page_params.push(Value::Integer(page_size as i64));
         page_params.push(Value::Integer((page as i64) * page_size as i64));
         let mut statement = self.conn.prepare(&sql)?;
@@ -1814,6 +2513,25 @@ impl Store {
     }
 }
 
+/// Keep the persisted stats rows bounded. Pruning only affects cache recall:
+/// the next request for an evicted threshold recomputes the identical rows.
+fn prune_player_metrics(conn: &Connection, save_id: i64, model: &str, keep: usize) -> Result<()> {
+    conn.execute(
+        "DELETE FROM player_metrics
+         WHERE save_id = ?1 AND model = ?2
+           AND min_minutes NOT IN (
+             SELECT min_minutes
+             FROM player_metrics
+             WHERE save_id = ?1 AND model = ?2
+             GROUP BY min_minutes
+             ORDER BY MAX(computed_at) DESC, min_minutes DESC
+             LIMIT ?3
+           )",
+        params![save_id, model, keep as i64],
+    )?;
+    Ok(())
+}
+
 fn migrate(conn: &Connection) -> Result<()> {
     const COLUMNS: &[(&str, &str, &str)] = &[
         ("saves", "save_name", "TEXT NOT NULL DEFAULT ''"),
@@ -1873,6 +2591,12 @@ fn migrate(conn: &Connection) -> Result<()> {
             )?;
         }
     }
+    // Both indexes duplicate the leading columns of their table's primary key.
+    // Keep this explicit so existing caches are migrated as well.
+    conn.execute_batch(
+        "DROP INDEX IF EXISTS player_season_stats_player;
+         DROP INDEX IF EXISTS club_finances_club;",
+    )?;
     Ok(())
 }
 
@@ -1889,6 +2613,75 @@ fn table_exists(conn: &Connection, table: &str) -> Result<bool> {
 
 fn parse_json_column<T: serde::de::DeserializeOwned + Default>(text: String, _label: &str) -> T {
     serde_json::from_str(&text).unwrap_or_default()
+}
+
+fn map_player_row(row: &Row<'_>, include_hidden: bool) -> rusqlite::Result<PlayerRow> {
+    let mut player = PlayerRow {
+        uid: row.get(0)?,
+        generated: is_generated_unique_id(row.get::<_, Option<u32>>(36)?),
+        name: row.get(1)?,
+        age: row.get(2)?,
+        club_uid: row.get(3)?,
+        club_name: row.get(4)?,
+        league_competition_id: row.get(5)?,
+        league_name: row.get(6)?,
+        nation_id: row.get(7)?,
+        ca: row.get(8)?,
+        pa: row.get(9)?,
+        pa_range_code: row.get(10)?,
+        positions_text: row.get(11)?,
+        positions: parse_json_column(row.get::<_, String>(12)?, "positions"),
+        attributes: parse_json_column(row.get::<_, String>(13)?, "attributes"),
+        personality: if include_hidden {
+            row.get::<_, Option<String>>(14)?
+                .and_then(|text| serde_json::from_str::<Personality>(&text).ok())
+        } else {
+            None
+        },
+        transfer_value: row.get(15)?,
+        transfer_value_state: row
+            .get::<_, Option<String>>(16)?
+            .and_then(|text| serde_json::from_str::<String>(&text).ok())
+            .unwrap_or_else(|| "ok".to_owned()),
+        wage: row.get(17)?,
+        contract_end: row.get(18)?,
+        height_cm: row.get(19)?,
+        left_foot: row.get(20)?,
+        right_foot: row.get(21)?,
+        on_loan: row.get(22)?,
+        traits: row
+            .get::<_, Option<String>>(23)?
+            .and_then(|text| serde_json::from_str::<Vec<Trait>>(&text).ok())
+            .unwrap_or_default(),
+        nation_name: row.get(24)?,
+        gender: row.get(25)?,
+        best_role_id: row.get(26)?,
+        best_role_name: row.get(27)?,
+        best_role_score: row.get(28)?,
+        best_role_position: row.get(29)?,
+        injury_status: row.get(30)?,
+        injury_until: row.get(31)?,
+        recent_injury: row.get(32)?,
+        suspension_count: row.get(33)?,
+        transfer_listed: row.get(34)?,
+        loan_listed: row.get(35)?,
+    };
+    if !include_hidden {
+        redact_attributes(&mut player.attributes);
+        player.personality = None;
+    }
+    Ok(player)
+}
+
+fn club_query_uses_aggregate_filters(query: &ClubQuery) -> bool {
+    query.player_count_min.is_some()
+        || query.player_count_max.is_some()
+        || query.average_ca_min.is_some()
+        || query.average_ca_max.is_some()
+        || query.total_value_min.is_some()
+        || query.total_value_max.is_some()
+        || query.has_stadium.is_some()
+        || query.stadium_capacity_min.is_some()
 }
 
 fn build_club_where(query: &ClubQuery, params: &mut Vec<Value>) -> Result<String> {
@@ -2280,7 +3073,7 @@ fn is_hidden_attribute(key: &str) -> bool {
 
 fn redact_attributes(attributes: &mut Attributes) {
     for key in HIDDEN_ATTRIBUTE_KEYS {
-        if let Some(index) = ATTRIBUTE_KEYS.iter().position(|name| *name == key) {
+        if let Some(index) = attribute_index(key) {
             attributes.values[index] = 0;
         }
     }
@@ -2518,5 +3311,326 @@ mod tests {
         let mut params = Vec::new();
         let sql = build_where(&query, &mut params).expect("database filter should be valid");
         assert!(sql.contains("p.unique_id IS NULL OR p.unique_id < ?"));
+    }
+
+    #[test]
+    fn streams_exports_without_materializing_all_rows() {
+        let store = Store::open_in_memory().expect("store");
+        store
+            .conn
+            .execute_batch(
+                "INSERT INTO saves
+                   (id, path, file_name, file_size, mtime_ns, fingerprint, game, build,
+                    parser_version, parsed_at)
+                 VALUES (1, '/tmp/test.fm', 'test.fm', 1, 1, 'fp', 'FM27', '27.0.0', 'test', 'now');
+                 INSERT INTO players
+                   (save_id, uid, name, age, ca, pa, transfer_value, transfer_value_state,
+                    positions_json, positions_text, personality_json, attributes_json,
+                    raw_attributes_json, best_role_id, best_role_name, best_role_score,
+                    best_role_position, data_json)
+                 VALUES
+                   (1, 1, 'One', 24, 150, 160, 1000, '\"ok\"', '{}', 'MC',
+                    '{\"professionalism\":20}', '{\"crossing\":12,\"dirtiness\":20}',
+                    '{\"crossing\":12,\"dirtiness\":20}', 'central_midfielder',
+                    'Central Midfielder', 16, 'MC', '{}'),
+                   (1, 2, 'Two', 25, 140, 150, 2000, '\"ok\"', '{}', 'ST',
+                    '{\"professionalism\":15}', '{\"finishing\":15,\"dirtiness\":10}',
+                    '{\"finishing\":15,\"dirtiness\":10}', 'poacher',
+                    'Poacher', 15, 'ST', '{}');",
+            )
+            .expect("seed");
+        let query = PlayerQuery {
+            save_id: 1,
+            include_hidden: false,
+            ..PlayerQuery::default()
+        };
+        let directory = tempfile::tempdir().expect("tempdir");
+        let json_path = directory.path().join("players.json");
+        let mut writer = crate::export::ExportWriter::create(&json_path, "json").expect("writer");
+        let streamed = store
+            .stream_players(&query, |row| writer.write_row(&row))
+            .expect("stream");
+        let report = writer.finish().expect("finish");
+        assert_eq!(streamed, 2);
+        assert_eq!(report.rows, 2);
+
+        let actual_json = std::fs::read_to_string(&json_path).expect("json");
+        let expected_json =
+            serde_json::to_string_pretty(&store.query_all(&query).expect("rows")).expect("pretty");
+        assert_eq!(actual_json, expected_json);
+
+        let value: serde_json::Value = serde_json::from_str(&actual_json).expect("parse");
+        let rows = value.as_array().expect("array");
+        assert_eq!(rows.len(), 2);
+        assert_eq!(rows[0]["name"], "One");
+        assert_eq!(rows[0]["personality"], serde_json::Value::Null);
+        assert_eq!(rows[0]["attributes"]["dirtiness"], 0);
+        assert_eq!(rows[0]["attributes"]["crossing"], 12);
+
+        let csv_path = directory.path().join("players.csv");
+        let mut writer = crate::export::ExportWriter::create(&csv_path, "csv").expect("writer");
+        store
+            .stream_players(&query, |row| writer.write_row(&row))
+            .expect("stream");
+        writer.finish().expect("finish");
+        let csv = std::fs::read_to_string(csv_path).expect("csv");
+        assert_eq!(csv.lines().count(), 3);
+        assert!(csv.starts_with("uid,generated,name,age"));
+    }
+
+    #[test]
+    fn stats_cache_is_bounded() {
+        let store = Store::open_in_memory().expect("store");
+        for minute in 0..MAX_STATS_CACHE_ENTRIES as u32 {
+            store.cache_stats_rows(
+                StatsCacheKey {
+                    save_id: 1,
+                    model: "core".to_owned(),
+                    min_minutes: minute,
+                },
+                Arc::new(Vec::new()),
+            );
+        }
+        assert_eq!(
+            store.stats_cache.lock().expect("cache").len(),
+            MAX_STATS_CACHE_ENTRIES
+        );
+
+        store.cache_stats_rows(
+            StatsCacheKey {
+                save_id: 1,
+                model: "core".to_owned(),
+                min_minutes: MAX_STATS_CACHE_ENTRIES as u32,
+            },
+            Arc::new(Vec::new()),
+        );
+        assert_eq!(store.stats_cache.lock().expect("cache").len(), 1);
+    }
+
+    fn seed_metric_threshold(conn: &Connection, min_minutes: u32, computed_at: &str) {
+        conn.execute(
+            "INSERT INTO player_metrics
+               (save_id, player_uid, model, min_minutes, ca, position_group, minutes,
+                starts, substitute_appearances, goals, assists, expected_goals,
+                expected_assists, shots, shots_on_target, passes_attempted,
+                passes_completed, tackles_attempted, tackles_completed, advanced_available,
+                transfer_value_state, cost, fee_known, wage_known, production_global,
+                production_tier, cost_pct_tier, surplus, score, confidence, flags_json,
+                drivers_json, transfer_listed, loan_listed, injury_status, computed_at)
+             VALUES (1, 1, 'core', ?1, 100, 'MC', 900, 10, 0, 0, 0, 0.0, 0.0, 0, 0,
+                     0, 0, 0, 0, 0, '\"ok\"', 0, 0, 0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+                     '[]', '[]', 0, 0, 'fit', ?2)",
+            params![min_minutes, computed_at],
+        )
+        .expect("seed metric threshold");
+    }
+
+    #[test]
+    fn opens_an_independent_read_only_connection_for_exports() {
+        let directory = tempfile::tempdir().expect("tempdir");
+        let path = directory.path().join("cache.db");
+        let writable = Store::open(&path).expect("store");
+        // The pool is opened before the first save is inserted, as it is when the
+        // desktop app starts. WAL must let it see later committed rows.
+        let read_only = Store::open_read_only(&path).expect("read-only store");
+        writable
+            .conn
+            .execute_batch(
+                "INSERT INTO saves
+                   (id, path, file_name, file_size, mtime_ns, fingerprint, game, build,
+                    parser_version, parsed_at)
+                 VALUES (1, '/tmp/test.fm', 'test.fm', 1, 1, 'fp', 'FM27', '27.0.0',
+                         'test', 'now');
+                 INSERT INTO players
+                   (save_id, uid, name, age, ca, pa, transfer_value,
+                    transfer_value_state, positions_json, positions_text,
+                    personality_json, attributes_json, raw_attributes_json,
+                    best_role_id, best_role_name, best_role_score, best_role_position,
+                    data_json)
+                 VALUES (1, 1, 'One', 24, 150, 160, 1000, '\"ok\"', '{}', 'MC', '{}',
+                         '{}', '{}', 'central_midfielder', 'Central Midfielder', 16,
+                         'MC', '{}');",
+            )
+            .expect("seed");
+
+        let query = PlayerQuery {
+            save_id: 1,
+            ..PlayerQuery::default()
+        };
+        assert_eq!(read_only.query_all(&query).expect("rows").len(), 1);
+        assert!(read_only.conn.execute("DELETE FROM players", []).is_err());
+    }
+
+    #[test]
+    fn prunes_old_player_metric_thresholds_per_model() {
+        let store = Store::open_in_memory().expect("store");
+        store
+            .conn
+            .execute_batch(
+                "INSERT INTO saves
+                   (id, path, file_name, file_size, mtime_ns, fingerprint, game, build,
+                    parser_version, parsed_at)
+                 VALUES (1, '/tmp/test.fm', 'test.fm', 1, 1, 'fp', 'FM27', '27.0.0',
+                         'test', 'now');",
+            )
+            .expect("seed save");
+        for step in 0..=MAX_PLAYER_METRIC_THRESHOLDS as u32 + 2 {
+            seed_metric_threshold(
+                &store.conn,
+                step * 100,
+                &format!("2026-01-01T00:00:{step:02}Z"),
+            );
+        }
+        prune_player_metrics(&store.conn, 1, "core", MAX_PLAYER_METRIC_THRESHOLDS).expect("prune");
+
+        let remaining: Vec<u32> = store
+            .conn
+            .prepare(
+                "SELECT min_minutes FROM player_metrics
+                 WHERE save_id = 1 AND model = 'core' ORDER BY min_minutes",
+            )
+            .expect("prepare")
+            .query_map([], |row| row.get(0))
+            .expect("query")
+            .collect::<std::result::Result<_, _>>()
+            .expect("rows");
+        assert_eq!(remaining.len(), MAX_PLAYER_METRIC_THRESHOLDS);
+        assert_eq!(remaining.first(), Some(&300));
+        assert_eq!(
+            remaining.last(),
+            Some(&((MAX_PLAYER_METRIC_THRESHOLDS as u32 + 2) * 100))
+        );
+    }
+
+    #[test]
+    fn club_count_skips_aggregate_ctes_without_aggregate_filters() {
+        let store = Store::open_in_memory().expect("store");
+        store
+            .conn
+            .execute_batch(
+                "INSERT INTO saves
+                   (id, path, file_name, file_size, mtime_ns, fingerprint, game, build,
+                    parser_version, parsed_at)
+                 VALUES (1, '/tmp/test.fm', 'test.fm', 1, 1, 'fp', 'FM27', '27.0.0', 'test', 'now');
+                 INSERT INTO clubs
+                   (save_id, uid, name, short_name, nation_id, fa_nation_id, reputation)
+                 VALUES (1, 10, 'Alpha', 'Alpha', 1, 1, 5000),
+                        (1, 11, 'Beta', 'Beta', 1, 1, 4000);",
+            )
+            .expect("seed");
+
+        let query = ClubQuery {
+            save_id: 1,
+            ..ClubQuery::default()
+        };
+        assert!(!club_query_uses_aggregate_filters(&query));
+        let page = store.query_clubs(&query).expect("clubs");
+        assert_eq!(page.total, 2);
+        assert_eq!(page.rows.len(), 2);
+
+        let query = ClubQuery {
+            save_id: 1,
+            player_count_min: Some(1),
+            ..ClubQuery::default()
+        };
+        assert!(club_query_uses_aggregate_filters(&query));
+        let page = store.query_clubs(&query).expect("aggregate clubs");
+        assert_eq!(page.total, 0);
+    }
+
+    #[test]
+    fn value_finder_reuses_its_scoring_baseline_across_pages() {
+        let store = Store::open_in_memory().expect("store");
+        store
+            .conn
+            .execute_batch(
+                "INSERT INTO saves
+                   (id, path, file_name, file_size, mtime_ns, fingerprint, game, build,
+                    parser_version, parsed_at)
+                 VALUES (1, '/tmp/test.fm', 'test.fm', 1, 1, 'fp', 'FM27', '27.0.0', 'test', 'now');
+                 INSERT INTO players
+                   (save_id, uid, name, age, ca, pa, transfer_value, transfer_value_state,
+                    positions_json, positions_text, attributes_json, raw_attributes_json,
+                    best_role_id, best_role_name, best_role_score, best_role_position, data_json)
+                 VALUES
+                   (1, 1, 'One', 24, 150, 160, 1000, '\"ok\"', '{}', 'MC', '{}', '{}',
+                    'central_midfielder', 'Central Midfielder', 16, 'MC', '{}'),
+                   (1, 2, 'Two', 24, 150, 160, 2000, '\"ok\"', '{}', 'MC', '{}', '{}',
+                    'central_midfielder', 'Central Midfielder', 16, 'MC', '{}');
+                 INSERT INTO contracts (save_id, player_uid, wage, end_date)
+                 VALUES (1, 1, 100, '2028-06-30'), (1, 2, 100, '2028-06-30');",
+            )
+            .expect("seed");
+
+        let first = store
+            .value_finder(&crate::moneyball::ValueFinderRequest {
+                save_id: 1,
+                page_size: Some(1),
+                ..crate::moneyball::ValueFinderRequest::default()
+            })
+            .expect("first page");
+        assert_eq!(first.rows.len(), 1);
+        assert_eq!(store.value_finder_cache.lock().expect("cache").len(), 1);
+
+        let second = store
+            .value_finder(&crate::moneyball::ValueFinderRequest {
+                save_id: 1,
+                page: Some(1),
+                page_size: Some(1),
+                ..crate::moneyball::ValueFinderRequest::default()
+            })
+            .expect("second page");
+        assert_eq!(second.rows.len(), 1);
+        assert_eq!(store.value_finder_cache.lock().expect("cache").len(), 1);
+    }
+
+    #[test]
+    fn value_finder_reads_the_cache_and_keeps_unknown_fees_out_by_default() {
+        let store = Store::open_in_memory().expect("store");
+        store
+            .conn
+            .execute_batch(
+                "INSERT INTO saves
+                   (id, path, file_name, file_size, mtime_ns, fingerprint, game, build,
+                    parser_version, parsed_at)
+                 VALUES (1, '/tmp/test.fm', 'test.fm', 1, 1, 'fp', 'FM27', '27.0.0', 'test', 'now');
+                 INSERT INTO clubs (save_id, uid, name, short_name, reputation)
+                 VALUES (1, 10, 'Test Club', 'Test', 5000);
+                 INSERT INTO players
+                   (save_id, uid, name, age, club_uid, club_name, league_name, ca, pa,
+                    transfer_value, transfer_value_state, positions_json, positions_text,
+                    attributes_json, raw_attributes_json, best_role_id, best_role_name,
+                    best_role_score, best_role_position, data_json)
+                 VALUES
+                   (1, 1, 'Cheap', 24, 10, 'Test Club', 'Test League', 150, 160,
+                    1000, '\"ok\"', '{}', 'MC', '{}', '{}', 'central_midfielder',
+                    'Central Midfielder', 16, 'MC', '{}'),
+                   (1, 2, 'Expensive', 24, 10, 'Test Club', 'Test League', 150, 160,
+                    1000000, '\"ok\"', '{}', 'MC', '{}', '{}', 'central_midfielder',
+                    'Central Midfielder', 16, 'MC', '{}'),
+                   (1, 3, 'Unknown fee', 24, 10, 'Test Club', 'Test League', 150, 160,
+                    0, '\"unset\"', '{}', 'MC', '{}', '{}', 'central_midfielder',
+                    'Central Midfielder', 16, 'MC', '{}');
+                 INSERT INTO contracts (save_id, player_uid, wage, end_date)
+                 VALUES (1, 1, 100, '2028-06-30'),
+                        (1, 2, 1000, '2028-06-30'),
+                        (1, 3, 1000, '2028-06-30');",
+            )
+            .expect("seed");
+
+        let request = crate::moneyball::ValueFinderRequest {
+            save_id: 1,
+            ca_min: Some(100),
+            ..crate::moneyball::ValueFinderRequest::default()
+        };
+        let page = store.value_finder(&request).expect("value finder");
+        assert_eq!(page.total, 2);
+        assert_eq!(page.rows[0].name.as_deref(), Some("Cheap"));
+        assert_eq!(page.meta.leagues, vec!["Test League".to_owned()]);
+
+        let mut with_unknown = request;
+        with_unknown.include_unknown_fee = true;
+        let page = store.value_finder(&with_unknown).expect("value finder");
+        assert_eq!(page.total, 3);
     }
 }

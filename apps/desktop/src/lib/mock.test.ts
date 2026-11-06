@@ -8,6 +8,8 @@ import {
   mockQuery,
   mockQueryClubs,
   mockSquadAnalysis,
+  mockStatsMoneyball,
+  mockValueFinder,
 } from "./mock";
 
 describe("mock player query", () => {
@@ -194,3 +196,52 @@ describe("mock club query", () => {
       expect((row.pa ?? 0) - row.ca).toBeGreaterThanOrEqual(10);
     }
   });
+
+describe("mock value finder", () => {
+  it("returns candidates with defaults", () => {
+    const page = mockValueFinder({
+      save_id: MOCK_SAVE_ID,
+      ca_min: 120,
+      role_min: 12,
+      age_max: 30,
+      include_unknown_fee: false,
+      page: 0,
+      page_size: 40,
+      sort_by: "score",
+      sort_dir: "desc",
+    });
+    expect(page.total).toBeGreaterThan(0);
+    expect(page.rows.length).toBeGreaterThan(0);
+  });
+});
+
+describe("mock stats moneyball", () => {
+  it("scores the core model and respects constraints", () => {
+    const page = mockStatsMoneyball({
+      save_id: MOCK_SAVE_ID,
+      model: "core",
+      ca_min: 120,
+      age_max: 30,
+      min_minutes: 900,
+      page_size: 40,
+    });
+    expect(page.total).toBeGreaterThan(0);
+    for (const row of page.rows) {
+      expect(row.ca).toBeGreaterThanOrEqual(120);
+      expect(row.age ?? 0).toBeLessThanOrEqual(30);
+      expect(row.minutes).toBeGreaterThanOrEqual(900);
+      expect(row.score).not.toBeNull();
+    }
+  });
+
+  it("only returns advanced rows for the advanced model", () => {
+    const page = mockStatsMoneyball({
+      save_id: MOCK_SAVE_ID,
+      model: "advanced",
+      ca_min: 120,
+      page_size: 40,
+    });
+    expect(page.total).toBeGreaterThan(0);
+    expect(page.rows.every((row) => row.advanced_available)).toBe(true);
+  });
+});

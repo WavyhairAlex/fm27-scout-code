@@ -6,6 +6,7 @@ use std::collections::HashMap;
 
 use chrono::NaiveDate;
 
+use crate::bytes::find_bytes;
 use crate::layout::{ContractLayout, MISSING_U32, decode_date, read_u8, read_u16, read_u32};
 use crate::model::{Clause, Contract, ContractChainEntry};
 
@@ -614,15 +615,14 @@ fn select_in_effect(
     player_club_uid: Option<u32>,
     clock: NaiveDate,
 ) -> Option<(usize, &ChainRecord)> {
-    let with_tail = records.iter().enumerate().filter(|(_, r)| r.has_terms);
-    let pool: Vec<(usize, &ChainRecord)> = with_tail.collect();
-    if pool.is_empty() {
-        return None;
-    }
     let mut latest: Option<(usize, &ChainRecord, NaiveDate, NaiveDate)> = None;
     let mut at_own_club: Option<(usize, &ChainRecord, NaiveDate, NaiveDate)> = None;
     let mut earliest_running: Option<(usize, &ChainRecord, NaiveDate, NaiveDate)> = None;
-    for (index, record) in pool {
+    for (index, record) in records
+        .iter()
+        .enumerate()
+        .filter(|(_, record)| record.has_terms)
+    {
         let Some(start) = record.start else { continue };
         if start > clock {
             continue;
@@ -731,16 +731,4 @@ fn positive_offset(base: usize, offset: i32) -> Option<usize> {
     } else {
         base.checked_sub(offset.unsigned_abs() as usize)
     }
-}
-
-fn find_bytes(haystack: &[u8], needle: &[u8]) -> Option<usize> {
-    if needle.is_empty() {
-        return Some(0);
-    }
-    if haystack.len() < needle.len() {
-        return None;
-    }
-    haystack
-        .windows(needle.len())
-        .position(|window| window == needle)
 }

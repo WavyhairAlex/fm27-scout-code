@@ -5,7 +5,9 @@
 //! are deliberately kept in one place so the model can be tuned without touching the query
 //! layer or UI.
 
-use crate::model::{Attributes, Positions, RoleScore};
+use std::sync::OnceLock;
+
+use crate::model::{Attributes, Positions, RoleScore, attribute_index, position_index};
 
 #[derive(Debug, Clone, Copy)]
 pub struct RoleSpec {
@@ -534,24 +536,59 @@ pub const ROLES: &[RoleSpec] = &[
     ),
 ];
 
-pub fn score_roles(attributes: &Attributes, positions: &Positions) -> Vec<RoleScore> {
-    ROLES
+struct CompiledRole {
+    spec: &'static RoleSpec,
+    weights: Vec<(Option<usize>, f32)>,
+    total: f32,
+    positions: Vec<usize>,
+}
+
+fn compiled_roles() -> &'static [CompiledRole] {
+    static COMPILED: OnceLock<Vec<CompiledRole>> = OnceLock::new();
+    COMPILED.get_or_init(|| {
+        ROLES
+            .iter()
+            .map(|spec| CompiledRole {
+                spec,
+                weights: spec
+                    .weights
+                    .iter()
+                    .map(|(key, weight)| (attribute_index(key), *weight))
+                    .collect(),
+                total: spec.weights.iter().map(|(_, weight)| *weight).sum(),
+                positions: spec
+                    .positions
+                    .iter()
+                    .filter_map(|key| position_index(key))
+                    .collect(),
+            })
+            .collect()
+    })
+}
+
+fn score_compiled(role: &CompiledRole, attributes: &Attributes, positions: &Positions) -> (u8, u8) {
+    let mut weighted = 0.0f32;
+    for (index, weight) in &role.weights {
+        let value = index.map_or(1, |index| attributes.values[index]) as f32;
+        weighted += value * weight;
+    }
+    let base = if role.total > 0.0 {
+        weighted / role.total
+    } else {
+        1.0
+    };
+    let best = role
+        .positions
         .iter()
-        .map(|spec| score_role(spec, attributes, positions))
-        .collect()
+        .map(|index| positions.values[*index])
+        .max()
+        .unwrap_or(1);
+    let fitness = (best as f32 / 20.0).clamp(0.0, 1.0);
+    let score = (base * (0.78 + 0.22 * fitness)).round().clamp(1.0, 20.0) as u8;
+    (score, best)
 }
 
-pub fn best_role(attributes: &Attributes, positions: &Positions) -> Option<RoleScore> {
-    score_roles(attributes, positions)
-        .into_iter()
-        .max_by(|left, right| left.score.cmp(&right.score))
-}
-
-pub fn role_score(spec: &RoleSpec, attributes: &Attributes, positions: &Positions) -> u8 {
-    score_role(spec, attributes, positions).score
-}
-
-fn score_role(spec: &RoleSpec, attributes: &Attributes, positions: &Positions) -> RoleScore {
+fn score_uncached(spec: &RoleSpec, attributes: &Attributes, positions: &Positions) -> (u8, u8) {
     let mut weighted = 0.0f32;
     let mut total = 0.0f32;
     for (key, weight) in spec.weights {
@@ -568,6 +605,10 @@ fn score_role(spec: &RoleSpec, attributes: &Attributes, positions: &Positions) -
         .unwrap_or(1);
     let fitness = (best as f32 / 20.0).clamp(0.0, 1.0);
     let score = (base * (0.78 + 0.22 * fitness)).round().clamp(1.0, 20.0) as u8;
+    (score, best)
+}
+
+fn materialize(spec: &RoleSpec, score: u8, position_rating: u8) -> RoleScore {
     RoleScore {
         id: spec.id.to_owned(),
         name: spec.name.to_owned(),
@@ -579,8 +620,40 @@ fn score_role(spec: &RoleSpec, attributes: &Attributes, positions: &Positions) -
             .copied()
             .unwrap_or("")
             .to_ascii_uppercase(),
-        position_rating: best,
+        position_rating,
     }
+}
+
+pub fn score_roles(attributes: &Attributes, positions: &Positions) -> Vec<RoleScore> {
+    compiled_roles()
+        .iter()
+        .map(|role| {
+            let (score, position_rating) = score_compiled(role, attributes, positions);
+            materialize(role.spec, score, position_rating)
+        })
+        .collect()
+}
+
+pub fn best_role(attributes: &Attributes, positions: &Positions) -> Option<RoleScore> {
+    let mut best: Option<(&'static RoleSpec, u8, u8)> = None;
+    for role in compiled_roles() {
+        let (score, position_rating) = score_compiled(role, attributes, positions);
+        // `Iterator::max_by` returns the last equal maximum, so keep `>=`.
+        if best.is_none_or(|(_, best_score, _)| score >= best_score) {
+            best = Some((role.spec, score, position_rating));
+        }
+    }
+    best.map(|(spec, score, position_rating)| materialize(spec, score, position_rating))
+}
+
+pub fn role_score(spec: &RoleSpec, attributes: &Attributes, positions: &Positions) -> u8 {
+    if let Some(role) = compiled_roles()
+        .iter()
+        .find(|role| std::ptr::eq(role.spec, spec))
+    {
+        return score_compiled(role, attributes, positions).0;
+    }
+    score_uncached(spec, attributes, positions).0
 }
 
 #[cfg(test)]
@@ -595,6 +668,61 @@ mod tests {
         assert_eq!(scores.len(), ROLES.len());
         assert!(scores.iter().all(|role| (1..=20).contains(&role.score)));
         assert!(best_role(&attributes, &positions).is_some());
+    }
+
+    #[test]
+    fn compiled_role_scores_match_the_string_lookup_path() {
+        let mut attributes = Attributes { values: [1; 52] };
+        for (index, value) in attributes.values.iter_mut().enumerate() {
+            *value = (index % 20 + 1) as u8;
+        }
+        let mut positions = Positions { values: [1; 15] };
+        for (index, value) in positions.values.iter_mut().enumerate() {
+            *value = (index % 20 + 1) as u8;
+        }
+
+        for spec in ROLES {
+            assert_eq!(
+                role_score(spec, &attributes, &positions),
+                score_uncached(spec, &attributes, &positions).0,
+                "role {} changed",
+                spec.id
+            );
+        }
+    }
+
+    #[test]
+    fn best_role_matches_max_by_including_ties() {
+        let attributes = Attributes { values: [10; 52] };
+        let positions = Positions { values: [10; 15] };
+        let expected = score_roles(&attributes, &positions)
+            .into_iter()
+            .max_by(|left, right| left.score.cmp(&right.score))
+            .expect("expected role");
+        let actual = best_role(&attributes, &positions).expect("actual role");
+        assert_eq!(actual.id, expected.id);
+        assert_eq!(actual.score, expected.score);
+        assert_eq!(actual.position_rating, expected.position_rating);
+    }
+
+    #[test]
+    fn every_role_weight_and_position_is_known() {
+        for spec in ROLES {
+            for (key, _) in spec.weights {
+                assert!(
+                    crate::model::attribute_index(key).is_some(),
+                    "unknown attribute {key} in role {}",
+                    spec.id
+                );
+            }
+            for key in spec.positions {
+                assert!(
+                    crate::model::position_index(key).is_some(),
+                    "unknown position {key} in role {}",
+                    spec.id
+                );
+            }
+        }
     }
 
     #[test]

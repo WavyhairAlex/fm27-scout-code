@@ -94,13 +94,27 @@ pub fn locate_facility_row(
     club_uid: u32,
     tracked_clubs: &HashSet<u32>,
 ) -> Option<FacilityRowOffsets> {
+    read_facility_row_offsets(game_db, club_index, tracked_clubs).remove(&club_uid)
+}
+
+/// Build all editable facility row offsets in one pass.
+pub fn read_facility_row_offsets(
+    game_db: &[u8],
+    club_index: &ClubIndex,
+    tracked_clubs: &HashSet<u32>,
+) -> HashMap<u32, FacilityRowOffsets> {
     selected_rows(game_db, club_index, tracked_clubs)
         .into_iter()
-        .find(|row| row.uid == club_uid)
-        .map(|row| FacilityRowOffsets {
-            row_start: row.row_start,
-            info_start: row.info_start,
+        .map(|row| {
+            (
+                row.uid,
+                FacilityRowOffsets {
+                    row_start: row.row_start,
+                    info_start: row.info_start,
+                },
+            )
         })
+        .collect()
 }
 
 /// Collect every plausible facility row and keep the longest sequence ordered by
@@ -130,10 +144,17 @@ fn selected_rows(
         index_to_uid.insert(key, uid);
     }
 
+    // The table is sparse: only a handful of tracked clubs have a row. Checking a
+    // 16-bit prefix bitmap before hashing the full u32 rejects almost every byte
+    // offset for a few memory reads, rather than millions of SipHash lookups.
+    let key_prefixes = KeyPrefixFilter::new(index_to_uid.keys().copied());
     let mut candidates = Vec::new();
     for start in 0..game_db.len() - 500 {
         let training = game_db[start + 4];
         if !(1..=20).contains(&training) {
+            continue;
+        }
+        if !key_prefixes.contains(game_db, start) {
             continue;
         }
         let Some(key) = read_u32(game_db, start) else {
@@ -160,6 +181,30 @@ fn selected_rows(
         });
     }
     longest_key_ordered(candidates)
+}
+
+/// A 65,536-bit membership filter for the low two bytes of candidate keys.
+struct KeyPrefixFilter {
+    bits: [u64; 1024],
+}
+
+impl KeyPrefixFilter {
+    fn new(keys: impl Iterator<Item = u32>) -> Self {
+        let mut bits = [0u64; 1024];
+        for key in keys {
+            let prefix = (key & 0xffff) as usize;
+            bits[prefix / 64] |= 1 << (prefix % 64);
+        }
+        Self { bits }
+    }
+
+    fn contains(&self, game_db: &[u8], start: usize) -> bool {
+        let Some(bytes) = game_db.get(start..start + 2) else {
+            return false;
+        };
+        let prefix = usize::from(u16::from_le_bytes([bytes[0], bytes[1]]));
+        self.bits[prefix / 64] & (1 << (prefix % 64)) != 0
+    }
 }
 
 fn longest_key_ordered(candidates: Vec<FacilityCandidate>) -> Vec<FacilityCandidate> {
@@ -263,6 +308,9 @@ mod tests {
         assert_eq!(row.youth, Some(13));
         assert_eq!(row.junior_coaching, Some(10));
         assert_eq!(row.youth_recruitment, Some(10));
+
+        let indexed = read_facility_row_offsets(&game_db, &club_index, &tracked);
+        assert_eq!(indexed.len(), 1);
 
         let offsets =
             locate_facility_row(&game_db, &club_index, 100, &tracked).expect("facility offsets");

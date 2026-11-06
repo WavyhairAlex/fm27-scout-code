@@ -1,4 +1,3 @@
-import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { writeText as writeClipboardText } from "@tauri-apps/plugin-clipboard-manager";
 import { open, save } from "@tauri-apps/plugin-dialog";
@@ -28,9 +27,14 @@ import type {
   SaveRecord,
   SnapshotPoint,
   SquadAnalysis,
+  StatsMoneyballPage,
+  StatsMoneyballRequest,
   TraitOption,
+  ValueFinderPage,
+  ValueFinderRequest,
 } from "./types";
 import { estimateCaExact } from "./ca";
+import { timedInvoke } from "./perf";
 import {
   MOCK_PLAYERS,
   MOCK_SAVE,
@@ -46,6 +50,8 @@ import {
   mockQuery,
   mockQueryClubs,
   mockSquadAnalysis,
+  mockStatsMoneyball,
+  mockValueFinder,
 } from "./mock";
 
 export const isTauri =
@@ -74,19 +80,33 @@ export async function copyTextToClipboard(text: string): Promise<void> {
 
 export async function listSaves(): Promise<SaveRecord[]> {
   if (!isTauri) return [MOCK_SAVE];
-  return invoke<SaveRecord[]>("list_saves");
+  return timedInvoke<SaveRecord[]>("list_saves");
 }
 
 export async function openSave(path: string, force = false): Promise<OpenSaveResult> {
   if (!isTauri) {
     return { save_id: MOCK_SAVE_ID, cached: true, summary: MOCK_SUMMARY, report: null };
   }
-  return invoke<OpenSaveResult>("open_save", { path, force });
+  return timedInvoke<OpenSaveResult>("open_save", { path, force });
 }
 
 export async function queryPlayers(query: PlayerQuery): Promise<PlayerPage> {
   if (!isTauri) return mockQuery(query);
-  return invoke<PlayerPage>("query_players", { query });
+  return timedInvoke<PlayerPage>("query_players", { query });
+}
+
+export async function queryValueFinder(
+  request: ValueFinderRequest,
+): Promise<ValueFinderPage> {
+  if (!isTauri) return mockValueFinder(request);
+  return timedInvoke<ValueFinderPage>("value_finder", { request });
+}
+
+export async function queryStatsMoneyball(
+  request: StatsMoneyballRequest,
+): Promise<StatsMoneyballPage> {
+  if (!isTauri) return mockStatsMoneyball(request);
+  return timedInvoke<StatsMoneyballPage>("stats_moneyball", { request });
 }
 
 export async function getPlayer(
@@ -95,22 +115,22 @@ export async function getPlayer(
   includeHidden = false,
 ): Promise<Player | null> {
   if (!isTauri) return MOCK_PLAYERS.find((player) => player.uid === uid) ?? null;
-  return invoke<Player | null>("get_player", { saveId, uid, includeHidden });
+  return timedInvoke<Player | null>("get_player", { saveId, uid, includeHidden });
 }
 
 export async function queryClubs(query: ClubQuery): Promise<ClubPage> {
   if (!isTauri) return mockQueryClubs(query);
-  return invoke<ClubPage>("query_clubs", { query });
+  return timedInvoke<ClubPage>("query_clubs", { query });
 }
 
 export async function getClub(saveId: number, uid: number): Promise<ClubDetail | null> {
   if (!isTauri) return mockClubDetail(uid);
-  return invoke<ClubDetail | null>("get_club", { saveId, uid });
+  return timedInvoke<ClubDetail | null>("get_club", { saveId, uid });
 }
 
 export async function getClubFilterOptions(saveId: number): Promise<ClubFilterOptions> {
   if (!isTauri) return mockClubFilterOptions();
-  return invoke<ClubFilterOptions>("club_filter_options", { saveId });
+  return timedInvoke<ClubFilterOptions>("club_filter_options", { saveId });
 }
 
 export async function editClub(
@@ -181,7 +201,7 @@ export async function editClub(
     ];
     return { output: outputPath, file_size: 0, changes, warnings: [] };
   }
-  return invoke<EditClubResult>("edit_club", { saveId, clubUid, outputPath, request });
+  return timedInvoke<EditClubResult>("edit_club", { saveId, clubUid, outputPath, request });
 }
 
 export async function savePlayerEdits(
@@ -203,19 +223,19 @@ export async function savePlayerEdits(
     );
     return { output: outputPath, file_size: 0, players: edits.length, changes };
   }
-  return invoke<BatchEditResult>("save_player_edits", { saveId, outputPath, edits });
+  return timedInvoke<BatchEditResult>("save_player_edits", { saveId, outputPath, edits });
 }
 
 export async function getTraitOptions(): Promise<TraitOption[]> {
   if (!isTauri) return MOCK_TRAIT_OPTIONS;
-  return invoke<TraitOption[]>("trait_options");
+  return timedInvoke<TraitOption[]>("trait_options");
 }
 
 export async function estimatePlayerCa(
   request: CaEstimateRequest,
 ): Promise<CaEstimate | null> {
   if (!isTauri) return estimateCaExact(request);
-  return invoke<CaEstimate>("estimate_player_ca", { request });
+  return timedInvoke<CaEstimate>("estimate_player_ca", { request });
 }
 
 export async function editPlayer(
@@ -248,7 +268,7 @@ export async function editPlayer(
       warnings: [],
     };
   }
-  return invoke<EditPlayerResult>("edit_player", { saveId, uid, outputPath, request });
+  return timedInvoke<EditPlayerResult>("edit_player", { saveId, uid, outputPath, request });
 }
 
 export async function getFilterOptions(
@@ -256,7 +276,7 @@ export async function getFilterOptions(
   query?: PlayerQuery | null,
 ): Promise<FilterOptions> {
   if (!isTauri) return mockFilterOptions();
-  return invoke<FilterOptions>("get_filter_options", { saveId, query: query ?? null });
+  return timedInvoke<FilterOptions>("get_filter_options", { saveId, query: query ?? null });
 }
 
 export async function getPlayerRoles(
@@ -264,7 +284,7 @@ export async function getPlayerRoles(
   uid: number,
 ): Promise<RoleScore[]> {
   if (!isTauri) return mockPlayerRoles(uid);
-  return invoke<RoleScore[]>("player_roles", { saveId, uid });
+  return timedInvoke<RoleScore[]>("player_roles", { saveId, uid });
 }
 
 export async function getGrowthHistory(
@@ -272,12 +292,12 @@ export async function getGrowthHistory(
   uid: number,
 ): Promise<SnapshotPoint[]> {
   if (!isTauri) return mockGrowthHistory(uid);
-  return invoke<SnapshotPoint[]>("growth_history", { saveId, uid });
+  return timedInvoke<SnapshotPoint[]>("growth_history", { saveId, uid });
 }
 
 export async function deleteSave(saveId: number): Promise<void> {
   if (!isTauri) return;
-  return invoke<void>("delete_save", { saveId });
+  return timedInvoke<void>("delete_save", { saveId });
 }
 
 export async function exportPlayers(
@@ -296,7 +316,7 @@ export async function exportPlayers(
     URL.revokeObjectURL(url);
     return { path, format, rows: rows.length };
   }
-  return invoke<ExportReport>("export_players", { query, format, path });
+  return timedInvoke<ExportReport>("export_players", { query, format, path });
 }
 
 export async function pickSaveFile(filterName = "Football Manager saves"): Promise<string | null> {
@@ -360,7 +380,7 @@ export interface UpdaterInfo {
 export async function setAppLanguage(locale: "en" | "zh-CN"): Promise<void> {
   if (!isTauri) return;
   try {
-    await invoke("set_app_language", { locale });
+    await timedInvoke("set_app_language", { locale });
   } catch {
     // The native menu is a polish layer; the in-app UI works without it.
   }
@@ -376,12 +396,12 @@ export async function appInfo(): Promise<AppInfo> {
       competition_names: 0,
     };
   }
-  return invoke<AppInfo>("app_info");
+  return timedInvoke<AppInfo>("app_info");
 }
 
 export async function updaterInfo(): Promise<UpdaterInfo> {
   if (!isTauri) return { configured: false, version: __APP_VERSION__ };
-  return invoke<UpdaterInfo>("updater_info");
+  return timedInvoke<UpdaterInfo>("updater_info");
 }
 
 export async function appDataDir(): Promise<string> {
@@ -404,13 +424,13 @@ export async function listenOpenFile(
 
 export async function takePendingOpen(): Promise<string | null> {
   if (!isTauri) return null;
-  return invoke<string | null>("take_pending_open");
+  return timedInvoke<string | null>("take_pending_open");
 }
 
 export async function logMessage(message: string): Promise<void> {
   if (!isTauri) return;
   try {
-    await invoke("log_message", { message });
+    await timedInvoke("log_message", { message });
   } catch {
     // Diagnostics must never break the UI.
   }
@@ -418,12 +438,12 @@ export async function logMessage(message: string): Promise<void> {
 
 export async function getAnalysisOverview(saveId: number): Promise<AnalysisOverview> {
   if (!isTauri) return mockAnalysisOverview();
-  return invoke<AnalysisOverview>("analysis_overview", { saveId });
+  return timedInvoke<AnalysisOverview>("analysis_overview", { saveId });
 }
 
 export async function listCompetitions(saveId: number): Promise<Competition[]> {
   if (!isTauri) return [];
-  return invoke<Competition[]>("list_competitions", { saveId });
+  return timedInvoke<Competition[]>("list_competitions", { saveId });
 }
 
 export async function getSquadAnalysis(
@@ -431,5 +451,5 @@ export async function getSquadAnalysis(
   clubUid: number,
 ): Promise<SquadAnalysis> {
   if (!isTauri) return mockSquadAnalysis(clubUid);
-  return invoke<SquadAnalysis>("squad_analysis", { saveId, clubUid });
+  return timedInvoke<SquadAnalysis>("squad_analysis", { saveId, clubUid });
 }

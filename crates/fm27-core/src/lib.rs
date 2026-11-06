@@ -3,6 +3,7 @@
 //! The core is platform independent and shared by the CLI and the Tauri app.
 
 pub mod ability;
+mod bytes;
 pub mod club_editor;
 pub mod clubs;
 pub mod competitions;
@@ -19,6 +20,7 @@ mod layout_tests;
 pub mod leagues;
 pub mod metadata;
 pub mod model;
+pub mod moneyball;
 pub mod names;
 pub mod nations;
 pub mod parse;
@@ -26,7 +28,9 @@ pub mod persons;
 pub mod player_scan;
 pub mod reference;
 pub mod roles;
+pub mod season_stats;
 pub mod stadiums;
+pub mod stats_moneyball;
 pub mod store;
 pub mod suspensions;
 pub mod youth_level;
