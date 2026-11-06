@@ -1,6 +1,6 @@
 # Release notes
 
-## Unreleased — Stats Moneyball (Phase 2)
+## 1.3.0 — Stats Moneyball (Phase 2)
 
 Experimental only; this is not a promise of transfer-market accuracy.
 
