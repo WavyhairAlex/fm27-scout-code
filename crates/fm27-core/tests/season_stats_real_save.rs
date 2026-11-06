@@ -38,6 +38,16 @@ fn reads_the_reference_career_season_stats() {
             .any(|row| row.kind == SeasonStatsKind::Overall && row.minutes >= 900),
         "expected at least one overall row with a meaningful sample"
     );
+    let stat_keys: std::collections::HashSet<(u32, SeasonStatsKind, u32)> = parsed
+        .season_stats
+        .iter()
+        .map(|row| (row.player_uid, row.kind, row.team_id.unwrap_or(0)))
+        .collect();
+    assert_eq!(
+        stat_keys.len(),
+        parsed.season_stats.len(),
+        "the SQLite cache needs one row per player, competition kind and team"
+    );
     assert!(
         parsed
             .season_stats

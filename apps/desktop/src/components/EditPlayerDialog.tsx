@@ -17,15 +17,16 @@ import {
   POSITION_LABELS,
   type AttributeEdit,
   type CaEstimate,
+  type Contract,
   type Player,
   type PlayerEditRequest,
 } from "@/lib/types";
-import { cn, displayAttributeValue } from "@/lib/utils";
+import { cn, displayAttributeValue, formatDate, formatWage } from "@/lib/utils";
 import { useI18n } from "@/lib/useI18n";
 import { useAppStore, type PendingChange } from "@/store/app";
 import { Button, Checkbox, Input, Modal } from "./ui";
 
-type Tab = "ability" | "attributes" | "hidden" | "traits";
+type Tab = "ability" | "contract" | "attributes" | "hidden" | "traits";
 
 export function EditPlayerDialog() {
   const { t, locale } = useI18n();
@@ -37,6 +38,7 @@ export function EditPlayerDialog() {
   const removePendingEdit = useAppStore((state) => state.removePendingEdit);
   const pushToast = useAppStore((state) => state.pushToast);
   const { data: player } = usePlayerEditDetail(open ? selectedUid : null);
+  const gameDate = useAppStore((state) => state.summary?.game_date ?? null);
   const { data: traitOptions = [] } = useQuery({
     queryKey: ["trait-options"],
     queryFn: getTraitOptions,
@@ -50,6 +52,8 @@ export function EditPlayerDialog() {
   const [attributes, setAttributes] = useState<Record<string, number>>({});
   const [personality, setPersonality] = useState<Record<string, number>>({});
   const [traits, setTraits] = useState<Set<number>>(new Set());
+  const [wage, setWage] = useState<number | null>(null);
+  const [contractEnd, setContractEnd] = useState("");
   const [traitSearch, setTraitSearch] = useState("");
   const [estimate, setEstimate] = useState<CaEstimate | null>(null);
   const [estimatePosition, setEstimatePosition] = useState("");
@@ -77,6 +81,8 @@ export function EditPlayerDialog() {
     setAttributes(nextAttributes);
     setPersonality(nextPersonality);
     setTraits(nextTraits);
+    setWage(staged?.request.wage ?? player.contract?.wage ?? null);
+    setContractEnd(staged?.request.contract_end ?? player.contract?.end ?? "");
     setTraitSearch("");
     // RCA is the maximum across all valid positions, so start with the
     // game-accurate automatic basis. The user can still pin one position.
@@ -175,6 +181,13 @@ export function EditPlayerDialog() {
       ([key, value]) =>
         value !== player.raw_attributes[key] && !CA_EXEMPT_ATTRIBUTE_KEYS.has(key),
     );
+  const contract = player?.contract ?? null;
+  const contractExpired =
+    contract?.end != null && gameDate != null && contract.end < gameDate;
+  const contractEditable =
+    contract != null && contract.wage != null && contract.club_uid != null && !contractExpired;
+  const wageChanged = contractEditable && wage !== contract.wage;
+  const contractEndChanged = contractEditable && contractEnd !== (contract.end ?? "");
   const changedCount = useMemo(() => {
     if (!player) return 0;
     let count = 0;
@@ -190,8 +203,20 @@ export function EditPlayerDialog() {
     }
     for (const bit of traits) if (!originalTraits.has(bit)) count += 1;
     for (const bit of originalTraits) if (!traits.has(bit)) count += 1;
+    if (wageChanged) count += 1;
+    if (contractEndChanged) count += 1;
     return count;
-  }, [attributes, caChanged, originalTraits, paChanged, personality, player, traits]);
+  }, [
+    attributes,
+    caChanged,
+    contractEndChanged,
+    originalTraits,
+    paChanged,
+    personality,
+    player,
+    traits,
+    wageChanged,
+  ]);
 
   const warnings = useMemo(() => {
     const list: string[] = [];
@@ -199,8 +224,10 @@ export function EditPlayerDialog() {
     if (caWeightedAttributeChanged) {
       list.push(caChanged ? t("edit.warning.caAttrs") : t("edit.warning.attrs"));
     }
+    if (wageChanged) list.push(t("edit.warning.wage"));
+    if (contractEndChanged) list.push(t("edit.warning.contractEnd"));
     return list;
-  }, [caChanged, caWeightedAttributeChanged, t]);
+  }, [caChanged, caWeightedAttributeChanged, contractEndChanged, t, wageChanged]);
 
   const reset = () => {
     if (!player) return;
@@ -210,6 +237,8 @@ export function EditPlayerDialog() {
     setAttributes({ ...player.raw_attributes });
     setPersonality(player.personality ? { ...player.personality } : {});
     setTraits(new Set(player.traits.map((trait) => trait.bit)));
+    setWage(player.contract?.wage ?? null);
+    setContractEnd(player.contract?.end ?? "");
     setTraitSearch("");
     setError(null);
   };
@@ -236,6 +265,18 @@ export function EditPlayerDialog() {
       )
     ) {
       return t("edit.invalidPersonality");
+    }
+    if (wageChanged && (wage == null || !Number.isInteger(wage) || wage < 0 || wage > 20_000_000)) {
+      return t("edit.invalidWage");
+    }
+    if (contractEndChanged) {
+      if (!contractEnd) return t("edit.invalidContractEnd");
+      if (contract?.start && contractEnd <= contract.start) {
+        return t("edit.invalidContractEnd");
+      }
+      if (gameDate && contractEnd < gameDate) {
+        return t("edit.invalidContractEndPast");
+      }
     }
     if (changedCount === 0) return t("edit.noChanges");
     return null;
@@ -267,6 +308,8 @@ export function EditPlayerDialog() {
       personality: personalityEdits,
       traits: traitsToAdd,
       untraits: traitsToRemove,
+      wage: wageChanged ? wage : null,
+      contract_end: contractEndChanged ? contractEnd : null,
     };
 
     const changes: PendingChange[] = [];
@@ -275,6 +318,22 @@ export function EditPlayerDialog() {
     }
     if (paChanged) {
       changes.push({ field: "pa", before: player.pa ?? 0, after: pa ?? 0 });
+    }
+    if (wageChanged && contract != null) {
+      changes.push({
+        field: "contract.wage",
+        before: contract.wage ?? 0,
+        after: wage ?? 0,
+      });
+    }
+    if (contractEndChanged && contract != null) {
+      changes.push({
+        field: "contract.end",
+        before: contract.end ? Number(contract.end.replaceAll("-", "")) : 0,
+        after: Number(contractEnd.replaceAll("-", "")),
+        before_display: contract.end ?? "—",
+        after_display: contractEnd,
+      });
     }
     for (const edit of attributeEdits) {
       changes.push({
@@ -371,6 +430,7 @@ export function EditPlayerDialog() {
           <div className="flex flex-wrap gap-1 border-b border-[var(--line)] pb-2">
             {[
               ["ability", t("edit.tab.ability")],
+              ["contract", t("edit.tab.contract")],
               ["attributes", t("edit.tab.attributes")],
               ["hidden", t("edit.tab.hidden")],
               ["traits", t("edit.tab.traits")],
@@ -427,6 +487,16 @@ export function EditPlayerDialog() {
               onPa={setPa}
               onEstimatePosition={setEstimatePosition}
               onUseEstimate={setCa}
+            />
+          )}
+          {currentTab === "contract" && (
+            <ContractTab
+              contract={contract}
+              gameDate={gameDate}
+              wage={wage}
+              contractEnd={contractEnd}
+              onWage={setWage}
+              onContractEnd={setContractEnd}
             />
           )}
           {currentTab === "attributes" && (
@@ -840,6 +910,138 @@ function AttributeEditor({
           className="h-6 w-14 px-1.5 font-mono text-[10px]"
         />
       </div>
+    </div>
+  );
+}
+
+function ContractTab({
+  contract,
+  gameDate,
+  wage,
+  contractEnd,
+  onWage,
+  onContractEnd,
+}: {
+  contract: Contract | null;
+  gameDate: string | null;
+  wage: number | null;
+  contractEnd: string;
+  onWage: (value: number | null) => void;
+  onContractEnd: (value: string) => void;
+}) {
+  const { t, locale } = useI18n();
+  const expired =
+    contract?.end != null && gameDate != null && contract.end < gameDate;
+  const available = contract != null && contract.wage != null && contract.club_uid != null;
+  const editable = available && !expired;
+  const futureContract =
+    contract?.chain.some(
+      (entry) => entry.start != null && gameDate != null && entry.start > gameDate,
+    ) ?? false;
+
+  return (
+    <div className="space-y-3">
+      <div className="rounded-xl border border-[var(--line)] bg-[var(--surface-2)] px-3 py-2.5">
+        <div className="grid grid-cols-2 gap-x-6 gap-y-1.5 text-[11px]">
+          <ContractField
+            label={t("edit.contract.club")}
+            value={contract?.club_name ?? t("edit.contract.none")}
+          />
+          <ContractField
+            label={t("edit.contract.wageLabel")}
+            value={formatWage(contract?.wage, locale)}
+          />
+          <ContractField
+            label={t("edit.contract.start")}
+            value={formatDate(contract?.start)}
+          />
+          <ContractField
+            label={t("edit.contract.end")}
+            value={formatDate(contract?.end)}
+          />
+          <ContractField
+            label={t("edit.contract.loan")}
+            value={
+              contract?.on_loan == null
+                ? "—"
+                : contract.on_loan
+                  ? t("common.yes")
+                  : t("common.no")
+            }
+          />
+          <ContractField
+            label={t("edit.contract.loanEnd")}
+            value={formatDate(contract?.loan_end)}
+          />
+        </div>
+      </div>
+
+      {!available && (
+        <div className="rounded-lg border border-[var(--line)] bg-[var(--surface-2)] px-3 py-2 text-[10px] leading-relaxed text-[var(--muted)]">
+          {t("edit.contractUnavailable")}
+        </div>
+      )}
+      {expired && (
+        <div className="flex items-start gap-2 rounded-lg border border-[var(--gold-line)] bg-[var(--gold-soft)] px-3 py-2 text-[10px] leading-relaxed text-[var(--gold)]">
+          <AlertTriangle size={13} className="mt-0.5 shrink-0" />
+          <span>{t("edit.contractExpired")}</span>
+        </div>
+      )}
+      {contract?.on_loan && (
+        <div className="rounded-lg border border-[var(--line)] bg-[var(--surface-2)] px-3 py-2 text-[10px] leading-relaxed text-[var(--muted)]">
+          {t("edit.contractLoanNote")}
+        </div>
+      )}
+      {futureContract && (
+        <div className="rounded-lg border border-[var(--line)] bg-[var(--surface-2)] px-3 py-2 text-[10px] leading-relaxed text-[var(--muted)]">
+          {t("edit.contractFutureNote")}
+        </div>
+      )}
+
+      {editable && (
+        <div className="grid grid-cols-2 gap-2">
+          <label className="space-y-1">
+            <span className="text-[10px] font-medium text-[var(--muted)]">
+              {t("edit.contract.wageInput")}
+            </span>
+            <Input
+              type="number"
+              min={0}
+              max={20_000_000}
+              step={1}
+              value={wage ?? ""}
+              onChange={(event) => {
+                const next = event.target.value;
+                onWage(next === "" ? null : Number(next));
+              }}
+            />
+          </label>
+          <label className="space-y-1">
+            <span className="text-[10px] font-medium text-[var(--muted)]">
+              {t("edit.contract.endInput")}
+            </span>
+            <Input
+              type="date"
+              min={gameDate ?? undefined}
+              value={contractEnd}
+              onChange={(event) => onContractEnd(event.target.value)}
+            />
+          </label>
+        </div>
+      )}
+
+      <div className="rounded-lg border border-[var(--line)] bg-[var(--surface-2)] px-3 py-2 text-[10px] leading-relaxed text-[var(--muted)]">
+        {t("edit.contractNote")}
+      </div>
+    </div>
+  );
+}
+
+function ContractField({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex items-baseline justify-between gap-3">
+      <span className="text-[var(--muted)]">{label}</span>
+      <span className="truncate text-right font-medium text-[var(--ink)]">{value}</span>
     </div>
   );
 }

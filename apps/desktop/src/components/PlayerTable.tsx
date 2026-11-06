@@ -23,7 +23,7 @@ import { type PlayerRow } from "@/lib/types";
 import { attributeLabel, nationLabel, roleName } from "@/lib/labels";
 import { formatNumber } from "@/lib/i18n";
 import { useI18n } from "@/lib/useI18n";
-import { caTone, cn, formatValue, formatWage, initials } from "@/lib/utils";
+import { caTone, cn, initials } from "@/lib/utils";
 import { useAppStore } from "@/store/app";
 import { Button, EmptyState } from "./ui";
 
@@ -37,7 +37,7 @@ const OVERVIEW_VISIBILITY: VisibilityState = Object.fromEntries(
 );
 
 export function PlayerTable() {
-  const { t, locale } = useI18n();
+  const { t, locale, formatValue, formatWage } = useI18n();
   const page = usePlayerPage();
   const sort = useAppStore((state) => state.sort);
   const setSort = useAppStore((state) => state.setSort);
@@ -275,7 +275,7 @@ export function PlayerTable() {
         size: 82,
         cell: ({ row }) => (
           <span className="whitespace-nowrap font-mono text-[10px] tabular-nums text-[var(--muted)]">
-            {row.original.wage != null ? formatWage(row.original.wage, locale) : "—"}
+            {row.original.wage != null ? formatWage(row.original.wage) : "—"}
           </span>
         ),
       },
@@ -351,7 +351,15 @@ export function PlayerTable() {
         ? { ...column, meta: { ...(column.meta ?? {}), sortable: true } }
         : column,
     );
-  }, [compareUids, hiddenEnabled, locale, t, toggleCompare]);
+  }, [
+    compareUids,
+    formatValue,
+    formatWage,
+    hiddenEnabled,
+    locale,
+    t,
+    toggleCompare,
+  ]);
 
   const table = useReactTable({
     data: page.data?.rows ?? [],

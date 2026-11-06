@@ -294,7 +294,120 @@ pub fn read_season_stats(
     }
     let body = save.read_region_frame(REGION_NAME, candidates[0])?;
     let walk = walk_season_stats(&body)?;
-    decode_records(&body, &walk, players_by_key, clubs)
+    let rows = decode_records(&body, &walk, players_by_key, clubs)?;
+    Ok(merge_duplicate_rows(rows))
+}
+
+/// FM can store more than one line for the same player, competition kind and
+/// team when a season contains two spells there. The SQLite cache identifies a
+/// row by that key, so fold those lines into one season total instead of
+/// failing the insert.
+fn merge_duplicate_rows(rows: Vec<SeasonStatRow>) -> Vec<SeasonStatRow> {
+    let mut merged: Vec<SeasonStatRow> = Vec::with_capacity(rows.len());
+    let mut seen: HashMap<(u32, SeasonStatsKind, u32), usize> = HashMap::new();
+    for row in rows {
+        let key = (row.player_uid, row.kind, row.team_id.unwrap_or(0));
+        if let Some(index) = seen.get(&key).copied() {
+            merge_row(&mut merged[index], row);
+        } else {
+            seen.insert(key, merged.len());
+            merged.push(row);
+        }
+    }
+    merged
+}
+
+fn merge_row(target: &mut SeasonStatRow, source: SeasonStatRow) {
+    let target_rated = target.rated_appearances;
+    let source_rated = source.rated_appearances;
+    let target_rating_sum =
+        target.average_rating.unwrap_or(0.0) * f64::from(target_rated);
+    let source_rating_sum =
+        source.average_rating.unwrap_or(0.0) * f64::from(source_rated);
+    let total_rated = target_rated + source_rated;
+
+    target.player_name = target.player_name.take().or(source.player_name);
+    target.club_uid = target.club_uid.or(source.club_uid);
+    target.club_name = target.club_name.take().or(source.club_name);
+    target.club_short_name = target.club_short_name.take().or(source.club_short_name);
+    target.team_slot = target.team_slot.or(source.team_slot);
+    target.starts += source.starts;
+    target.substitute_appearances += source.substitute_appearances;
+    target.minutes += source.minutes;
+    target.rated_appearances += source.rated_appearances;
+    target.average_rating = (total_rated > 0)
+        .then(|| (target_rating_sum + source_rating_sum) / f64::from(total_rated));
+    target.player_of_the_match += source.player_of_the_match;
+    target.goals += source.goals;
+    target.assists += source.assists;
+    target.expected_goals += source.expected_goals;
+    target.non_penalty_expected_goals += source.non_penalty_expected_goals;
+    target.expected_assists += source.expected_assists;
+    target.shots += source.shots;
+    target.shots_on_target += source.shots_on_target;
+    target.shots_outside_box += source.shots_outside_box;
+    target.goals_outside_box = add_optional(target.goals_outside_box, source.goals_outside_box);
+    target.free_kick_shots += source.free_kick_shots;
+    target.penalties_taken += source.penalties_taken;
+    target.penalties_scored += source.penalties_scored;
+    target.passes_attempted += source.passes_attempted;
+    target.passes_completed += source.passes_completed;
+    target.progressive_passes += source.progressive_passes;
+    target.key_passes += source.key_passes;
+    target.open_play_key_passes += source.open_play_key_passes;
+    target.clear_cut_chances_created += source.clear_cut_chances_created;
+    target.crosses_attempted += source.crosses_attempted;
+    target.crosses_completed += source.crosses_completed;
+    target.open_play_crosses_attempted += source.open_play_crosses_attempted;
+    target.open_play_crosses_completed = add_optional(
+        target.open_play_crosses_completed,
+        source.open_play_crosses_completed,
+    );
+    target.dribbles += source.dribbles;
+    target.offsides += source.offsides;
+    target.distance_km += source.distance_km;
+    target.high_intensity_sprints += source.high_intensity_sprints;
+    target.aerial_challenges_attempted = add_optional(
+        target.aerial_challenges_attempted,
+        source.aerial_challenges_attempted,
+    );
+    target.headers_won = add_optional(target.headers_won, source.headers_won);
+    target.key_headers += source.key_headers;
+    target.tackles_attempted += source.tackles_attempted;
+    target.tackles_completed += source.tackles_completed;
+    target.key_tackles += source.key_tackles;
+    target.interceptions += source.interceptions;
+    target.possession_won += source.possession_won;
+    target.possession_lost += source.possession_lost;
+    target.pressures_attempted =
+        add_optional(target.pressures_attempted, source.pressures_attempted);
+    target.pressures_completed =
+        add_optional(target.pressures_completed, source.pressures_completed);
+    target.blocks = add_optional(target.blocks, source.blocks);
+    target.shots_blocked += source.shots_blocked;
+    target.clearances = add_optional(target.clearances, source.clearances);
+    target.fouls_made += source.fouls_made;
+    target.fouls_against += source.fouls_against;
+    target.yellow_cards += source.yellow_cards;
+    target.red_cards += source.red_cards;
+    target.mistakes_leading_to_goal += source.mistakes_leading_to_goal;
+    target.clean_sheets += source.clean_sheets;
+    target.goals_allowed += source.goals_allowed;
+    target.saves_held = add_optional(target.saves_held, source.saves_held);
+    target.saves_parried = add_optional(target.saves_parried, source.saves_parried);
+    target.saves_tipped = add_optional(target.saves_tipped, source.saves_tipped);
+    target.shots_on_target_faced =
+        add_optional(target.shots_on_target_faced, source.shots_on_target_faced);
+    target.expected_goals_prevented += source.expected_goals_prevented;
+    target.advanced_available |= source.advanced_available;
+}
+
+fn add_optional(left: Option<u32>, right: Option<u32>) -> Option<u32> {
+    match (left, right) {
+        (Some(left), Some(right)) => Some(left + right),
+        (Some(value), None) | (None, Some(value)) => Some(value),
+        (None, None) => None,
+    }
 }
 
 fn section_header() -> Vec<u8> {
@@ -764,6 +877,53 @@ mod tests {
         body.splice(insert_at..insert_at, second);
         let error = walk_season_stats(&body).unwrap_err();
         assert!(error.to_string().contains("repeat"));
+    }
+
+    #[test]
+    fn merges_duplicate_lines_for_the_same_team_and_kind() {
+        let mut body = section_header();
+        body.push(RECORD_PRESENT);
+        body.extend_from_slice(&42u32.to_le_bytes());
+        body.extend_from_slice(&[0u8; HEADER_BYTES]);
+        let line = line();
+        body.extend_from_slice(&line); // own line, non-competitive slot
+        for _ in 1..OWN_SLOTS {
+            body.push(0);
+        }
+        body.extend_from_slice(&[0u8; BLOCK_BYTES]);
+        body.extend_from_slice(&1u32.to_le_bytes()); // one other team
+        body.push(0); // other-team lead byte
+        body.extend_from_slice(&123u32.to_le_bytes());
+        body.extend_from_slice(&line); // same team and kind again
+        for _ in 1..OTHER_TEAM_SLOTS {
+            body.push(0);
+        }
+        body.extend_from_slice(&0u32.to_le_bytes()); // rating items
+        body.push(0); // form entries
+        body.push(RECORD_END);
+        body.extend_from_slice(&[0u8; FOOTER_BYTES]);
+
+        let walk = walk_season_stats(&body).unwrap();
+        let players = HashMap::from([(
+            42,
+            SeasonPlayer {
+                uid: 7,
+                name: Some("Test Player".to_owned()),
+                team_id: Some(123),
+                goalkeeper: false,
+            },
+        )]);
+        let clubs = ClubIndex::default();
+        let rows = decode_records(&body, &walk, &players, &clubs).unwrap();
+        assert_eq!(rows.len(), 2);
+
+        let rows = merge_duplicate_rows(rows);
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0].minutes, 1_800);
+        assert_eq!(rows[0].starts, 20);
+        assert_eq!(rows[0].goals, 8);
+        assert_eq!(rows[0].rated_appearances, 24);
+        assert_eq!(rows[0].average_rating, Some(7.0));
     }
 
     #[test]

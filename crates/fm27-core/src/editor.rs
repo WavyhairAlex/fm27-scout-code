@@ -10,12 +10,15 @@ use std::path::Path;
 use chrono::NaiveDate;
 use serde::{Deserialize, Serialize};
 
+use crate::clubs::ClubIndex;
 use crate::container::{SaveFile, SaveWriteReport};
+use crate::contracts::{ContractDecoder, ContractLocation};
 use crate::error::{Error, Result};
 use crate::layout::{
-    ATTRIBUTE_KEYS, GAME_DB_SCHEMA, PERSONALITY_KEYS, PersonLayout, PlayerLayout, editable_builds,
-    is_ca_exempt_attribute, is_editable_build, read_i16, read_u8, read_u16, read_u64,
-    stored_attribute_index, trait_name,
+    ATTRIBUTE_KEYS, ContractLayout, FinanceLayout, GAME_DB_SCHEMA, PERSONALITY_KEYS, PersonLayout,
+    PlayerLayout, decode_date, editable_builds, encode_date, is_ca_exempt_attribute,
+    is_editable_build, read_i16, read_u8, read_u16, read_u32, read_u64, stored_attribute_index,
+    trait_name,
 };
 use crate::metadata::SaveMetadata;
 use crate::model::Player;
@@ -29,6 +32,10 @@ pub struct EditChange {
     pub field: String,
     pub before: i64,
     pub after: i64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub before_display: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub after_display: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -47,6 +54,8 @@ pub struct PlayerEditRequest {
     pub personality: Vec<AttributeEdit>,
     pub traits: Vec<u8>,
     pub untraits: Vec<u8>,
+    pub wage: Option<u32>,
+    pub contract_end: Option<NaiveDate>,
 }
 
 impl PlayerEditRequest {
@@ -57,6 +66,8 @@ impl PlayerEditRequest {
             && self.personality.is_empty()
             && self.traits.is_empty()
             && self.untraits.is_empty()
+            && self.wage.is_none()
+            && self.contract_end.is_none()
     }
 
     /// Warnings for the UI/CLI. CA drives CA-weighted attributes; hidden
@@ -86,6 +97,18 @@ impl PlayerEditRequest {
                 );
             }
         }
+        if self.wage.is_some() {
+            warnings.push(
+                "Weekly wage affects the club's wage bill, budget and financial rules; FM may recalculate those totals after the game advances."
+                    .to_owned(),
+            );
+        }
+        if self.contract_end.is_some() {
+            warnings.push(
+                "Contract expiry controls free agency, compensation and squad planning; only the player's current permanent contract is edited."
+                    .to_owned(),
+            );
+        }
         warnings
     }
 
@@ -107,6 +130,12 @@ impl PlayerEditRequest {
         }
         for bit in &self.untraits {
             editor.set_trait(uid, *bit, false)?;
+        }
+        if let Some(value) = self.wage {
+            editor.set_wage(uid, value)?;
+        }
+        if let Some(value) = self.contract_end {
+            editor.set_contract_end(uid, value)?;
         }
         Ok(())
     }
@@ -166,6 +195,26 @@ impl PlayerEditRequest {
                 )));
             }
         }
+        if let Some(expected) = self.wage {
+            let actual = player.contract.as_ref().and_then(|contract| contract.wage);
+            if actual != Some(expected) {
+                return Err(Error::parse(format!(
+                    "wage verification failed: expected {expected}, got {actual:?}"
+                )));
+            }
+        }
+        if let Some(expected) = self.contract_end {
+            let expected_text = expected.to_string();
+            let actual = player
+                .contract
+                .as_ref()
+                .and_then(|contract| contract.end.as_deref());
+            if actual != Some(expected_text.as_str()) {
+                return Err(Error::parse(format!(
+                    "contract end verification failed: expected {expected_text}, got {actual:?}"
+                )));
+            }
+        }
         Ok(())
     }
 }
@@ -191,6 +240,8 @@ pub struct PlayerEditor {
     records: PlayerRecords,
     names: NamePools,
     clock: NaiveDate,
+    club_names: HashMap<u32, String>,
+    club_by_team: HashMap<u32, (u32, u8)>,
     person_locations: HashMap<u32, PersonLocation>,
     edited_uids: HashSet<u32>,
     changes: Vec<EditChange>,
@@ -217,6 +268,7 @@ impl PlayerEditor {
         }
         let names = NamePools::locate(&game_db)?;
         let records = PlayerRecords::locate(&game_db, names.end_offset)?;
+        let clubs = ClubIndex::read(&game_db)?;
         let clock = metadata
             .game_date
             .as_deref()
@@ -227,6 +279,8 @@ impl PlayerEditor {
             records,
             names,
             clock,
+            club_names: clubs.name_by_uid,
+            club_by_team: clubs.fielding_team_to_club,
             person_locations: HashMap::new(),
             edited_uids: HashSet::new(),
             changes: Vec::new(),
@@ -250,6 +304,110 @@ impl PlayerEditor {
             .by_uid
             .get(&uid)
             .map(|&position| self.records.records[position])
+    }
+
+    /// Locate the contract currently shown for this player. Refuses records
+    /// without terms, loan-only spells and expired contracts.
+    pub fn current_contract_location(&self, uid: u32) -> Result<ContractLocation> {
+        let record = self.require_record(uid)?;
+        let position = *self
+            .records
+            .by_uid
+            .get(&uid)
+            .ok_or_else(|| Error::parse(format!("player uid {uid} was not found")))?;
+        let window_end = self.records.window_end(position, self.game_db.len());
+        let is_last = position + 1 == self.records.records.len();
+        let team_id = read_u32(&self.game_db, record.offset + PlayerLayout::TEAM_ID_OFFSET)
+            .unwrap_or(u32::MAX);
+        let player_club_uid = self
+            .club_by_team
+            .get(&team_id)
+            .map(|(club_uid, _)| *club_uid);
+        let decoder = ContractDecoder {
+            club_names: &self.club_names,
+            club_by_team: &self.club_by_team,
+            clock: self.clock,
+        };
+        let location = decoder
+            .locate_in_effect(
+                &self.game_db,
+                record.offset,
+                window_end,
+                is_last,
+                record.pindex,
+                player_club_uid,
+            )
+            .ok_or_else(|| {
+                Error::Unsupported(format!(
+                    "player uid {uid} has no current permanent contract with terms"
+                ))
+            })?;
+        if location.is_expired(self.clock) {
+            return Err(Error::Unsupported(format!(
+                "player uid {uid} has an expired contract (ended {}); only a current contract can be edited",
+                location
+                    .end
+                    .map(|date| date.to_string())
+                    .unwrap_or_default()
+            )));
+        }
+        Ok(location)
+    }
+
+    /// Set the weekly wage on the current permanent contract. The value is in
+    /// the save's base currency, not a converted display currency.
+    pub fn set_wage(&mut self, uid: u32, value: u32) -> Result<EditChange> {
+        if value > FinanceLayout::WEEKLY_MAXIMUM {
+            return Err(Error::Unsupported(format!(
+                "weekly wage must be at most {}, got {value}",
+                FinanceLayout::WEEKLY_MAXIMUM
+            )));
+        }
+        let location = self.current_contract_location(uid)?;
+        let at = location.tag_offset + ContractLayout::WAGE_OFFSET;
+        let before = read_u32(&self.game_db, at)
+            .ok_or_else(|| Error::parse("the contract record ends before its wage field"))?;
+        self.game_db[at..at + 4].copy_from_slice(&value.to_le_bytes());
+        self.edited_uids.insert(uid);
+        Ok(self.push_change("contract.wage", before as i64, value as i64))
+    }
+
+    /// Set the end date on the current permanent contract. The date must be
+    /// after the contract start and not before the in-game date.
+    pub fn set_contract_end(&mut self, uid: u32, value: NaiveDate) -> Result<EditChange> {
+        let location = self.current_contract_location(uid)?;
+        let start = location
+            .start
+            .ok_or_else(|| Error::parse("the current contract has no start date"))?;
+        if value <= start {
+            return Err(Error::Unsupported(format!(
+                "contract end {value} must be after the contract start {start}"
+            )));
+        }
+        if value < self.clock {
+            return Err(Error::Unsupported(format!(
+                "contract end {value} is before the in-game date {}",
+                self.clock
+            )));
+        }
+        let at = location.tail_offset + ContractLayout::TAIL_END_OFFSET;
+        let old_packed = read_u16(&self.game_db, at)
+            .ok_or_else(|| Error::parse("the contract tail ends before its end date"))?;
+        let old_end = decode_date(&self.game_db, at);
+        let encoded = encode_date(value, old_packed).ok_or_else(|| {
+            Error::Unsupported(format!(
+                "contract end {value} is outside the supported date range"
+            ))
+        })?;
+        self.game_db[at..at + 4].copy_from_slice(&encoded);
+        self.edited_uids.insert(uid);
+        Ok(self.push_change_display(
+            "contract.end",
+            old_end.map(compact_date).unwrap_or(0),
+            compact_date(value),
+            old_end.map(|date| date.to_string()),
+            Some(value.to_string()),
+        ))
     }
 
     pub fn set_ca(&mut self, uid: u32, value: u16) -> Result<EditChange> {
@@ -461,12 +619,48 @@ impl PlayerEditor {
     }
 
     fn push_change(&mut self, field: impl Into<String>, before: i64, after: i64) -> EditChange {
+        self.push_change_display(field, before, after, None, None)
+    }
+
+    fn push_change_display(
+        &mut self,
+        field: impl Into<String>,
+        before: i64,
+        after: i64,
+        before_display: Option<String>,
+        after_display: Option<String>,
+    ) -> EditChange {
         let change = EditChange {
             field: field.into(),
             before,
             after,
+            before_display,
+            after_display,
         };
         self.changes.push(change.clone());
         change
+    }
+}
+
+fn compact_date(date: NaiveDate) -> i64 {
+    date.format("%Y%m%d")
+        .to_string()
+        .parse()
+        .unwrap_or_default()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn contract_request_deserializes_from_json() {
+        let request: PlayerEditRequest = serde_json::from_str(
+            r#"{"wage":50000,"contract_end":"2030-06-30","ca":null,"pa":null,"attributes":[],"personality":[],"traits":[],"untraits":[]}"#,
+        )
+        .expect("contract request");
+        assert_eq!(request.wage, Some(50_000));
+        assert_eq!(request.contract_end, NaiveDate::from_ymd_opt(2030, 6, 30));
+        assert!(!request.is_empty());
     }
 }

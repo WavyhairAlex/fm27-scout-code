@@ -1,4 +1,5 @@
 import { translate, type Locale } from "./i18n";
+import { SAVE_UNITS, type CurrencyCode } from "./currency";
 import { ATTRIBUTE_LABELS, type Clause } from "./types";
 import { formatValue, formatWage } from "./utils";
 
@@ -629,7 +630,11 @@ export function clauseKindLabel(kind: number, locale: Locale): string | null {
  * a percentage for wage changes and sell-on clauses, years for extension
  * options, and an amount plus a league threshold for landmark bonuses.
  */
-export function clauseValueLabel(clause: Clause, locale: Locale): string {
+export function clauseValueLabel(
+  clause: Clause,
+  locale: Locale,
+  currency: CurrencyCode = SAVE_UNITS,
+): string {
   const { kind, parameter, value } = clause;
   if (FLAG_CLAUSE_KINDS.has(kind)) {
     return translate(locale, "inspector.clauseIncluded");
@@ -641,13 +646,17 @@ export function clauseValueLabel(clause: Clause, locale: Locale): string {
     if (parameter != null && value != null) {
       return translate(locale, "inspector.clauseProfitOver", {
         percent: parameter,
-        amount: formatValue(value),
+        amount: formatValue(value, currency),
       });
     }
-    return parameter != null ? `${parameter}%` : value != null ? formatValue(value) : "—";
+    return parameter != null
+      ? `${parameter}%`
+      : value != null
+        ? formatValue(value, currency)
+        : "—";
   }
   if (kind === 10 || kind === 40 || kind === 41) {
-    const reward = value != null ? formatValue(value) : null;
+    const reward = value != null ? formatValue(value, currency) : null;
     const thresholdKey =
       kind === 10
         ? "inspector.clauseGoals"
@@ -666,7 +675,7 @@ export function clauseValueLabel(clause: Clause, locale: Locale): string {
       : "—";
   }
   if (kind === 13) {
-    const wage = value != null ? formatWage(value, locale) : null;
+    const wage = value != null ? formatWage(value, locale, currency) : null;
     const games =
       parameter != null
         ? translate(locale, "inspector.clauseLeagueGames", { count: parameter })
@@ -674,7 +683,7 @@ export function clauseValueLabel(clause: Clause, locale: Locale): string {
     return [wage, games].filter(Boolean).join(" · ") || "—";
   }
   if (kind === 19) {
-    const wage = value != null ? formatWage(value, locale) : null;
+    const wage = value != null ? formatWage(value, locale, currency) : null;
     const caps =
       parameter != null
         ? translate(locale, "inspector.clauseCaps", { count: parameter })
@@ -689,7 +698,7 @@ export function clauseValueLabel(clause: Clause, locale: Locale): string {
   if (kind === 58 && value == null) {
     return translate(locale, "inspector.clauseIncluded");
   }
-  if (value != null) return formatValue(value);
+  if (value != null) return formatValue(value, currency);
   return parameter != null ? String(parameter) : "—";
 }
 

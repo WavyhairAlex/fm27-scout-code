@@ -244,10 +244,22 @@ function PendingEditRow({
 function changeLabel(
   change: PendingChange,
   locale: "en" | "zh-CN",
-  t: (key: "pending.added" | "pending.removed") => string,
+  t: (
+    key:
+      | "pending.added"
+      | "pending.removed"
+      | "pending.wage"
+      | "pending.contractEnd",
+  ) => string,
 ): string {
   if (change.field === "ca") return `CA ${change.before} → ${change.after}`;
   if (change.field === "pa") return `PA ${change.before} → ${change.after}`;
+  if (change.field === "contract.wage") {
+    return `${t("pending.wage")} ${change.before} → ${change.after}`;
+  }
+  if (change.field === "contract.end") {
+    return `${t("pending.contractEnd")} ${change.before_display ?? change.before} → ${change.after_display ?? change.after}`;
+  }
   if (change.field.startsWith("attribute.")) {
     const key = change.field.slice("attribute.".length);
     return `${attributeLabel(key, locale)} ${change.before} → ${change.after}`;

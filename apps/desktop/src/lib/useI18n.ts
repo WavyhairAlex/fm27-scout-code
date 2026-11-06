@@ -6,9 +6,15 @@ import {
   type Locale,
   type TranslationKey,
 } from "./i18n";
+import {
+  formatMoney as formatMoneyValue,
+  formatValue as formatValueValue,
+  formatWage as formatWageValue,
+} from "./utils";
 
 export function useI18n() {
   const language = useAppStore((state) => state.language);
+  const currency = useAppStore((state) => state.currency);
   const [systemLocale, setSystemLocale] = useState<Locale>(() => resolveLocale("system"));
 
   useEffect(() => {
@@ -27,5 +33,18 @@ export function useI18n() {
     [locale],
   );
 
-  return { t, locale, language };
+  const formatValue = useCallback(
+    (value: number | null | undefined) => formatValueValue(value, currency),
+    [currency],
+  );
+  const formatMoney = useCallback(
+    (value: number | null | undefined) => formatMoneyValue(value, currency),
+    [currency],
+  );
+  const formatWage = useCallback(
+    (value: number | null | undefined) => formatWageValue(value, locale, currency),
+    [currency, locale],
+  );
+
+  return { t, locale, language, currency, formatValue, formatMoney, formatWage };
 }

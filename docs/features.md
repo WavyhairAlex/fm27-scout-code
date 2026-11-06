@@ -76,6 +76,9 @@
 ## Save editor
 
 - CA/PA, attributes, hidden attributes, determination, personality and traits.
+- Current permanent contract: weekly wage and end date, with the same in-effect
+  contract selection the parser uses; free agents, contracts without terms,
+  expired contracts and loan terms are read-only.
 - Edits are staged per player and written together to one new save file.
 - CA rebalancing warnings before writing.
 - CA budget estimator: live RCA estimate from edited attributes using the

@@ -21,6 +21,7 @@ Open a save, select a player, and click **Edit** in the player profile header.
 The dialog groups:
 
 - ability (CA/PA),
+- contract (current permanent contract only: weekly wage and end date),
 - CA-weighted attributes plus a separate CA-exempt group
   (Determination, Natural Fitness, Flair, Aggression),
 - hidden attributes and personality,
@@ -51,6 +52,25 @@ Facility ratings live in the club-info row that also holds supporter shares.
 Youth Level is read-only: English clubs get their EPPP category from the
 installed game's `eng_youth_grades.edt`, and it cannot be edited.
 
+## Contract edits
+
+The player **Contract** tab edits the current permanent contract only:
+
+- weekly wage (the save's base-currency value, not a converted display currency),
+- contract end date.
+
+The editor uses the same in-effect contract selection as the parser, so it
+writes the record the profile displays. It refuses players with no current
+contract terms (free agents, loan-only records, unobserved structures) and
+refuses contracts that have already expired. Loans keep their existing loan end
+date; only the parent-club contract is changed. Future pre-contracts are left
+untouched.
+
+The wage must be 0–20,000,000. The end date must be after the contract start and
+not before the in-game date. FM may recalculate the club's wage bill, budgets and
+financial-rule totals after the game advances, so check the club finances screen
+after loading an edited copy.
+
 ## CLI usage
 
 ```bash
@@ -63,6 +83,10 @@ installed game's `eng_youth_grades.edt`, and it cannot be edited.
 ./target/release/fm27scout edit "/path/to/save.fm" --uid 228 \
   --ca 150 --pa 199 --attr crossing=100 --attr consistency=100 \
   --personality professionalism=20 --trait 11 --output edited.fm
+
+# Edit the current permanent contract
+./target/release/fm27scout edit "/path/to/save.fm" --uid 228 \
+  --wage 50000 --contract-end 2030-06-30 --output contract-edited.fm
 
 # Low-risk club edit
 ./target/release/fm27scout edit-club "/path/to/save.fm" --club-uid 1155 \
@@ -89,6 +113,8 @@ save and checking every requested field.
 | `--attr KEY=VALUE` | 1–100 raw | Any visible attribute, or a hidden attribute |
 | `--personality KEY=VALUE` | 1–20 | Adaptability, ambition, loyalty, pressure, professionalism, sportsmanship, temperament, controversy |
 | `--trait BIT` / `--untrait BIT` | 0–63 | Adds or removes a known trait bit |
+| `--wage VALUE` | 0–20,000,000 | Weekly wage in the save's base currency; current permanent contract only |
+| `--contract-end DATE` | YYYY-MM-DD | Contract end date; must be after the start and not before the in-game date |
 
 `--ca` and `--pa` must leave CA at or below PA. The editor rejects the
 combination before writing.

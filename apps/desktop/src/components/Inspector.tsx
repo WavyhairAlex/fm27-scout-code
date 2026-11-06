@@ -42,8 +42,6 @@ import {
   caTone,
   cn,
   formatDate,
-  formatValue,
-  formatWage,
   initials,
 } from "@/lib/utils";
 import { useAppStore } from "@/store/app";
@@ -53,7 +51,7 @@ import { Badge, Button, EmptyState, Switch } from "./ui";
 type Tab = "attributes" | "roles" | "positions" | "growth" | "hidden" | "contract";
 
 export function Inspector() {
-  const { t, locale } = useI18n();
+  const { t, locale, formatValue, formatWage } = useI18n();
   const selectedUid = useAppStore((state) => state.selectedUid);
   const setSelectedUid = useAppStore((state) => state.setSelectedUid);
   const hiddenEnabled = useAppStore((state) => state.hiddenEnabled);
@@ -323,7 +321,7 @@ export function Inspector() {
             <MiniStat
               icon={<BriefcaseBusiness size={11} />}
               label={t("inspector.wage")}
-              value={formatWage(player.contract?.wage, locale)}
+              value={formatWage(player.contract?.wage)}
             />
             <MiniStat
               icon={<HeartPulse size={11} />}
@@ -692,7 +690,7 @@ function GrowthPanel({
   gameDate: string | null;
   injuries: Player["injuries"];
 }) {
-  const { t, locale } = useI18n();
+  const { t, locale, formatValue } = useI18n();
   const [expanded, setExpanded] = useState(false);
   const hasGrowth = points.length >= 2;
   const first = points[0];
@@ -1053,7 +1051,7 @@ function PositionsPanel({ positions }: { positions: Positions }) {
 }
 
 function ContractPanel({ player }: { player: Player }) {
-  const { t, locale } = useI18n();
+  const { t, locale, currency, formatWage } = useI18n();
   const contract = player.contract;
   return (
     <div className="space-y-3 px-4 py-3">
@@ -1085,7 +1083,7 @@ function ContractPanel({ player }: { player: Player }) {
           <MiniStat
             icon={<Coins size={11} />}
             label={t("inspector.wage")}
-            value={formatWage(contract?.wage, locale)}
+            value={formatWage(contract?.wage)}
           />
           <MiniStat
             icon={<CalendarDays size={11} />}
@@ -1176,7 +1174,7 @@ function ContractPanel({ player }: { player: Player }) {
                     t("inspector.clause", { kind: clause.kind })}
                 </span>
                 <span className="shrink-0 text-right font-mono text-[var(--ink)]">
-                  {clauseValueLabel(clause, locale)}
+                  {clauseValueLabel(clause, locale, currency)}
                 </span>
               </div>
             ))}

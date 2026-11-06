@@ -5,6 +5,7 @@ import {
   translate,
   type Language,
 } from "@/lib/i18n";
+import { isCurrencyCode, type CurrencyCode } from "@/lib/currency";
 import {
   HIDDEN_FILTERS,
   type FilterOptions,
@@ -16,6 +17,7 @@ import {
 
 const SAVED_VIEWS_KEY = "fm27scout.views.v1";
 const LANGUAGE_KEY = "fm27scout.language.v1";
+const CURRENCY_KEY = "fm27scout.currency.v1";
 
 export interface AttributeRule {
   id: string;
@@ -154,6 +156,8 @@ export interface PendingChange {
   before: number;
   after: number;
   label?: string;
+  before_display?: string | null;
+  after_display?: string | null;
 }
 
 export interface PendingEdit {
@@ -187,6 +191,7 @@ interface AppState {
   displayMode: DisplayMode;
   theme: Theme;
   language: Language;
+  currency: CurrencyCode;
   sidebarOpen: boolean;
   inspectorOpen: boolean;
   settingsOpen: boolean;
@@ -229,6 +234,7 @@ interface AppState {
   setDisplayMode: (mode: DisplayMode) => void;
   setTheme: (theme: Theme) => void;
   setLanguage: (language: Language) => void;
+  setCurrency: (currency: CurrencyCode) => void;
   setSidebarOpen: (open: boolean) => void;
   setInspectorOpen: (open: boolean) => void;
   setSettingsOpen: (open: boolean) => void;
@@ -271,6 +277,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   displayMode: "display",
   theme: "system",
   language: loadLanguage(),
+  currency: loadCurrency(),
   sidebarOpen: true,
   inspectorOpen: true,
   settingsOpen: false,
@@ -520,6 +527,10 @@ export const useAppStore = create<AppState>((set, get) => ({
     persistLanguage(language);
     set({ language });
   },
+  setCurrency: (currency) => {
+    persistCurrency(currency);
+    set({ currency });
+  },
   setSidebarOpen: (sidebarOpen) => set({ sidebarOpen }),
   setInspectorOpen: (inspectorOpen) => set({ inspectorOpen }),
   setSettingsOpen: (settingsOpen) => set({ settingsOpen }),
@@ -573,6 +584,26 @@ function persistLanguage(language: Language) {
   } catch {
     // Local storage can be unavailable in hardened webviews; the language still
     // applies for the current session.
+  }
+}
+
+function loadCurrency(): CurrencyCode {
+  if (typeof window === "undefined") return "save";
+  try {
+    const value = window.localStorage.getItem(CURRENCY_KEY);
+    return isCurrencyCode(value) ? value : "save";
+  } catch {
+    return "save";
+  }
+}
+
+function persistCurrency(currency: CurrencyCode) {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(CURRENCY_KEY, currency);
+  } catch {
+    // Local storage can be unavailable in hardened webviews; the display
+    // currency still applies for the current session.
   }
 }
 

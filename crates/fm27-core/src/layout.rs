@@ -1,7 +1,7 @@
 //! FM27 layout constants, ported from the verified fmsave reference implementation
 //! and checked against real career saves.
 
-use chrono::NaiveDate;
+use chrono::{Datelike, NaiveDate};
 
 pub const GAME: &str = "FM27";
 /// Latest FM27 build whose save layout has been verified.
@@ -517,6 +517,21 @@ pub fn decode_date(bytes: &[u8], offset: usize) -> Option<NaiveDate> {
     NaiveDate::from_yo_opt(year, day_of_year)
 }
 
+/// Encode a game date, preserving any flags stored in the high bits of the
+/// existing low word. The low 9 bits are the day of the year (1..=366); the
+/// next word is the year.
+pub fn encode_date(date: NaiveDate, existing_packed: u16) -> Option<[u8; 4]> {
+    let year = u16::try_from(date.year()).ok()?;
+    if !(EARLIEST_YEAR..=LATEST_YEAR).contains(&(year as i32)) {
+        return None;
+    }
+    let packed = (existing_packed & !0x1FF) | date.ordinal() as u16;
+    let mut bytes = [0u8; 4];
+    bytes[..2].copy_from_slice(&packed.to_le_bytes());
+    bytes[2..].copy_from_slice(&year.to_le_bytes());
+    Some(bytes)
+}
+
 pub fn fmt_date(date: Option<NaiveDate>) -> Option<String> {
     date.map(|value| value.format("%Y-%m-%d").to_string())
 }
@@ -579,5 +594,33 @@ mod tests {
         assert!(!is_editable_build("27.0.0+9999999"));
         assert!(!is_editable_build("27.0.1+2493426"));
         assert_eq!(editable_builds(), "27.0.0+2486695, 27.0.0+2493426");
+    }
+
+    #[test]
+    fn encodes_and_decodes_game_dates() {
+        for date in [
+            NaiveDate::from_ymd_opt(2027, 6, 30).unwrap(),
+            NaiveDate::from_ymd_opt(2028, 2, 29).unwrap(),
+            NaiveDate::from_ymd_opt(2030, 12, 31).unwrap(),
+        ] {
+            let bytes = encode_date(date, 0).expect("date in range");
+            assert_eq!(decode_date(&bytes, 0), Some(date));
+        }
+    }
+
+    #[test]
+    fn encoding_preserves_high_date_bits() {
+        let date = NaiveDate::from_ymd_opt(2029, 6, 30).unwrap();
+        let bytes = encode_date(date, 0xFE00).expect("date in range");
+        let packed = u16::from_le_bytes([bytes[0], bytes[1]]);
+        assert_eq!(packed & !0x1FF, 0xFE00);
+        assert_eq!(packed & 0x1FF, date.ordinal() as u16);
+        assert_eq!(decode_date(&bytes, 0), Some(date));
+    }
+
+    #[test]
+    fn rejects_dates_outside_the_game_range() {
+        assert!(encode_date(NaiveDate::from_ymd_opt(1900, 1, 2).unwrap(), 0).is_none());
+        assert!(encode_date(NaiveDate::from_ymd_opt(2201, 1, 1).unwrap(), 0).is_none());
     }
 }

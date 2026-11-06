@@ -659,6 +659,8 @@ impl ClubEditor {
             field: field.into(),
             before,
             after,
+            before_display: None,
+            after_display: None,
         };
         self.changes.push(change.clone());
         change

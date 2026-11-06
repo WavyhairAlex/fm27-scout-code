@@ -68,12 +68,16 @@ export interface PlayerEditRequest {
   personality: AttributeEdit[];
   traits: number[];
   untraits: number[];
+  wage: number | null;
+  contract_end: string | null;
 }
 
 export interface EditChange {
   field: string;
   before: number;
   after: number;
+  before_display?: string | null;
+  after_display?: string | null;
 }
 
 export interface EditPlayerResult {

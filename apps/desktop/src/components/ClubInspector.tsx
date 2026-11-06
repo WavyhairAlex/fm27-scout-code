@@ -14,15 +14,7 @@ import { useClubDetail, useSquadAnalysis } from "@/lib/query";
 import { facilityRatingLabel, nationLabel } from "@/lib/labels";
 import { formatNumber } from "@/lib/i18n";
 import { useI18n } from "@/lib/useI18n";
-import {
-  caTone,
-  cn,
-  formatDate,
-  formatMoney,
-  formatValue,
-  formatWage,
-  initials,
-} from "@/lib/utils";
+import { caTone, cn, formatDate, initials } from "@/lib/utils";
 import { useAppStore } from "@/store/app";
 import { Badge, Button, EmptyState } from "./ui";
 import { EditClubDialog } from "./EditClubDialog";
@@ -30,7 +22,7 @@ import { EditClubDialog } from "./EditClubDialog";
 type ClubTab = "overview" | "squad" | "finances" | "stadium";
 
 export function ClubInspector() {
-  const { t, locale } = useI18n();
+  const { t, locale, formatMoney, formatValue, formatWage } = useI18n();
   const selectedClubUid = useAppStore((state) => state.selectedClubUid);
   const setSelectedClubUid = useAppStore((state) => state.setSelectedClubUid);
   const setClubEditOpen = useAppStore((state) => state.setClubEditOpen);
@@ -280,7 +272,7 @@ function OverviewTab({ detail }: { detail: import("@/lib/types").ClubDetail }) {
 type SquadSortField = "ca" | "pa";
 
 function SquadTab({ clubUid }: { clubUid: number }) {
-  const { t, locale } = useI18n();
+  const { t, locale, formatMoney, formatValue, formatWage } = useI18n();
   const squad = useSquadAnalysis(clubUid);
   const setSelectedUid = useAppStore((state) => state.setSelectedUid);
   const setViewMode = useAppStore((state) => state.setViewMode);
@@ -389,7 +381,7 @@ function SquadTab({ clubUid }: { clubUid: number }) {
                   )}
                 </td>
                 <td className="px-2 py-1.5 text-right font-mono text-[var(--muted)]">
-                  {player.wage != null ? formatWage(player.wage, locale) : "—"}
+                  {player.wage != null ? formatWage(player.wage) : "—"}
                 </td>
               </tr>
             ))}
@@ -430,7 +422,7 @@ function SortHeader({
 }
 
 function FinancesTab({ detail }: { detail: import("@/lib/types").ClubDetail }) {
-  const { t, locale } = useI18n();
+  const { t, locale, formatMoney } = useI18n();
   const months = detail.finance_months;
   if (months.length === 0) {
     return (

@@ -5,12 +5,12 @@ import { getPlayer } from "@/lib/api";
 import { ATTRIBUTE_GROUPS, type Player } from "@/lib/types";
 import { attributeLabel } from "@/lib/labels";
 import { useI18n } from "@/lib/useI18n";
-import { caTone, cn, formatValue } from "@/lib/utils";
+import { caTone, cn } from "@/lib/utils";
 import { useAppStore } from "@/store/app";
 import { Badge, Button, Modal } from "./ui";
 
 export function CompareDialog() {
-  const { t, locale } = useI18n();
+  const { t, locale, formatValue } = useI18n();
   const open = useAppStore((state) => state.compareOpen);
   const setOpen = useAppStore((state) => state.setCompareOpen);
   const compareUids = useAppStore((state) => state.compareUids);

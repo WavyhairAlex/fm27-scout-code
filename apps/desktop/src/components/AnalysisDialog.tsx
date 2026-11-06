@@ -35,7 +35,7 @@ import type {
 import { bandLabel, roleName } from "@/lib/labels";
 import { formatNumber, type TranslationKey } from "@/lib/i18n";
 import { useI18n } from "@/lib/useI18n";
-import { caTone, cn, formatValue, formatWage, initials } from "@/lib/utils";
+import { caTone, cn, initials } from "@/lib/utils";
 import { useAppStore } from "@/store/app";
 import { Badge, Button, Input, Modal, Select } from "./ui";
 import { MultiSelect } from "./MultiSelect";
@@ -279,7 +279,7 @@ function OverviewPanel({
   data: AnalysisOverview;
   onClub: (clubUid: number) => void;
 }) {
-  const { t, locale } = useI18n();
+  const { t, locale, formatValue } = useI18n();
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-3 gap-2 lg:grid-cols-6">
@@ -407,7 +407,7 @@ function SquadPanel({
   data: SquadAnalysis;
   onPlayer: (uid: number) => void;
 }) {
-  const { t, locale } = useI18n();
+  const { t, locale, formatValue, formatWage } = useI18n();
   return (
     <div className="space-y-3">
       <div className="grid grid-cols-3 gap-2 lg:grid-cols-6">
@@ -434,7 +434,7 @@ function SquadPanel({
         <Stat
           icon={<Coins size={13} />}
           label={t("analysis.totalWage")}
-          value={formatWage(data.total_wage, locale)}
+          value={formatWage(data.total_wage)}
         />
         <Stat
           icon={<Coins size={13} />}
@@ -505,7 +505,7 @@ function SquadPanel({
                   </td>
                   <td className="px-2 py-1.5 text-right font-mono text-[var(--muted)]">{player.pa ?? "?"}</td>
                   <td className="px-2 py-1.5 text-right font-mono text-[var(--muted)]">
-                    {player.wage != null ? formatWage(player.wage, locale) : "—"}
+                    {player.wage != null ? formatWage(player.wage) : "—"}
                   </td>
                   <td className="px-3 py-1.5 text-right font-mono text-[var(--muted)]">
                     {player.contract_end ?? "—"}
@@ -545,7 +545,7 @@ function WonderkidPanel({
   onApply: () => void;
   onPlayer: (uid: number) => void;
 }) {
-  const { t } = useI18n();
+  const { t, formatValue } = useI18n();
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap items-end gap-3 rounded-xl border border-[var(--line)] bg-[var(--surface-2)] p-3">
@@ -672,7 +672,7 @@ function StatsMoneyballPanel({
   saveId: number | null;
   onPlayer: (uid: number) => void;
 }) {
-  const { t, locale } = useI18n();
+  const { t, locale, formatValue } = useI18n();
   const [model, setModel] = useState<"core" | "advanced">("core");
   const [position, setPosition] = useState("");
   const [league, setLeague] = useState("");
@@ -1348,7 +1348,7 @@ function StatsMoneyballPanel({
 }
 
 function StatsMoneyballDetail({ row }: { row: StatsMoneyballRow }) {
-  const { t, locale } = useI18n();
+  const { t, locale, formatValue, formatWage } = useI18n();
   const flagLabel = (flag: string) => {
     const statsKey = `analysis.stats.flag.${flag}` as TranslationKey;
     const statsText = t(statsKey);
@@ -1420,7 +1420,7 @@ function StatsMoneyballDetail({ row }: { row: StatsMoneyballRow }) {
           </div>
           <div className="flex justify-between gap-3">
             <span>{t("analysis.stats.detail.wage")}</span>
-            <span className="text-[var(--ink)]">{formatWage(row.wage, locale)}</span>
+            <span className="text-[var(--ink)]">{formatWage(row.wage)}</span>
           </div>
           <div className="flex justify-between gap-3 border-t border-[var(--line)] pt-1">
             <span>{t("analysis.stats.detail.total")}</span>
@@ -1451,7 +1451,7 @@ function ValueFinderPanel({
   saveId: number | null;
   onPlayer: (uid: number) => void;
 }) {
-  const { t, locale } = useI18n();
+  const { t, locale, formatValue, formatWage } = useI18n();
   const [position, setPosition] = useState("");
   const [league, setLeague] = useState("");
   const [minCa, setMinCa] = useState(120);
@@ -1866,7 +1866,7 @@ function ValueFinderPanel({
                       {feeLabel(row)}
                     </td>
                     <td className="px-2 py-1.5 text-right font-mono text-[var(--muted)]">
-                      {formatWage(row.wage, locale)}
+                      {formatWage(row.wage)}
                     </td>
                     <td className="px-2 py-1.5 text-right font-mono text-[var(--muted)]">
                       {formatValue(row.cost)}

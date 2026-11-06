@@ -66,6 +66,11 @@
   latest finance snapshot, corporate facilities, training/youth/junior-coaching/
   youth-recruitment ratings and owned-stadium capacities. It does not edit names,
   nations, team lists, affiliations, Youth Level or stadium owners.
+- Player contract editing is limited to the current permanent contract's weekly
+  wage and end date. Free agents, loan-only records, contracts without terms,
+  expired contracts, loan end dates, staff contracts and contract clauses
+  (release fees, extension options, bonuses) are read-only. FM may recalculate
+  club wage totals and budgets after a wage edit.
 - Windows/Linux builds are not available yet.
 - CI publishes an unsigned DMG; on first launch, use
   **System Settings → Privacy & Security → Open Anyway**. Developer ID

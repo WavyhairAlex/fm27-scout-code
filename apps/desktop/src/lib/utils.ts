@@ -1,29 +1,69 @@
 import { clsx, type ClassValue } from "clsx";
 import { twMerge } from "tailwind-merge";
+import {
+  convertFromBase,
+  currencySymbol,
+  SAVE_UNITS,
+  type CurrencyCode,
+} from "./currency";
 import { formatRelativeTime, translate, type Locale } from "./i18n";
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
-export function formatValue(value: number | null | undefined): string {
+function compactAmount(value: number): string {
+  const abs = Math.abs(value);
+  if (abs >= 1_000_000_000) return `${(abs / 1_000_000_000).toFixed(1)}B`;
+  if (abs >= 1_000_000) return `${(abs / 1_000_000).toFixed(2)}M`;
+  if (abs >= 1_000) return `${(abs / 1_000).toFixed(0)}K`;
+  return abs.toLocaleString("en-US", {
+    maximumFractionDigits: abs < 10 ? 2 : 0,
+  });
+}
+
+function formatConverted(value: number, currency: CurrencyCode): string {
+  const converted = convertFromBase(value, currency);
+  const sign = converted < 0 ? "-" : "";
+  const symbol = currency === SAVE_UNITS ? "" : currencySymbol(currency);
+  return `${sign}${symbol}${compactAmount(converted)}`;
+}
+
+export function formatValue(
+  value: number | null | undefined,
+  currency: CurrencyCode = SAVE_UNITS,
+): string {
   if (value == null || value === 0) return "—";
-  if (value >= 1_000_000_000) return `${(value / 1_000_000_000).toFixed(1)}B`;
-  if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(2)}M`;
-  if (value >= 1_000) return `${(value / 1_000).toFixed(0)}K`;
-  return value.toLocaleString("en-US");
+  return formatConverted(value, currency);
 }
 
-export function formatMoney(value: number | null | undefined): string {
+export function formatMoney(
+  value: number | null | undefined,
+  currency: CurrencyCode = SAVE_UNITS,
+): string {
   if (value == null) return "—";
-  if (value === 0) return "0";
-  const sign = value < 0 ? "-" : "";
-  return `${sign}${formatValue(Math.abs(value))}`;
+  if (value === 0) {
+    return `${currency === SAVE_UNITS ? "" : currencySymbol(currency)}0`;
+  }
+  return formatConverted(value, currency);
 }
 
-export function formatWage(value: number | null | undefined, locale: Locale = "en"): string {
+export function formatWage(
+  value: number | null | undefined,
+  locale: Locale = "en",
+  currency: CurrencyCode = SAVE_UNITS,
+): string {
   if (value == null) return "—";
-  return `${value.toLocaleString(locale === "zh-CN" ? "zh-CN" : "en-US")}${translate(locale, "common.perWeek")}`;
+  const converted = convertFromBase(value, currency);
+  const symbol = currency === SAVE_UNITS ? "" : currencySymbol(currency);
+  const sign = converted < 0 ? "-" : "";
+  const amount =
+    Math.abs(converted) < 1_000_000
+      ? Math.round(Math.abs(converted)).toLocaleString(
+          locale === "zh-CN" ? "zh-CN" : "en-US",
+        )
+      : compactAmount(converted);
+  return `${sign}${symbol}${amount}${translate(locale, "common.perWeek")}`;
 }
 
 export function formatDate(value: string | null | undefined): string {

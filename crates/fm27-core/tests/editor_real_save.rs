@@ -71,6 +71,8 @@ fn edits_ca_pa_attributes_personality_and_traits_in_a_copy() {
         }],
         traits: vec![trait_bit],
         untraits: vec![],
+        wage: None,
+        contract_end: None,
     };
     request.apply(&mut editor, source.uid).expect("apply edits");
     editor.validate().expect("validate edits");
@@ -118,5 +120,71 @@ fn edits_ca_pa_attributes_personality_and_traits_in_a_copy() {
         unchanged.name.as_deref(),
         untouched.name.as_deref(),
         "an unrelated player must not change"
+    );
+}
+
+#[test]
+#[ignore = "requires a real FM27 save and FM27_TEST_SAVE"]
+fn edits_current_contract_wage_and_end_date_in_a_copy() {
+    let path = std::env::var("FM27_TEST_SAVE").expect("set FM27_TEST_SAVE");
+    let parsed = parse_save(&path).expect("parse source save");
+    let game_date = parsed
+        .metadata
+        .game_date
+        .as_deref()
+        .and_then(|text| chrono::NaiveDate::parse_from_str(text, "%Y-%m-%d").ok())
+        .expect("game date");
+    let source = parsed
+        .players
+        .iter()
+        .find(|player| {
+            player.contract.as_ref().is_some_and(|contract| {
+                contract.wage.is_some()
+                    && contract.club_uid.is_some()
+                    && contract.start.is_some()
+                    && contract
+                        .end
+                        .as_deref()
+                        .and_then(|text| chrono::NaiveDate::parse_from_str(text, "%Y-%m-%d").ok())
+                        .is_some_and(|end| end >= game_date)
+            })
+        })
+        .expect("a player with a current permanent contract");
+    let contract = source.contract.as_ref().expect("contract");
+    let new_wage = contract.wage.expect("wage").saturating_add(1);
+    let old_end =
+        chrono::NaiveDate::parse_from_str(contract.end.as_deref().expect("end date"), "%Y-%m-%d")
+            .expect("parse end date");
+    let new_end = old_end.succ_opt().expect("next day");
+
+    let save = SaveFile::open(&path).expect("open container");
+    let metadata = read_metadata(&save).expect("metadata");
+    let mut editor = PlayerEditor::open(&save, &metadata).expect("open editor");
+    let request = PlayerEditRequest {
+        wage: Some(new_wage),
+        contract_end: Some(new_end),
+        ..PlayerEditRequest::default()
+    };
+    request.apply(&mut editor, source.uid).expect("apply edits");
+    editor.validate().expect("validate edits");
+
+    let directory = tempfile::tempdir().expect("tempdir");
+    let output = directory.path().join("contract-edited.fm");
+    editor.write(&save, &output, 3).expect("write edited save");
+
+    let edited = parse_save(&output).expect("parse edited save");
+    let changed = edited
+        .players
+        .iter()
+        .find(|player| player.uid == source.uid)
+        .expect("edited player");
+    request
+        .verify(changed)
+        .expect("verify the shared edit request");
+    let changed_contract = changed.contract.as_ref().expect("edited contract");
+    assert_eq!(changed_contract.wage, Some(new_wage));
+    assert_eq!(
+        changed_contract.end.as_deref(),
+        Some(new_end.to_string().as_str())
     );
 }

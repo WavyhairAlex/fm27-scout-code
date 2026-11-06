@@ -12,12 +12,14 @@ use crate::model::{Clause, Contract, ContractChainEntry};
 
 #[derive(Debug, Clone)]
 struct ChainRecord {
+    tag_offset: usize,
     club_uid: Option<u32>,
     club_name: Option<String>,
     team_id: u32,
     wage: u32,
     start: Option<NaiveDate>,
     end: Option<NaiveDate>,
+    tail_offset: Option<usize>,
     has_terms: bool,
     squad_status: Option<u8>,
     list_flags: Option<u8>,
@@ -25,6 +27,24 @@ struct ChainRecord {
     event_count: Option<u32>,
     clauses: Vec<Clause>,
     contract_type: Option<u8>,
+}
+
+/// Where a player's current contract terms live in `game_db`.
+#[derive(Debug, Clone, Copy)]
+pub struct ContractLocation {
+    pub tag_offset: usize,
+    pub tail_offset: usize,
+    pub club_uid: Option<u32>,
+    pub team_id: u32,
+    pub wage: u32,
+    pub start: Option<NaiveDate>,
+    pub end: Option<NaiveDate>,
+}
+
+impl ContractLocation {
+    pub fn is_expired(&self, clock: NaiveDate) -> bool {
+        self.end.is_some_and(|end| end < clock)
+    }
 }
 
 pub struct ContractDecoder<'a> {
@@ -230,6 +250,41 @@ impl ContractDecoder<'_> {
         })
     }
 
+    /// Locate the contract record that supplies the current terms for a player.
+    ///
+    /// The selection is the same one used by [`Self::decode`], so an editor
+    /// writes exactly the record the app displays. Returns `None` when no
+    /// current record carries terms (free agent, loan-only record or unknown).
+    pub fn locate_in_effect(
+        &self,
+        game_db: &[u8],
+        record_offset: usize,
+        record_window_end: usize,
+        is_last_record: bool,
+        pindex: u32,
+        player_club_uid: Option<u32>,
+    ) -> Option<ContractLocation> {
+        let (offsets, records) = self.find_chain_records(
+            game_db,
+            record_offset,
+            record_window_end,
+            is_last_record,
+            pindex,
+        );
+        let (_, records) = (offsets?, records?);
+        let (_, record) = select_in_effect(&records, player_club_uid, self.clock)?;
+        let tail_offset = record.tail_offset?;
+        Some(ContractLocation {
+            tag_offset: record.tag_offset,
+            tail_offset,
+            club_uid: record.club_uid,
+            team_id: record.team_id,
+            wage: record.wage,
+            start: record.start,
+            end: record.end,
+        })
+    }
+
     fn find_chain_records(
         &self,
         game_db: &[u8],
@@ -285,27 +340,24 @@ impl ContractDecoder<'_> {
         let team_id =
             read_u32(game_db, chain_tag_offset + ContractLayout::TEAM_ID_OFFSET).unwrap_or(0);
         let wage = read_u32(game_db, chain_tag_offset + ContractLayout::WAGE_OFFSET).unwrap_or(0);
-        let (club_uid, club_name) = self
-            .club_by_team
-            .get(&team_id)
-            .and_then(|(uid, _)| {
-                self.club_names
-                    .get(uid)
-                    .map(|name| (Some(*uid), Some(name.clone())))
-            })
-            .unwrap_or((None, None));
+        let (club_uid, club_name) = match self.club_by_team.get(&team_id) {
+            Some((uid, _)) => (Some(*uid), self.club_names.get(uid).cloned()),
+            None => (None, None),
+        };
 
         let start = positive_offset(chain_tag_offset, ContractLayout::START_OFFSET)
             .and_then(|offset| decode_date(game_db, offset));
 
         let Some(tail) = locate_tail(game_db, chain_tag_offset) else {
             return ChainRecord {
+                tag_offset: chain_tag_offset,
                 club_uid,
                 club_name,
                 team_id,
                 wage,
                 start,
                 end: None,
+                tail_offset: None,
                 has_terms: false,
                 squad_status: None,
                 list_flags: None,
@@ -333,12 +385,14 @@ impl ContractDecoder<'_> {
         };
 
         ChainRecord {
+            tag_offset: chain_tag_offset,
             club_uid,
             club_name,
             team_id,
             wage,
             start,
             end,
+            tail_offset: Some(tail),
             has_terms: true,
             squad_status,
             list_flags,

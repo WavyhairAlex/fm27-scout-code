@@ -1005,6 +1005,7 @@ name = "fm27-cli"
 version = "1.3.0"
 dependencies = [
  "anyhow",
+ "chrono",
  "clap",
  "csv",
  "fm27-core",

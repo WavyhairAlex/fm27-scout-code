@@ -316,7 +316,7 @@ cost_total = fee + wage * 52 * horizon
 - 默认 `horizon = 3` 年，可由用户调整。
 - `fee` 用 `transfer_value` 代理；`zero/placeholder/unset` 不参与费用排序。
 - 缺失身价时提供“仅工资”模式，并明确标注“费用未知”。
-- 所有金额显示为“存档单位”，不要假装是真实货币。
+- 默认显示“存档单位”；用户可在设置中选择显示货币，按近似汇率换算并明确标注。
 
 **属性边际（Attribute edge）：**
 

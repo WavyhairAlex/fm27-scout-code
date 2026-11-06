@@ -12,12 +12,12 @@ import { useClubPage } from "@/lib/query";
 import { facilityRatingLabel, nationLabel } from "@/lib/labels";
 import { formatNumber } from "@/lib/i18n";
 import { useI18n } from "@/lib/useI18n";
-import { caTone, cn, formatMoney, formatValue, initials } from "@/lib/utils";
+import { caTone, cn, initials } from "@/lib/utils";
 import { useAppStore } from "@/store/app";
 import { Button, EmptyState } from "./ui";
 
 export function ClubTable() {
-  const { t, locale } = useI18n();
+  const { t, locale, formatMoney, formatValue } = useI18n();
   const page = useClubPage();
   const selectedClubUid = useAppStore((state) => state.selectedClubUid);
   const setSelectedClubUid = useAppStore((state) => state.setSelectedClubUid);

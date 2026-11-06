@@ -2,6 +2,7 @@ use std::io::{self, BufWriter, Write};
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result, anyhow, bail};
+use chrono::NaiveDate;
 use clap::{Parser, Subcommand};
 use fm27_core::{
     club_editor::{ClubEditRequest, ClubEditor, ClubFinanceEdit, StadiumCapacityEdit},
@@ -101,6 +102,12 @@ enum Command {
         /// Remove a trait bit (0-63).
         #[arg(long = "untrait", value_name = "BIT")]
         untraits: Vec<u8>,
+        /// Weekly wage in the save's base currency (0-20,000,000).
+        #[arg(long)]
+        wage: Option<u32>,
+        /// Contract end date (YYYY-MM-DD) for the current permanent contract.
+        #[arg(long, value_name = "YYYY-MM-DD")]
+        contract_end: Option<NaiveDate>,
         /// Output path. Defaults to `<save stem>.edited.fm` next to the source.
         #[arg(long)]
         output: Option<PathBuf>,
@@ -315,6 +322,8 @@ fn main() -> Result<()> {
             personality,
             traits,
             untraits,
+            wage,
+            contract_end,
             output,
             save_name,
             force,
@@ -337,10 +346,12 @@ fn main() -> Result<()> {
                 personality: parse_assignments(&personality)?,
                 traits,
                 untraits,
+                wage,
+                contract_end,
             };
             if request.is_empty() {
                 bail!(
-                    "no edits requested; pass --ca, --pa, --attr, --personality, --trait or --untrait"
+                    "no edits requested; pass --ca, --pa, --attr, --personality, --trait, --untrait, --wage or --contract-end"
                 );
             }
             let warnings = request.warnings();
@@ -735,5 +746,21 @@ mod tests {
             };
             assert!(request.warnings().is_empty(), "{key} should be exempt");
         }
+    }
+
+    #[test]
+    fn warns_about_contract_edits() {
+        let request = PlayerEditRequest {
+            wage: Some(50_000),
+            contract_end: NaiveDate::from_ymd_opt(2030, 6, 30),
+            ..PlayerEditRequest::default()
+        };
+        let warnings = request.warnings();
+        assert!(warnings.iter().any(|warning| warning.contains("wage bill")));
+        assert!(
+            warnings
+                .iter()
+                .any(|warning| warning.contains("Contract expiry"))
+        );
     }
 }

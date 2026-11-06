@@ -1,7 +1,8 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   CheckCircle2,
+  Coins,
   Database,
   Download,
   Eye,
@@ -18,6 +19,13 @@ import {
 import { check, type DownloadEvent, type Update } from "@tauri-apps/plugin-updater";
 import { relaunch } from "@tauri-apps/plugin-process";
 import { deleteSave, updaterInfo, type UpdaterInfo } from "@/lib/api";
+import {
+  COMMON_CURRENCY_CODES,
+  CURRENCY_RATES_DATE,
+  allCurrencyCodes,
+  currencyName,
+  type CurrencyCode,
+} from "@/lib/currency";
 import { useAppInfo, useSaves } from "@/lib/query";
 import { formatNumber } from "@/lib/i18n";
 import { LANGUAGE_OPTIONS, type Language } from "@/lib/i18n";
@@ -40,7 +48,7 @@ function updateErrorMessage(error: unknown): string {
 }
 
 export function SettingsDialog() {
-  const { t, locale } = useI18n();
+  const { t, locale, formatMoney } = useI18n();
   const open = useAppStore((state) => state.settingsOpen);
   const setOpen = useAppStore((state) => state.setSettingsOpen);
   const hiddenEnabled = useAppStore((state) => state.hiddenEnabled);
@@ -51,6 +59,8 @@ export function SettingsDialog() {
   const setTheme = useAppStore((state) => state.setTheme);
   const language = useAppStore((state) => state.language);
   const setLanguage = useAppStore((state) => state.setLanguage);
+  const currency = useAppStore((state) => state.currency);
+  const setCurrency = useAppStore((state) => state.setCurrency);
   const pushToast = useAppStore((state) => state.pushToast);
   const currentSaveId = useAppStore((state) => state.saveId);
   const clearSession = useAppStore((state) => state.clearSession);
@@ -60,6 +70,23 @@ export function SettingsDialog() {
   const { data: info } = useAppInfo(open);
   const { data: saves = [] } = useSaves();
   const queryClient = useQueryClient();
+  const allCurrencies = useMemo(() => allCurrencyCodes(locale), [locale]);
+  const commonCurrencyOptions = useMemo(
+    () =>
+      COMMON_CURRENCY_CODES.map((code) => ({
+        value: code,
+        label: `${currencyName(code, locale)} (${code})`,
+      })),
+    [locale],
+  );
+  const allCurrencyOptions = useMemo(
+    () =>
+      allCurrencies.map((code) => ({
+        value: code,
+        label: `${currencyName(code, locale)} (${code})`,
+      })),
+    [allCurrencies, locale],
+  );
 
   useEffect(() => {
     if (!open) return;
@@ -163,6 +190,53 @@ export function SettingsDialog() {
                 ))}
               </Select>
             </div>
+          </div>
+        </section>
+
+        <section className="space-y-2">
+          <h3 className="text-[11px] font-semibold uppercase tracking-wider text-[var(--muted)]">
+            {t("settings.currency")}
+          </h3>
+          <div className="rounded-xl border border-[var(--line)] bg-[var(--surface-2)] p-3">
+            <div className="flex items-start justify-between gap-4">
+              <div className="flex max-w-sm items-start gap-2">
+                <Coins size={14} className="mt-0.5 shrink-0 text-[var(--accent)]" />
+                <div>
+                  <p className="text-[10px] leading-relaxed text-[var(--muted)]">
+                    {t("settings.currencyDescription")}
+                  </p>
+                  <p className="mt-1.5 font-mono text-[10px] text-[var(--ink)]">
+                    {t("settings.currencyPreview", {
+                      value: formatMoney(10_000_000),
+                    })}
+                  </p>
+                </div>
+              </div>
+              <Select
+                value={currency}
+                onChange={(event) => setCurrency(event.target.value as CurrencyCode)}
+                className="max-w-[210px] shrink-0"
+              >
+                <option value="save">{t("settings.currencySave")}</option>
+                <optgroup label={t("settings.currencyCommon")}>
+                  {commonCurrencyOptions.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </optgroup>
+                <optgroup label={t("settings.currencyAll")}>
+                  {allCurrencyOptions.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </optgroup>
+              </Select>
+            </div>
+            <p className="mt-2 border-t border-[var(--line)] pt-2 text-[9px] leading-relaxed text-[var(--muted)]">
+              {t("settings.currencyNote", { date: CURRENCY_RATES_DATE })}
+            </p>
           </div>
         </section>
 

@@ -24,6 +24,8 @@ const en = {
   "common.max": "Max",
   "common.unknownDate": "Unknown date",
   "common.unknown": "Unknown",
+  "common.yes": "Yes",
+  "common.no": "No",
   "common.freeAgent": "Free agent",
   "common.unnamedPlayer": "Unnamed player",
   "common.unnamed": "Unnamed",
@@ -518,8 +520,8 @@ const en = {
   "analysis.stats.minCa": "Min CA",
   "analysis.stats.maxAge": "Max age",
   "analysis.stats.minMinutes": "Min minutes",
-  "analysis.stats.maxFee": "Max fee",
-  "analysis.stats.maxWage": "Max wage",
+  "analysis.stats.maxFee": "Max fee (save units)",
+  "analysis.stats.maxWage": "Max wage (save units)",
   "analysis.stats.contractBefore": "Contract before",
   "analysis.stats.market": "Market",
   "analysis.stats.marketAll": "All",
@@ -562,8 +564,8 @@ const en = {
   "analysis.value.minCa": "Min CA",
   "analysis.value.minRole": "Min role",
   "analysis.value.maxAge": "Max age",
-  "analysis.value.maxFee": "Max fee",
-  "analysis.value.maxWage": "Max wage",
+  "analysis.value.maxFee": "Max fee (save units)",
+  "analysis.value.maxWage": "Max wage (save units)",
   "analysis.value.market": "Market",
   "analysis.value.marketAll": "All",
   "analysis.value.marketSale": "Listed for transfer",
@@ -657,11 +659,20 @@ const en = {
 
   // Settings dialog
   "settings.title": "Settings",
-  "settings.description": "Display, privacy and local cache",
+  "settings.description": "Display, currency, privacy and local cache",
   "settings.language": "Language",
   "settings.languageDescription":
     "Follows your system language by default. Unsupported languages fall back to English.",
   "settings.languageSystem": "System",
+  "settings.currency": "Currency",
+  "settings.currencyDescription":
+    "Display transfer values, wages and club finances in this currency. The save stores money in GBP.",
+  "settings.currencySave": "Save units (no conversion)",
+  "settings.currencyCommon": "Common currencies",
+  "settings.currencyAll": "All currencies",
+  "settings.currencyNote":
+    "Approximate mid-market rates as of {date}. Football Manager's in-game rates can differ; filters and edit fields stay in save units.",
+  "settings.currencyPreview": "Preview: {value}",
   "settings.display": "Display",
   "settings.theme": "Theme",
   "settings.themeSystem": "System",
@@ -770,6 +781,8 @@ const en = {
     "This step writes a new save file. If the output is corrupted or the game cannot read it, the source save remains untouched. Keep a backup and verify the output in game before relying on it.",
   "pending.added": "added",
   "pending.removed": "removed",
+  "pending.wage": "Weekly wage",
+  "pending.contractEnd": "Contract end",
   "pending.discardBeforeOpen":
     "You have {count} pending player edits. Opening another save will discard them. Continue?",
 
@@ -778,6 +791,7 @@ const en = {
   "edit.title": "Edit player",
   "edit.description": "Changes are staged per player; save all pending edits together to a new file.",
   "edit.tab.ability": "Ability",
+  "edit.tab.contract": "Contract",
   "edit.tab.attributes": "Attributes",
   "edit.tab.hidden": "Hidden & personality",
   "edit.tab.traits": "Traits",
@@ -814,6 +828,32 @@ const en = {
     "CA and CA-weighted attributes are both edited. FM usually preserves key attributes near their values, but may trim them to fit the CA budget.",
   "edit.warning.attrs":
     "Editing CA-weighted visible attributes without CA is temporary; FM will trim them toward the current CA.",
+  "edit.warning.wage":
+    "Weekly wage affects the club wage bill, budget and financial rules; FM may recalculate those totals after the game advances.",
+  "edit.warning.contractEnd":
+    "Contract expiry controls free agency, compensation and squad planning; only the current permanent contract is edited.",
+  "edit.contract.club": "Club",
+  "edit.contract.wageLabel": "Current weekly wage",
+  "edit.contract.start": "Start",
+  "edit.contract.end": "End",
+  "edit.contract.loan": "On loan",
+  "edit.contract.loanEnd": "Loan end",
+  "edit.contract.none": "No current contract",
+  "edit.contractUnavailable":
+    "This player has no current permanent contract with terms. Free agents, loan-only records and contracts without terms are read-only.",
+  "edit.contractExpired":
+    "This contract has already expired. The editor only changes a current contract, so extend it in-game or pick another player.",
+  "edit.contractLoanNote":
+    "The player is on loan. These fields edit the parent-club contract; the loan end date is unchanged.",
+  "edit.contractFutureNote":
+    "A future contract or pre-contract is already stored for this player. Editing the current contract does not change that future record.",
+  "edit.contract.wageInput": "Weekly wage (save units)",
+  "edit.contract.endInput": "Contract end date",
+  "edit.contractNote":
+    "Only the current permanent contract is edited. Weekly wage is stored in the save's base currency; contract end must be after the start date and not before the in-game date.",
+  "edit.invalidWage": "Weekly wage must be a whole number between 0 and 20,000,000.",
+  "edit.invalidContractEnd": "Contract end must be after the contract start date.",
+  "edit.invalidContractEndPast": "Contract end cannot be before the in-game date.",
   "edit.warning.singlePlayer":
     "Single-player use only. Keep the source save backed up and load the edited copy in-game to verify it.",
   "edit.group.caExempt": "CA-exempt",
@@ -874,6 +914,8 @@ const zhCN: Record<TranslationKey, string> = {
   "common.max": "最大",
   "common.unknownDate": "未知日期",
   "common.unknown": "未知",
+  "common.yes": "是",
+  "common.no": "否",
   "common.freeAgent": "自由球员",
   "common.unnamedPlayer": "未命名球员",
   "common.unnamed": "未命名",
@@ -1360,8 +1402,8 @@ const zhCN: Record<TranslationKey, string> = {
   "analysis.stats.minCa": "最低 CA",
   "analysis.stats.maxAge": "最大年龄",
   "analysis.stats.minMinutes": "最少分钟",
-  "analysis.stats.maxFee": "最大转会费",
-  "analysis.stats.maxWage": "最高周薪",
+  "analysis.stats.maxFee": "最大转会费（存档单位）",
+  "analysis.stats.maxWage": "最高周薪（存档单位）",
   "analysis.stats.contractBefore": "合同到期早于",
   "analysis.stats.market": "市场状态",
   "analysis.stats.marketAll": "全部",
@@ -1404,8 +1446,8 @@ const zhCN: Record<TranslationKey, string> = {
   "analysis.value.minCa": "最低 CA",
   "analysis.value.minRole": "最低角色分",
   "analysis.value.maxAge": "最大年龄",
-  "analysis.value.maxFee": "最高转会费",
-  "analysis.value.maxWage": "最高周薪",
+  "analysis.value.maxFee": "最高转会费（存档单位）",
+  "analysis.value.maxWage": "最高周薪（存档单位）",
   "analysis.value.market": "市场状态",
   "analysis.value.marketAll": "全部",
   "analysis.value.marketSale": "挂牌出售",
@@ -1495,10 +1537,19 @@ const zhCN: Record<TranslationKey, string> = {
   "help.shortcut.escape": "关闭弹窗 / 详情",
 
   "settings.title": "设置",
-  "settings.description": "显示、隐私与本地缓存",
+  "settings.description": "显示、货币、隐私与本地缓存",
   "settings.language": "语言",
   "settings.languageDescription": "默认跟随系统语言；不支持的语言将回退到英语。",
   "settings.languageSystem": "跟随系统",
+  "settings.currency": "货币单位",
+  "settings.currencyDescription":
+    "使用所选货币显示转会身价、工资和俱乐部财务。存档金额以英镑（GBP）为基准存储。",
+  "settings.currencySave": "存档单位（不换算）",
+  "settings.currencyCommon": "常用货币",
+  "settings.currencyAll": "全部货币",
+  "settings.currencyNote":
+    "使用 {date} 的近似市场中间汇率。游戏内汇率可能不同；筛选和编辑字段仍使用存档单位。",
+  "settings.currencyPreview": "示例：{value}",
   "settings.display": "显示",
   "settings.theme": "主题",
   "settings.themeSystem": "跟随系统",
@@ -1602,6 +1653,8 @@ const zhCN: Record<TranslationKey, string> = {
     "这一步会写入一个全新的存档文件。如果输出文件损坏或游戏无法读取，源存档不会被影响；请保留备份，并在游戏内验证输出文件后再使用。",
   "pending.added": "添加",
   "pending.removed": "移除",
+  "pending.wage": "周薪",
+  "pending.contractEnd": "合同到期",
   "pending.discardBeforeOpen":
     "还有 {count} 名球员的修改未保存。打开其他存档会丢弃这些修改，是否继续？",
 
@@ -1609,6 +1662,7 @@ const zhCN: Record<TranslationKey, string> = {
   "edit.title": "编辑球员",
   "edit.description": "修改先暂存在球员上；全部编辑完成后统一保存为一个新存档。",
   "edit.tab.ability": "能力",
+  "edit.tab.contract": "合同",
   "edit.tab.attributes": "属性",
   "edit.tab.hidden": "隐藏与性格",
   "edit.tab.traits": "习惯",
@@ -1643,6 +1697,31 @@ const zhCN: Record<TranslationKey, string> = {
   "edit.warning.caAttrs":
     "同时修改 CA 和参与 CA 计算的属性；关键属性通常接近保留，但可能被压缩以匹配 CA 预算。",
   "edit.warning.attrs": "只改参与 CA 计算的可见属性是临时的；FM 会把它们压向当前 CA。",
+  "edit.warning.wage":
+    "周薪会影响俱乐部工资单、预算和财政规则；游戏推进后 FM 可能重新计算这些总额。",
+  "edit.warning.contractEnd":
+    "合同到期日会影响自由转会、补偿金和球队计划；这里只修改当前永久合同。",
+  "edit.contract.club": "俱乐部",
+  "edit.contract.wageLabel": "当前周薪",
+  "edit.contract.start": "开始",
+  "edit.contract.end": "到期",
+  "edit.contract.loan": "租借中",
+  "edit.contract.loanEnd": "租借到期",
+  "edit.contract.none": "没有当前合同",
+  "edit.contractUnavailable":
+    "该球员没有可编辑的当前永久合同。自由球员、只有租借记录或没有合同条款的球员为只读。",
+  "edit.contractExpired":
+    "该合同已经过期。编辑器只修改当前合同；请先在游戏内续约，或换一名球员。",
+  "edit.contractLoanNote": "该球员正在租借。这里修改的是所属俱乐部的合同；租借结束日不变。",
+  "edit.contractFutureNote":
+    "该球员已存在未来合同或预合同。修改当前合同不会改变那条未来记录。",
+  "edit.contract.wageInput": "周薪（存档原始单位）",
+  "edit.contract.endInput": "合同到期日",
+  "edit.contractNote":
+    "只修改当前永久合同。周薪使用存档基础货币的原始值；到期日必须晚于开始日期，且不能早于游戏内日期。",
+  "edit.invalidWage": "周薪必须是 0–20,000,000 之间的整数。",
+  "edit.invalidContractEnd": "合同到期日必须晚于开始日期。",
+  "edit.invalidContractEndPast": "合同到期日不能早于游戏内日期。",
   "edit.warning.singlePlayer":
     "仅限单机使用。请备份源存档，并在游戏内加载编辑后的副本验证。",
   "edit.group.caExempt": "CA 豁免",
