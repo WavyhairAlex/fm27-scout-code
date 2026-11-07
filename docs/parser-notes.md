@@ -90,10 +90,18 @@ records in the reference save.
 Attribute display values use `max(1, (raw + 2) / 5)`. Natural positions are ratings
 ≥18; accomplished are 15–17, both sorted by rating descending.
 
-The player's game Unique ID comes from the closing person header. The game allocates
-IDs from `2,002,000,000` upward to people it creates after the save starts, so players
-at or above that threshold are system-generated newgens. FM27 database people stay
-below it even when their IDs are in the `2,000,000,000` range.
+The player's game Unique ID comes from the closing person header: the next object
+header carrying `person_id + 1` and the same Unique ID twice. The game allocates IDs
+from `2,002,000,000` upward to people it creates after the save starts, so players at
+or above that threshold are system-generated newgens. FM27 database people stay below
+it even when their IDs are in the `2,000,000,000` range.
+
+The header is identified by its person id, not by an ascending Unique ID. Long careers
+can store batches of generated people in descending ID order, and non-player objects
+can sit between two player records, so a floor or ceiling taken from the neighbouring
+player record rejects valid headers. The closing header also bounds the person-block
+window; without it, a window that spans later people presents several valid person
+candidates and the player is left unnamed.
 
 ## Person block
 
@@ -114,7 +122,9 @@ name ids            block_start + 0/5/10, each followed by a zero byte
 ```
 
 FM27 requires exactly one valid candidate in the window; ambiguous windows return no
-person data. Relation keys are `(role << 8) | kind`; the observed pairs are
+person data. The window ends at the player's closing person header when one is found,
+so later people stored before the next player record do not create ambiguity. Relation
+keys are `(role << 8) | kind`; the observed pairs are
 `(8,9)` second nation, `(8,70)` home-grown nation, `(1,72)` home-grown club.
 
 ## Clubs

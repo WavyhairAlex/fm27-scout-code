@@ -225,7 +225,6 @@ pub fn parse_save_with_progress(
         let record = record_index.records[position];
         let offset = record.offset;
         let window_end = record_index.window_end(position, game_db.len());
-        let next_uid = record_index.records.get(position + 1).map(|next| next.uid);
 
         let team_id_raw =
             read_u32(&game_db, offset + PlayerLayout::TEAM_ID_OFFSET).unwrap_or(MISSING_U32);
@@ -270,8 +269,6 @@ pub fn parse_save_with_progress(
             record.pindex,
             offset + PlayerLayout::DECODE_EXTENT,
             window_end,
-            record.uid,
-            next_uid,
         );
         let unique_id = closing.map(|(_, uid)| uid);
         let person_end = closing.map_or(window_end, |(at, _)| at);
@@ -658,13 +655,11 @@ pub(crate) fn closing_person_header(
     person_id: u32,
     search_start: usize,
     search_end: usize,
-    uid_floor: u32,
-    uid_ceiling: Option<u32>,
 ) -> Option<(usize, u32)> {
     if person_id == MISSING_U32 {
         return None;
     }
-    let needle = (person_id + 1).to_le_bytes();
+    let needle = person_id.checked_add(1)?.to_le_bytes();
     let mut found = None;
     let mut search_from = search_start;
     while let Some(relative) = find_bytes(game_db.get(search_from..search_end)?, &needle) {
@@ -676,10 +671,7 @@ pub(crate) fn closing_person_header(
         let Some(uid_copy) = read_u32(game_db, hit + 8) else {
             continue;
         };
-        if uid != uid_copy || uid == 0 || uid == MISSING_U32 || uid <= uid_floor {
-            continue;
-        }
-        if uid_ceiling.is_some_and(|ceiling| uid > ceiling) {
+        if uid != uid_copy || uid == 0 || uid == MISSING_U32 {
             continue;
         }
         if found.is_some() {
@@ -716,5 +708,60 @@ mod tests {
     fn parser_display_version_strips_the_cache_suffix() {
         assert!(!parser_display_version().contains('+'));
         assert!(parser_version().starts_with(parser_display_version()));
+    }
+
+    #[test]
+    fn closing_header_accepts_ids_below_the_record_uid() {
+        // System-generated people can be stored in descending Unique ID order, and the
+        // header after a player may sit beyond intervening non-player objects. The
+        // closing header is identified by the pindex, not by an ascending uid.
+        let mut data = vec![0u8; 64];
+        let pindex = 5u32;
+        data[20..24].copy_from_slice(&(pindex + 1).to_le_bytes());
+        data[24..28].copy_from_slice(&1_999_999_999u32.to_le_bytes());
+        data[28..32].copy_from_slice(&1_999_999_999u32.to_le_bytes());
+
+        assert_eq!(
+            closing_person_header(&data, pindex, 0, data.len()),
+            Some((20, 1_999_999_999))
+        );
+    }
+
+    #[test]
+    fn closing_header_requires_exactly_one_doubled_uid() {
+        let mut data = vec![0u8; 64];
+        let pindex = 5u32;
+
+        // An unpaired uid copy is ignored, not treated as a candidate.
+        data[8..12].copy_from_slice(&(pindex + 1).to_le_bytes());
+        data[12..16].copy_from_slice(&42u32.to_le_bytes());
+
+        // One doubled header is the closing header.
+        data[20..24].copy_from_slice(&(pindex + 1).to_le_bytes());
+        data[24..28].copy_from_slice(&1_999_999_999u32.to_le_bytes());
+        data[28..32].copy_from_slice(&1_999_999_999u32.to_le_bytes());
+        assert_eq!(
+            closing_person_header(&data, pindex, 0, data.len()),
+            Some((20, 1_999_999_999))
+        );
+
+        // A second doubled header makes the match ambiguous.
+        data[40..44].copy_from_slice(&(pindex + 1).to_le_bytes());
+        data[44..48].copy_from_slice(&43u32.to_le_bytes());
+        data[48..52].copy_from_slice(&43u32.to_le_bytes());
+        assert_eq!(closing_person_header(&data, pindex, 0, data.len()), None);
+    }
+
+    #[test]
+    fn closing_header_needs_a_valid_person_id() {
+        let data = vec![0u8; 32];
+        assert_eq!(
+            closing_person_header(&data, MISSING_U32, 0, data.len()),
+            None
+        );
+        assert_eq!(
+            closing_person_header(&data, MISSING_U32 - 1, 0, data.len()),
+            None
+        );
     }
 }

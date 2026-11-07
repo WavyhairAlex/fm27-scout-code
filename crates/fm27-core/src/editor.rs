@@ -592,14 +592,11 @@ impl PlayerEditor {
         let record = self.records.records[position];
         let window_start = record.offset + PersonLayout::WINDOW_START_OFFSET;
         let window_end = self.records.window_end(position, self.game_db.len());
-        let next_uid = self.records.records.get(position + 1).map(|next| next.uid);
         let closing = closing_person_header(
             &self.game_db,
             record.pindex,
             record.offset + PlayerLayout::DECODE_EXTENT,
             window_end,
-            record.uid,
-            next_uid,
         );
         let person_end = closing.map_or(window_end, |(at, _)| at);
         let decoder = PersonDecoder {

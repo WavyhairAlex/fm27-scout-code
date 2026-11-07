@@ -23,11 +23,12 @@ pub fn editable_builds() -> String {
 /// cached data shape changes. The suffix invalidates caches written before the
 /// complete player-trait and nation-name tables landed, before the current
 /// injury windows were read from the stride-14 arrays, before the bundled
-/// competition name table was populated, and before club leagues were resolved.
+/// competition name table was populated, before club leagues were resolved, and
+/// before the closing person header accepted descending Unique IDs.
 pub const PARSER_VERSION: &str = concat!(
-    "1.1.0",
+    "1.1.1",
     "+nation-names+listing+injury-windows+club-finance+stadiums+club-facilities+youth-level-edt",
-    "+competition-names+club-leagues+season-stats"
+    "+competition-names+club-leagues+season-stats+unique-ids"
 );
 pub const EARLIEST_YEAR: i32 = 1901;
 pub const LATEST_YEAR: i32 = 2200;
