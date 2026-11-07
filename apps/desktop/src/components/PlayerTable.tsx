@@ -100,28 +100,28 @@ export function PlayerTable() {
             <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-[var(--line)] bg-[var(--surface-2)] text-[9px] font-bold text-[var(--muted)]">
               {initials(row.original.name)}
             </div>
-            <div className="min-w-0">
+            <div className="min-w-0 flex-1">
               <div className="truncate text-[12px] font-semibold leading-tight text-[var(--ink)]">
                 {row.original.name ?? t("common.unnamedPlayer")}
               </div>
-              <div className="mt-0.5 flex items-center gap-1.5 text-[10px] leading-tight text-[var(--muted)]">
-                <span>{t("common.yearsOld", { age: row.original.age ?? "?" })}</span>
-                <span className="text-[var(--line-strong)]">·</span>
-                <span className="truncate">
+              <div className="mt-0.5 flex min-w-0 items-center gap-1.5 whitespace-nowrap text-[10px] leading-tight text-[var(--muted)]">
+                <span className="shrink-0">{t("common.yearsOld", { age: row.original.age ?? "?" })}</span>
+                <span className="shrink-0 text-[var(--line-strong)]">·</span>
+                <span className="min-w-0 truncate">
                   {nationLabel(row.original.nation_name, locale) ??
                     (row.original.nation_id != null
                       ? t("common.nationNumber", { id: row.original.nation_id })
                       : t("common.unknownNation"))}
                 </span>
                 {row.original.gender === 1 && (
-                  <span className="rounded bg-[var(--blue-soft)] px-1 text-[8px] font-semibold text-[var(--blue)]">
+                  <span className="shrink-0 rounded bg-[var(--blue-soft)] px-1 text-[8px] font-semibold text-[var(--blue)]">
                     {t("table.female")}
                   </span>
                 )}
                 {row.original.generated && (
                   <span
                     title={t("table.generatedTitle")}
-                    className="rounded bg-[var(--gold-soft)] px-1 text-[8px] font-semibold text-[var(--gold)]"
+                    className="shrink-0 rounded bg-[var(--gold-soft)] px-1 text-[8px] font-semibold text-[var(--gold)]"
                   >
                     {t("table.generated")}
                   </span>
@@ -581,6 +581,7 @@ export function PlayerTable() {
                             isSelected &&
                             "bg-[var(--accent-soft)]",
                           cell.column.id === "club" && "overflow-hidden",
+                          cell.column.id === "name" && "overflow-hidden",
                         )}
                       >
                         {flexRender(cell.column.columnDef.cell, cell.getContext())}
