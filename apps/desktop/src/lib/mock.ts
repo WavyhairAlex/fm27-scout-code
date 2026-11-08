@@ -22,6 +22,11 @@ import type {
   SaveSummary,
   SquadAnalysis,
   Stadium,
+  StaffFilterOptions,
+  StaffAttributes,
+  StaffPage,
+  StaffQuery,
+  StaffRow,
   StatsDriver,
   StatsMoneyballPage,
   StatsMoneyballRequest,
@@ -32,6 +37,7 @@ import type {
   ValueFinderRequest,
   ValueFinderRow,
 } from "./types";
+import { STAFF_ATTRIBUTE_KEYS, STAFF_ROLE_KEYS } from "./types";
 
 export const MOCK_SAVE_ID = 1;
 
@@ -332,6 +338,7 @@ export const MOCK_SAVE: SaveRecord = {
   parser_version: "0.1.0",
   parsed_at: new Date().toISOString(),
   players: MOCK_PLAYERS.length,
+  staff: 120,
   clubs: CLUBS.length,
   contracts: MOCK_PLAYERS.length,
 };
@@ -600,6 +607,233 @@ export function mockQuery(query: PlayerQuery): {
   };
 }
 
+
+const STAFF_JOBS: [number, string][] = [
+  [16, "Manager"],
+  [20, "Assistant Manager"],
+  [2, "Coach"],
+  [12, "Physio"],
+  [14, "Scout"],
+  [34, "Goalkeeping Coach"],
+  [26, "Fitness Coach"],
+  [4, "Chairperson"],
+  [10, "Director of Football"],
+  [64, "Head of Youth Development"],
+  [86, "Loan Manager"],
+  [88, "Technical Director"],
+  [58, "Data Analyst"],
+  [48, "Sports Scientist"],
+  [22, "Set Piece Coach"],
+];
+
+function buildStaff(index: number): StaffRow {
+  const random = rng(9_001 + index * 37);
+  const [jobCode, jobName] = STAFF_JOBS[index % STAFF_JOBS.length];
+  const club = CLUBS[Math.floor(index / STAFF_JOBS.length) % CLUBS.length];
+  const nationId = NATIONS[index % NATIONS.length];
+  const attributes: StaffAttributes = {};
+  for (const key of STAFF_ATTRIBUTE_KEYS) {
+    attributes[key] = 1 + Math.floor(random() * 20);
+  }
+  const roleKey = STAFF_ROLE_KEYS[index % STAFF_ROLE_KEYS.length];
+  const roles = STAFF_ROLE_KEYS.map((key) =>
+    key === roleKey ? 13 + Math.floor(random() * 8) : 1 + Math.floor(random() * 17),
+  );
+  const bestRoleIndex = roles.indexOf(Math.max(...roles));
+  const bestRoleKey = STAFF_ROLE_KEYS[bestRoleIndex];
+  const age = 32 + Math.floor(random() * 32);
+  const ca = 70 + Math.floor(random() * 90);
+  const hasContract = index % 11 !== 0;
+  return {
+    uid: 500_000 + index,
+    unique_id: 700_000 + index,
+    name: `${FIRST_NAMES[index % FIRST_NAMES.length]} ${LAST_NAMES[(index * 3) % LAST_NAMES.length]}`,
+    age,
+    club_uid: club[1],
+    club_name: club[0],
+    nation_id: nationId,
+    nation_name: NATION_NAMES[nationId] ?? `国家 #${nationId}`,
+    job_code: jobCode,
+    job_name: jobName,
+    ca,
+    pa: Math.min(200, ca + Math.floor(random() * 40)),
+    wage: hasContract ? 800 + Math.floor(random() * 24_000) : null,
+    contract_start: hasContract ? "2025-07-01" : null,
+    contract_end: hasContract
+      ? `${2026 + Math.floor(random() * 4)}-06-30`
+      : null,
+    has_contract: hasContract,
+    attributes,
+    roles,
+    best_role_index: bestRoleIndex,
+    best_role_name: bestRoleKey,
+    best_role_score: roles[bestRoleIndex],
+    personality: null,
+  };
+}
+
+export const MOCK_STAFF: StaffRow[] = Array.from({ length: 120 }, (_, index) =>
+  buildStaff(index),
+);
+
+export function mockQueryStaff(query: StaffQuery): StaffPage {
+  let rows = [...MOCK_STAFF];
+  const search = query.search?.trim().toLowerCase();
+  if (search) {
+    rows = rows.filter(
+      (row) =>
+        row.name?.toLowerCase().includes(search) ||
+        row.club_name?.toLowerCase().includes(search) ||
+        row.nation_name?.toLowerCase().includes(search) ||
+        row.job_name?.toLowerCase().includes(search),
+    );
+  }
+  if (query.uids?.length) rows = rows.filter((row) => query.uids!.includes(row.uid));
+  if (query.club_uids?.length) {
+    rows = rows.filter((row) => query.club_uids!.includes(row.club_uid ?? -1));
+  }
+  if (query.nation_ids?.length) {
+    rows = rows.filter((row) => query.nation_ids!.includes(row.nation_id ?? -1));
+  }
+  if (query.job_codes?.length) {
+    rows = rows.filter((row) => query.job_codes!.includes(row.job_code ?? -1));
+  }
+  if (query.age_min != null) rows = rows.filter((row) => (row.age ?? 0) >= query.age_min!);
+  if (query.age_max != null) rows = rows.filter((row) => (row.age ?? 999) <= query.age_max!);
+  if (query.ca_min != null) rows = rows.filter((row) => (row.ca ?? 0) >= query.ca_min!);
+  if (query.ca_max != null) rows = rows.filter((row) => (row.ca ?? 999) <= query.ca_max!);
+  if (query.pa_min != null) rows = rows.filter((row) => (row.pa ?? 0) >= query.pa_min!);
+  if (query.pa_max != null) rows = rows.filter((row) => (row.pa ?? 999) <= query.pa_max!);
+  if (query.wage_min != null) rows = rows.filter((row) => (row.wage ?? 0) >= query.wage_min!);
+  if (query.wage_max != null) rows = rows.filter((row) => (row.wage ?? 0) <= query.wage_max!);
+  if (query.contract_end_before) {
+    rows = rows.filter(
+      (row) => row.contract_end != null && row.contract_end <= query.contract_end_before!,
+    );
+  }
+  if (query.contract_end_after) {
+    rows = rows.filter(
+      (row) => row.contract_end != null && row.contract_end >= query.contract_end_after!,
+    );
+  }
+  if (query.has_contract != null) {
+    rows = rows.filter((row) => row.has_contract === query.has_contract);
+  }
+  for (const rule of query.attributes ?? []) {
+    rows = rows.filter((row) => {
+      const value = row.attributes?.[rule.key] ?? 0;
+      return (
+        (rule.min == null || value >= rule.min) &&
+        (rule.max == null || value <= rule.max)
+      );
+    });
+  }
+  for (const rule of query.roles ?? []) {
+    const index = STAFF_ROLE_KEYS.indexOf(rule.key as (typeof STAFF_ROLE_KEYS)[number]);
+    if (index < 0) continue;
+    rows = rows.filter((row) => {
+      const value = row.roles?.[index] ?? 0;
+      return (
+        (rule.min == null || value >= rule.min) &&
+        (rule.max == null || value <= rule.max)
+      );
+    });
+  }
+  const rules = query.sort?.length
+    ? query.sort
+    : [{ by: query.sort_by ?? "ca", dir: query.sort_dir ?? "desc" }];
+  rows.sort((a, b) => {
+    for (const rule of rules) {
+      const direction = rule.dir === "asc" ? 1 : -1;
+      const read = (row: StaffRow): number | string | null => {
+        switch (rule.by) {
+          case "name": return row.name;
+          case "age": return row.age;
+          case "club": return row.club_name;
+          case "nation_name": return row.nation_name;
+          case "job": return row.job_code;
+          case "job_name": return row.job_name;
+          case "best_role": return row.best_role_name;
+          case "role": return row.best_role_score;
+          case "wage": return row.wage;
+          case "contract_end": return row.contract_end;
+          case "uid": return row.uid;
+          case "pa": return row.pa;
+          default: return row.ca;
+        }
+      };
+      const left = read(a);
+      const right = read(b);
+      if (left == null && right == null) continue;
+      if (left == null) return 1;
+      if (right == null) return -1;
+      const compared = (left > right ? 1 : left < right ? -1 : 0) * direction;
+      if (compared !== 0) return compared;
+    }
+    return a.uid - b.uid;
+  });
+  const total = rows.length;
+  const page = query.page ?? 0;
+  const pageSize = query.page_size ?? 100;
+  return {
+    total,
+    page,
+    page_size: pageSize,
+    rows: rows.slice(page * pageSize, (page + 1) * pageSize),
+  };
+}
+
+export function mockStaffFilterOptions(): StaffFilterOptions {
+  const clubs = new Map<number, { id: number; name: string; count: number }>();
+  const nations = new Map<number, { id: number; name: string; count: number }>();
+  const jobs = new Map<number, { id: number; name: string; count: number }>();
+  for (const row of MOCK_STAFF) {
+    if (row.club_uid != null && row.club_name) {
+      const entry = clubs.get(row.club_uid) ?? { id: row.club_uid, name: row.club_name, count: 0 };
+      entry.count += 1;
+      clubs.set(row.club_uid, entry);
+    }
+    if (row.nation_id != null) {
+      const entry = nations.get(row.nation_id) ?? {
+        id: row.nation_id,
+        name: row.nation_name ?? `国家 #${row.nation_id}`,
+        count: 0,
+      };
+      entry.count += 1;
+      nations.set(row.nation_id, entry);
+    }
+    if (row.job_code != null) {
+      const entry = jobs.get(row.job_code) ?? {
+        id: row.job_code,
+        name: row.job_name ?? `Job #${row.job_code}`,
+        count: 0,
+      };
+      entry.count += 1;
+      jobs.set(row.job_code, entry);
+    }
+  }
+  const wages = MOCK_STAFF.map((row) => row.wage).filter((wage): wage is number => wage != null);
+  const ages = MOCK_STAFF.map((row) => row.age).filter((age): age is number => age != null);
+  const cas = MOCK_STAFF.map((row) => row.ca).filter((ca): ca is number => ca != null);
+  const pas = MOCK_STAFF.map((row) => row.pa).filter((pa): pa is number => pa != null);
+  return {
+    clubs: [...clubs.values()].sort((a, b) => a.name.localeCompare(b.name)),
+    nations: [...nations.values()].sort((a, b) => a.name.localeCompare(b.name)),
+    jobs: [...jobs.values()].sort((a, b) => a.name.localeCompare(b.name)),
+    min_age: Math.min(...ages),
+    max_age: Math.max(...ages),
+    min_ca: Math.min(...cas),
+    max_ca: Math.max(...cas),
+    min_pa: Math.min(...pas),
+    max_pa: Math.max(...pas),
+    min_wage: Math.min(...wages),
+    max_wage: Math.max(...wages),
+    with_contract: MOCK_STAFF.filter((row) => row.has_contract).length,
+    without_contract: MOCK_STAFF.filter((row) => !row.has_contract).length,
+    with_attributes: MOCK_STAFF.filter((row) => row.attributes != null).length,
+    with_roles: MOCK_STAFF.filter((row) => row.roles != null).length,
+  };
+}
 
 function mockPositionGroup(position: string | null): string {
   switch ((position ?? "").toUpperCase()) {

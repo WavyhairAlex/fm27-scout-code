@@ -7,7 +7,8 @@ use std::path::Path;
 use serde::Serialize;
 
 use crate::error::{Error, Result};
-use crate::store::PlayerRow;
+use crate::layout::{STAFF_ATTRIBUTE_KEYS, STAFF_ROLE_KEYS};
+use crate::store::{PlayerRow, StaffRow};
 
 #[derive(Debug, Clone, Serialize)]
 pub struct ExportReport {
@@ -103,7 +104,79 @@ pub fn write_export(path: &Path, format: &str, rows: &[PlayerRow]) -> Result<Exp
     writer.finish()
 }
 
-fn write_indented_json(writer: &mut BufWriter<File>, row: &PlayerRow) -> Result<()> {
+/// Streaming CSV/JSON writer for the staff directory.
+pub struct StaffExportWriter {
+    path: String,
+    format: String,
+    rows: usize,
+    destination: Destination,
+}
+
+impl StaffExportWriter {
+    pub fn create(path: &Path, format: &str) -> Result<Self> {
+        let format = format.to_ascii_lowercase();
+        let destination = match format.as_str() {
+            "csv" => {
+                let mut writer = csv::Writer::from_writer(BufWriter::new(File::create(path)?));
+                writer.write_record(staff_csv_header())?;
+                Destination::Csv(writer)
+            }
+            "json" => {
+                let mut writer = BufWriter::new(File::create(path)?);
+                writer.write_all(b"[")?;
+                Destination::Json(writer)
+            }
+            other => {
+                return Err(Error::parse(format!(
+                    "unknown export format {other:?}; expected csv or json"
+                )));
+            }
+        };
+        Ok(Self {
+            path: path.display().to_string(),
+            format,
+            rows: 0,
+            destination,
+        })
+    }
+
+    pub fn write_row(&mut self, row: &StaffRow) -> Result<()> {
+        match &mut self.destination {
+            Destination::Csv(writer) => writer.write_record(staff_csv_record(row))?,
+            Destination::Json(writer) => {
+                if self.rows == 0 {
+                    writer.write_all(b"\n")?;
+                } else {
+                    writer.write_all(b",\n")?;
+                }
+                write_indented_json(writer, row)?;
+            }
+        }
+        self.rows += 1;
+        Ok(())
+    }
+
+    pub fn finish(mut self) -> Result<ExportReport> {
+        match &mut self.destination {
+            Destination::Csv(writer) => writer.flush()?,
+            Destination::Json(writer) => {
+                if self.rows == 0 {
+                    writer.write_all(b"]")?;
+                } else {
+                    writer.write_all(b"\n]")?;
+                }
+                writer.flush()?;
+            }
+        }
+        Ok(ExportReport {
+            path: self.path,
+            format: self.format,
+            rows: self.rows,
+        })
+    }
+}
+
+fn write_indented_json<T: Serialize>(writer: &mut BufWriter<File>, row: &T) -> Result<()> {
     let bytes = serde_json::to_vec_pretty(row)?;
     for (index, line) in bytes.split(|byte| *byte == b'\n').enumerate() {
         if index > 0 {
@@ -190,6 +263,80 @@ fn csv_record(row: &PlayerRow) -> Vec<String> {
     ];
     for value in row.attributes.values {
         record.push(value.to_string());
+    }
+    record
+}
+
+fn staff_csv_header() -> Vec<String> {
+    let mut header = vec![
+        "uid".to_owned(),
+        "unique_id".to_owned(),
+        "name".to_owned(),
+        "age".to_owned(),
+        "club".to_owned(),
+        "nation_id".to_owned(),
+        "nation_name".to_owned(),
+        "job".to_owned(),
+        "ca".to_owned(),
+        "pa".to_owned(),
+        "wage".to_owned(),
+        "contract_start".to_owned(),
+        "contract_end".to_owned(),
+        "has_contract".to_owned(),
+        "best_role".to_owned(),
+        "best_role_score".to_owned(),
+    ];
+    for key in STAFF_ATTRIBUTE_KEYS {
+        header.push(key.to_owned());
+    }
+    for key in STAFF_ROLE_KEYS {
+        header.push(key.to_owned());
+    }
+    header
+}
+
+fn staff_csv_record(row: &StaffRow) -> Vec<String> {
+    let mut record = vec![
+        row.uid.to_string(),
+        row.unique_id
+            .map(|value| value.to_string())
+            .unwrap_or_default(),
+        row.name.clone().unwrap_or_default(),
+        row.age.map(|value| value.to_string()).unwrap_or_default(),
+        row.club_name.clone().unwrap_or_default(),
+        row.nation_id
+            .map(|value| value.to_string())
+            .unwrap_or_default(),
+        row.nation_name.clone().unwrap_or_default(),
+        row.job_name.clone().unwrap_or_default(),
+        row.ca.map(|value| value.to_string()).unwrap_or_default(),
+        row.pa.map(|value| value.to_string()).unwrap_or_default(),
+        row.wage.map(|value| value.to_string()).unwrap_or_default(),
+        row.contract_start.clone().unwrap_or_default(),
+        row.contract_end.clone().unwrap_or_default(),
+        if row.has_contract { "yes" } else { "no" }.to_owned(),
+        row.best_role_name.clone().unwrap_or_default(),
+        row.best_role_score
+            .map(|value| value.to_string())
+            .unwrap_or_default(),
+    ];
+    for key in STAFF_ATTRIBUTE_KEYS {
+        record.push(
+            row.attributes
+                .as_ref()
+                .and_then(|attributes| attributes.get(key))
+                .map(|value| value.to_string())
+                .unwrap_or_default(),
+        );
+    }
+    for (index, _) in STAFF_ROLE_KEYS.iter().enumerate() {
+        record.push(
+            row.roles
+                .as_ref()
+                .and_then(|roles| roles.get(index))
+                .map(|value| value.to_string())
+                .unwrap_or_default(),
+        );
     }
     record
 }

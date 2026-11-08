@@ -366,6 +366,92 @@ export interface PlayerPage {
   rows: PlayerRow[];
 }
 
+/** Staff profile attributes, keyed by `STAFF_ATTRIBUTE_KEYS`, on the 1–20 scale. */
+export type StaffAttributes = Record<string, number>;
+
+export interface StaffRow {
+  uid: number;
+  unique_id: number | null;
+  name: string | null;
+  age: number | null;
+  club_uid: number | null;
+  club_name: string | null;
+  nation_id: number | null;
+  nation_name: string | null;
+  job_code: number | null;
+  job_name: string | null;
+  ca: number | null;
+  pa: number | null;
+  wage: number | null;
+  contract_start: string | null;
+  contract_end: string | null;
+  has_contract: boolean;
+  attributes: StaffAttributes | null;
+  roles: number[] | null;
+  best_role_index: number | null;
+  best_role_name: string | null;
+  best_role_score: number | null;
+  personality: Personality | null;
+}
+
+export interface StaffRoleFilter {
+  key: string;
+  min?: number | null;
+  max?: number | null;
+}
+
+export interface StaffQuery {
+  save_id: number;
+  search?: string | null;
+  uids?: number[];
+  club_uids?: number[];
+  nation_ids?: number[];
+  job_codes?: number[];
+  age_min?: number | null;
+  age_max?: number | null;
+  ca_min?: number | null;
+  ca_max?: number | null;
+  pa_min?: number | null;
+  pa_max?: number | null;
+  wage_min?: number | null;
+  wage_max?: number | null;
+  contract_end_before?: string | null;
+  contract_end_after?: string | null;
+  has_contract?: boolean | null;
+  attributes?: { key: string; min?: number | null; max?: number | null }[];
+  roles?: StaffRoleFilter[];
+  sort?: SortRule[];
+  sort_by?: string | null;
+  sort_dir?: "asc" | "desc" | null;
+  page?: number | null;
+  page_size?: number | null;
+}
+
+export interface StaffPage {
+  total: number;
+  page: number;
+  page_size: number;
+  rows: StaffRow[];
+}
+
+export interface StaffFilterOptions {
+  clubs: FilterOption[];
+  nations: FilterOption[];
+  jobs: FilterOption[];
+  min_age: number | null;
+  max_age: number | null;
+  min_ca: number | null;
+  max_ca: number | null;
+  min_pa: number | null;
+  max_pa: number | null;
+  min_wage: number | null;
+  max_wage: number | null;
+  with_contract: number;
+  without_contract: number;
+  with_attributes: number;
+  with_roles: number;
+}
+
 export interface ValueFinderRequest {
   save_id: number;
   position_group?: string | null;
@@ -769,6 +855,7 @@ export interface SaveRecord {
   parser_version: string;
   parsed_at: string;
   players: number;
+  staff: number;
   clubs: number;
   contracts: number;
 }
@@ -798,6 +885,9 @@ export interface Competition {
 export interface ParseReport {
   save: SaveSummary;
   players: number;
+  staff: number;
+  staff_with_attributes: number;
+  staff_with_roles: number;
   clubs: number;
   season_stats: number;
   contracts: number;
@@ -1121,3 +1211,89 @@ export const ATTRIBUTE_LABELS: Record<string, string> = {
 };
 
 export const ATTRIBUTE_FILTER_KEYS = ATTRIBUTE_FILTER_GROUPS.flatMap((group) => group.keys);
+
+/** Staff profile attributes, in the order the parser stores them. */
+export const STAFF_ATTRIBUTE_KEYS = [
+  "authority",
+  "working_with_youngsters",
+  "determination",
+  "goalkeeping",
+  "judging_player_ability",
+  "judging_player_potential",
+  "people_management",
+  "motivating",
+  "physiotherapy",
+  "tactical_knowledge",
+  "attacking",
+  "defending",
+  "fitness",
+  "possession",
+  "technical",
+  "tactical",
+  "data_analysis",
+  "sports_science",
+  "negotiating",
+  "judging_staff_ability",
+  "set_pieces",
+] as const;
+
+export const STAFF_ATTRIBUTE_GROUPS: { labelKey: TranslationKey; keys: readonly string[] }[] = [
+  {
+    labelKey: "staff.group.profile",
+    keys: [
+      "authority",
+      "determination",
+      "working_with_youngsters",
+      "motivating",
+      "people_management",
+    ],
+  },
+  {
+    labelKey: "staff.group.judging",
+    keys: [
+      "judging_player_ability",
+      "judging_player_potential",
+      "judging_staff_ability",
+    ],
+  },
+  {
+    labelKey: "staff.group.coaching",
+    keys: [
+      "attacking",
+      "defending",
+      "possession",
+      "technical",
+      "tactical",
+      "set_pieces",
+      "tactical_knowledge",
+      "fitness",
+      "goalkeeping",
+    ],
+  },
+  {
+    labelKey: "staff.group.support",
+    keys: ["data_analysis", "sports_science", "negotiating", "physiotherapy"],
+  },
+];
+
+/** Role-suitability vector order used by the save and the cache columns. */
+export const STAFF_ROLE_KEYS = [
+  "manager",
+  "assistant_manager",
+  "coach",
+  "physio",
+  "scout",
+  "gk_coach",
+  "fitness_coach",
+  "chairperson",
+  "director_of_football",
+  "head_of_youth_development",
+  "loan_manager",
+  "technical_director",
+  "data_analyst",
+  "sports_scientist",
+  "set_piece_coach",
+] as const;
+
+/** A role score at or above this value is a realistic appointment. */
+export const STAFF_ROLE_GREEN_THRESHOLD = 10;

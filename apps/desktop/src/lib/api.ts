@@ -27,6 +27,9 @@ import type {
   SaveRecord,
   SnapshotPoint,
   SquadAnalysis,
+  StaffFilterOptions,
+  StaffPage,
+  StaffQuery,
   StatsMoneyballPage,
   StatsMoneyballRequest,
   TraitOption,
@@ -49,6 +52,8 @@ import {
   mockPlayerRoles,
   mockQuery,
   mockQueryClubs,
+  mockQueryStaff,
+  mockStaffFilterOptions,
   mockSquadAnalysis,
   mockStatsMoneyball,
   mockValueFinder,
@@ -93,6 +98,22 @@ export async function openSave(path: string, force = false): Promise<OpenSaveRes
 export async function queryPlayers(query: PlayerQuery): Promise<PlayerPage> {
   if (!isTauri) return mockQuery(query);
   return timedInvoke<PlayerPage>("query_players", { query });
+}
+
+export async function queryStaff(query: StaffQuery): Promise<StaffPage> {
+  if (!isTauri) return mockQueryStaff(query);
+  return timedInvoke<StaffPage>("query_staff", { query });
+}
+
+export async function getStaffFilterOptions(
+  saveId: number,
+  query?: StaffQuery | null,
+): Promise<StaffFilterOptions> {
+  if (!isTauri) return mockStaffFilterOptions();
+  return timedInvoke<StaffFilterOptions>("staff_filter_options", {
+    saveId,
+    query: query ?? null,
+  });
 }
 
 export async function queryValueFinder(
@@ -317,6 +338,25 @@ export async function exportPlayers(
     return { path, format, rows: rows.length };
   }
   return timedInvoke<ExportReport>("export_players", { query, format, path });
+}
+
+export async function exportStaff(
+  query: StaffQuery,
+  format: "csv" | "json",
+  path: string,
+): Promise<ExportReport> {
+  if (!isTauri) {
+    const rows = mockQueryStaff({ ...query, page: 0, page_size: 100000 }).rows;
+    const blob = new Blob([JSON.stringify(rows, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = path;
+    anchor.click();
+    URL.revokeObjectURL(url);
+    return { path, format, rows: rows.length };
+  }
+  return timedInvoke<ExportReport>("export_staff", { query, format, path });
 }
 
 export async function pickSaveFile(filterName = "Football Manager saves"): Promise<string | null> {

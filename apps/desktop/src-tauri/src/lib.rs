@@ -12,7 +12,8 @@ use fm27_core::metadata::read_metadata;
 use fm27_core::model::{Attributes, ClubDetail, Positions};
 use fm27_core::store::{
     AnalysisOverview, ClubFilterOptions, ClubPage, ClubQuery, FilterOptions, PlayerPage,
-    PlayerQuery, SaveRecord, SnapshotPoint, SquadAnalysis, Store,
+    PlayerQuery, SaveRecord, SnapshotPoint, SquadAnalysis, StaffFilterOptions, StaffPage,
+    StaffQuery, Store,
 };
 use fm27_core::{
     ParseReport, Player, SaveSummary, inspect_save, parse_save_with_progress,
@@ -354,6 +355,28 @@ async fn stats_moneyball(
 ) -> Result<fm27_core::stats_moneyball::StatsMoneyballPage, String> {
     run_store_command(state, move |store| {
         store.stats_moneyball(&request).map_err(error_string)
+    })
+    .await
+}
+
+#[tauri::command]
+async fn query_staff(state: State<'_, AppState>, query: StaffQuery) -> Result<StaffPage, String> {
+    run_read_command(state, move |store| {
+        store.query_staff(&query).map_err(error_string)
+    })
+    .await
+}
+
+#[tauri::command]
+async fn staff_filter_options(
+    state: State<'_, AppState>,
+    save_id: i64,
+    query: Option<StaffQuery>,
+) -> Result<StaffFilterOptions, String> {
+    run_read_command(state, move |store| {
+        store
+            .staff_filter_options(save_id, query.as_ref())
+            .map_err(error_string)
     })
     .await
 }
@@ -791,6 +814,28 @@ async fn export_players(
 }
 
 #[tauri::command]
+async fn export_staff(
+    state: State<'_, AppState>,
+    query: StaffQuery,
+    format: String,
+    path: String,
+) -> Result<fm27_core::export::ExportReport, String> {
+    let db_path = state.data_dir.join("fm27scout.db");
+    tauri::async_runtime::spawn_blocking(move || {
+        let mut writer =
+            fm27_core::export::StaffExportWriter::create(std::path::Path::new(&path), &format)
+                .map_err(error_string)?;
+        let store = Store::open_read_only(&db_path).map_err(error_string)?;
+        store
+            .stream_staff(&query, |row| writer.write_row(&row))
+            .map_err(error_string)?;
+        writer.finish().map_err(error_string)
+    })
+    .await
+    .map_err(error_string)?
+}
+
+#[tauri::command]
 fn take_pending_open(app: AppHandle) -> Option<String> {
     let value = PENDING_OPEN
         .lock()
@@ -1031,8 +1076,8 @@ pub fn run() {
             }
             let db_path = data_dir.join("fm27scout.db");
             let store = Store::open(&db_path)?;
-            let readers = ReadPool::open(&db_path, READ_POOL_SIZE)
-                .map_err(|error| std::io::Error::other(error))?;
+            let readers =
+                ReadPool::open(&db_path, READ_POOL_SIZE).map_err(std::io::Error::other)?;
             app.manage(AppState {
                 store: std::sync::Arc::new(Mutex::new(store)),
                 readers: std::sync::Arc::new(readers),
@@ -1046,6 +1091,8 @@ pub fn run() {
             query_players,
             value_finder,
             stats_moneyball,
+            query_staff,
+            staff_filter_options,
             query_clubs,
             get_player,
             get_club,
@@ -1063,6 +1110,7 @@ pub fn run() {
             get_filter_options,
             delete_save,
             export_players,
+            export_staff,
             app_info,
             updater_info,
             set_app_language,

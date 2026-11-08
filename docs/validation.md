@@ -144,3 +144,27 @@ The ignored `club_real_save.rs` tests cover:
 - club search and detail retrieval through SQLite,
 - owned-stadium capacity edits,
 - re-parsing and field-by-field verification of an edited save copy.
+
+## Staff validation
+
+Staff rows were compared with the fmsave staff reader on both supported builds. The
+comparison joins on the person object's `uid` and checks name, club, job code, CA, PA,
+wage, contract end and contract presence.
+
+```text
+Parma (27.0.0+2486695): oracle=14225 rust=14173 matched=14173
+  missing=52 extra=0  ca/pa/wage/contract_end/has_contract/club/job mismatches=0
+Milan (27.0.0+2493426): oracle=13809 rust=13770 matched=13770
+  missing=39 extra=0  ca/pa/wage/contract_end/has_contract/club/job mismatches=0
+```
+
+The unmatched oracle rows are people a club lists without any held or no-contract role
+record plus the human manager; national-team appointments are excluded because their
+team id has no club mapping. Profile attributes decode for every staff row on both saves.
+Role suitability decodes for 12,977 of 14,173 Parma rows and 12,484 of 13,770 Milan rows;
+the rest are mostly no-contract board roles whose objects carry no readable vector.
+The attribute block is validated against the save's preference slots and the 26-byte
+ability block; role vectors require a unique signature and at least one score of 10.
+
+The ignored `staff_real_save.rs` test covers the directory count, attribute and role
+coverage, the club-job invariant, SQLite insertion, role filtering and staff facet counts.

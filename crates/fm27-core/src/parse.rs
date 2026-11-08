@@ -21,7 +21,7 @@ use crate::layout::{
 use crate::metadata::{SaveMetadata, read_metadata};
 use crate::model::{
     Attributes, Club, Competition, FinanceMonth, ParseReport, Player, Positions, Reputation,
-    SaveSummary, Stadium, TransferValueState,
+    SaveSummary, Stadium, Staff, TransferValueState,
 };
 use crate::names::NamePools;
 use crate::nations::NationIndex;
@@ -43,6 +43,7 @@ pub struct ParsedSave {
     pub metadata: SaveMetadata,
     pub summary: SaveSummary,
     pub players: Vec<Player>,
+    pub staff: Vec<Staff>,
     pub clubs: Vec<Club>,
     pub season_stats: Vec<SeasonStatRow>,
     pub competitions: Vec<Competition>,
@@ -509,6 +510,17 @@ pub fn parse_save_with_progress(
     }
 
     progress(ParseProgress {
+        stage: "staff".to_owned(),
+        current: 0,
+        total: 0,
+        message: "正在解析职员".to_owned(),
+    });
+    let staff = crate::staff::read_staff(&game_db, &person_decoder, &contract_decoder, &nations);
+    if staff.is_empty() {
+        warnings.push("staff objects unavailable".to_owned());
+    }
+
+    progress(ParseProgress {
         stage: "season_stats".to_owned(),
         current: 0,
         total: 0,
@@ -593,9 +605,14 @@ pub fn parse_save_with_progress(
         .count();
     let club_finance_months = finance_data.months.len();
     let stadium_count = stadiums.len();
+    let staff_with_attributes = staff.iter().filter(|row| row.attributes.is_some()).count();
+    let staff_with_roles = staff.iter().filter(|row| row.roles.is_some()).count();
     let report = ParseReport {
         save: summary.clone(),
         players: players.len(),
+        staff: staff.len(),
+        staff_with_attributes,
+        staff_with_roles,
         clubs: clubs.clubs.len(),
         season_stats: season_stats.len(),
         contracts,
@@ -619,6 +636,7 @@ pub fn parse_save_with_progress(
         metadata,
         summary,
         players,
+        staff,
         clubs: clubs.clubs,
         season_stats,
         competitions: competitions.competitions,

@@ -7,7 +7,9 @@ use std::collections::HashMap;
 use chrono::NaiveDate;
 
 use crate::bytes::find_bytes;
-use crate::layout::{ContractLayout, MISSING_U32, decode_date, read_u8, read_u16, read_u32};
+use crate::layout::{
+    ContractLayout, MISSING_U32, StaffLayout, decode_date, read_u8, read_u16, read_u32,
+};
 use crate::model::{Clause, Contract, ContractChainEntry};
 
 #[derive(Debug, Clone)]
@@ -44,6 +46,21 @@ impl ContractLocation {
     pub fn is_expired(&self, clock: NaiveDate) -> bool {
         self.end.is_some_and(|end| end < clock)
     }
+}
+
+/// One staff contract record. Staff rows use the latest started record for the
+/// employer, job and terms; the full player contract chain is not needed.
+#[derive(Debug, Clone)]
+pub struct StaffContractRecord {
+    pub tag_offset: usize,
+    pub club_uid: Option<u32>,
+    pub club_name: Option<String>,
+    pub team_id: Option<u32>,
+    pub wage: Option<u32>,
+    pub start: Option<NaiveDate>,
+    pub end: Option<NaiveDate>,
+    pub has_terms: bool,
+    pub job_code: Option<u8>,
 }
 
 pub struct ContractDecoder<'a> {
@@ -246,6 +263,28 @@ impl ContractDecoder<'_> {
             loan_end,
             chain,
         })
+    }
+
+    /// Decode one staff contract record at `tag_offset`. The job code is the byte
+    /// FM27 stores past the record's selector; a missing or zero byte is `None`.
+    pub fn decode_staff_record(&self, game_db: &[u8], tag_offset: usize) -> StaffContractRecord {
+        let record = self.decode_chain_record(game_db, tag_offset);
+        let job_code = read_u8(
+            game_db,
+            tag_offset + ContractLayout::SELECTOR_OFFSET + StaffLayout::JOB_OFFSET_FROM_SELECTOR,
+        )
+        .filter(|value| *value != 0);
+        StaffContractRecord {
+            tag_offset,
+            club_uid: record.club_uid,
+            club_name: record.club_name,
+            team_id: Some(record.team_id),
+            wage: record.has_terms.then_some(record.wage),
+            start: record.start,
+            end: record.end,
+            has_terms: record.has_terms,
+            job_code,
+        }
     }
 
     /// Locate the contract record that supplies the current terms for a player.

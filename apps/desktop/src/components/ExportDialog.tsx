@@ -1,11 +1,11 @@
 import { useMemo, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Check, Download, FileJson, FileSpreadsheet, Loader2 } from "lucide-react";
-import { exportPlayers, pickExportFile } from "@/lib/api";
-import { buildPlayerQuery, usePlayerPage } from "@/lib/query";
+import { exportPlayers, exportStaff, pickExportFile } from "@/lib/api";
+import { buildPlayerQuery, buildStaffQuery, usePlayerPage, useStaffPage } from "@/lib/query";
 import { formatNumber } from "@/lib/i18n";
 import { useI18n } from "@/lib/useI18n";
-import { useAppStore, EMPTY_FILTERS } from "@/store/app";
+import { EMPTY_STAFF_FILTERS, useAppStore, EMPTY_FILTERS } from "@/store/app";
 import { Button, Modal } from "./ui";
 
 type Scope = "filter" | "selected" | "all";
@@ -16,43 +16,72 @@ export function ExportDialog() {
   const setOpen = useAppStore((state) => state.setExportOpen);
   const saveId = useAppStore((state) => state.saveId);
   const summary = useAppStore((state) => state.summary);
+  const viewMode = useAppStore((state) => state.viewMode);
   const filters = useAppStore((state) => state.filters);
   const sort = useAppStore((state) => state.sort);
   const hiddenEnabled = useAppStore((state) => state.hiddenEnabled);
   const selectedUid = useAppStore((state) => state.selectedUid);
   const compareUids = useAppStore((state) => state.compareUids);
+  const staffFilters = useAppStore((state) => state.staffFilters);
+  const staffSort = useAppStore((state) => state.staffSort);
+  const selectedStaffUid = useAppStore((state) => state.selectedStaffUid);
   const pushToast = useAppStore((state) => state.pushToast);
-  const page = usePlayerPage();
+  const exportingStaff = viewMode === "staff";
+  const page = usePlayerPage(!exportingStaff);
+  const staffPage = useStaffPage(exportingStaff);
   const [scope, setScope] = useState<Scope>("filter");
   const [format, setFormat] = useState<"csv" | "json">("csv");
   const [busy, setBusy] = useState(false);
   const queryClient = useQueryClient();
 
   const selected = useMemo(() => {
+    if (exportingStaff) {
+      return selectedStaffUid != null ? [selectedStaffUid] : [];
+    }
     const ids = new Set<number>(compareUids);
     if (selectedUid != null) ids.add(selectedUid);
     return [...ids];
-  }, [compareUids, selectedUid]);
+  }, [compareUids, exportingStaff, selectedStaffUid, selectedUid]);
 
   const exportNow = async () => {
     if (!saveId) return;
-    const base = buildPlayerQuery(
-      saveId,
-      scope === "all" ? EMPTY_FILTERS : filters,
-      sort,
-      0,
-      100000,
-      hiddenEnabled,
-    );
-    base.uids = scope === "selected" ? selected : [];
-    const defaultName = `fm27-${summary?.save_name ?? "players"}-${new Date()
+    const defaultName = `fm27-${summary?.save_name ?? (exportingStaff ? "staff" : "players")}-${new Date()
       .toISOString()
       .slice(0, 10)}.${format}`;
     const path = await pickExportFile(defaultName, format);
     if (!path) return;
     setBusy(true);
     try {
-      const report = await exportPlayers(base, format, path);
+      const report = exportingStaff
+        ? await exportStaff(
+            {
+              ...buildStaffQuery(
+                saveId,
+                scope === "all" ? EMPTY_STAFF_FILTERS : staffFilters,
+                staffSort,
+                0,
+                100000,
+              ),
+              uids: scope === "selected" ? selected : [],
+            },
+            format,
+            path,
+          )
+        : await exportPlayers(
+            {
+              ...buildPlayerQuery(
+                saveId,
+                scope === "all" ? EMPTY_FILTERS : filters,
+                sort,
+                0,
+                100000,
+                hiddenEnabled,
+              ),
+              uids: scope === "selected" ? selected : [],
+            },
+            format,
+            path,
+          );
       pushToast({
         title: t("toast.exportDone"),
         description: t("toast.exportDoneDescription", {
@@ -61,7 +90,9 @@ export function ExportDialog() {
         }),
         tone: "success",
       });
-      await queryClient.invalidateQueries({ queryKey: ["players"] });
+      await queryClient.invalidateQueries({
+        queryKey: [exportingStaff ? "staff" : "players"],
+      });
       setOpen(false);
     } catch (error) {
       pushToast({ title: t("toast.exportFailed"), description: String(error), tone: "error" });
@@ -70,12 +101,20 @@ export function ExportDialog() {
     }
   };
 
+  const total = exportingStaff ? (staffPage.data?.total ?? 0) : (page.data?.total ?? 0);
+  const countLabel = (count: number) =>
+    exportingStaff
+      ? t("common.staffCount", { count: formatNumber(count, locale) })
+      : t("common.playersCount", { count: formatNumber(count, locale) });
+
   return (
     <Modal
       open={open}
       onClose={() => setOpen(false)}
-      title={t("export.title")}
-      description={t("export.description")}
+      title={t(exportingStaff ? "export.titleStaff" : "export.title")}
+      description={t(
+        exportingStaff ? "export.descriptionStaff" : "export.description",
+      )}
       width="max-w-[520px]"
       footer={
         <>
@@ -103,18 +142,20 @@ export function ExportDialog() {
             [
               "filter",
               t("export.currentFilter"),
-              t("common.playersCount", {
-                count: formatNumber(page.data?.total ?? 0, locale),
-              }),
+              countLabel(total),
             ],
             [
               "selected",
-              t("export.selected"),
+              t(exportingStaff ? "export.selectedStaff" : "export.selected"),
               selected.length
-                ? t("common.playersCount", { count: selected.length })
+                ? countLabel(selected.length)
                 : t("export.notSelected"),
             ],
-            ["all", t("export.all"), t("export.skipFilters")],
+            [
+              "all",
+              t(exportingStaff ? "export.allStaff" : "export.all"),
+              t("export.skipFilters"),
+            ],
           ].map(([value, label, detail]) => (
             <button
               key={value}
@@ -175,7 +216,7 @@ export function ExportDialog() {
         </div>
 
         <div className="rounded-xl border border-[var(--line)] bg-[var(--surface-2)] px-3 py-2 text-[10px] leading-relaxed text-[var(--muted)]">
-          {t("export.note")}
+          {t(exportingStaff ? "export.noteStaff" : "export.note")}
         </div>
       </div>
     </Modal>

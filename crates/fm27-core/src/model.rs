@@ -6,7 +6,7 @@ use chrono::{Datelike, NaiveDate};
 use serde::de::{MapAccess, Visitor};
 use serde::{Deserialize, Serialize, Serializer, ser::SerializeMap};
 
-use crate::layout::{ATTRIBUTE_KEYS, POSITION_KEYS};
+use crate::layout::{ATTRIBUTE_KEYS, POSITION_KEYS, STAFF_ATTRIBUTE_KEYS};
 
 /// The game allocates Unique IDs to people it creates after the save starts from this
 /// range. Database people stay below it, including the 2,000,000,000+ IDs FM27 uses for
@@ -23,6 +23,10 @@ pub fn attribute_index(key: &str) -> Option<usize> {
 
 pub fn position_index(key: &str) -> Option<usize> {
     POSITION_KEYS.iter().position(|name| *name == key)
+}
+
+pub fn staff_attribute_index(key: &str) -> Option<usize> {
+    STAFF_ATTRIBUTE_KEYS.iter().position(|name| *name == key)
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -88,6 +92,69 @@ impl Serialize for Attributes {
     fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
         let mut map = serializer.serialize_map(Some(52))?;
         for (key, value) in ATTRIBUTE_KEYS.iter().zip(self.values.iter()) {
+            map.serialize_entry(key, value)?;
+        }
+        map.end()
+    }
+}
+
+/// The 21 rated staff-profile attributes on the displayed 1-20 scale.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct StaffAttributes {
+    pub values: [u8; 21],
+}
+
+impl StaffAttributes {
+    pub fn get(&self, key: &str) -> Option<u8> {
+        staff_attribute_index(key).map(|index| self.values[index])
+    }
+
+    pub fn to_map(&self) -> BTreeMap<&'static str, u8> {
+        STAFF_ATTRIBUTE_KEYS
+            .iter()
+            .copied()
+            .zip(self.values.iter().copied())
+            .collect()
+    }
+}
+
+impl<'de> Deserialize<'de> for StaffAttributes {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        struct StaffAttributesVisitor;
+
+        impl<'de> Visitor<'de> for StaffAttributesVisitor {
+            type Value = StaffAttributes;
+
+            fn expecting(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+                formatter.write_str("a map of staff attribute names to values")
+            }
+
+            fn visit_map<A>(self, mut map: A) -> Result<Self::Value, A::Error>
+            where
+                A: MapAccess<'de>,
+            {
+                let mut values = [0u8; 21];
+                while let Some(key) = map.next_key::<Cow<'de, str>>()? {
+                    let value = map.next_value::<u8>()?;
+                    if let Some(index) = staff_attribute_index(key.as_ref()) {
+                        values[index] = value;
+                    }
+                }
+                Ok(StaffAttributes { values })
+            }
+        }
+
+        deserializer.deserialize_map(StaffAttributesVisitor)
+    }
+}
+
+impl Serialize for StaffAttributes {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        let mut map = serializer.serialize_map(Some(21))?;
+        for (key, value) in STAFF_ATTRIBUTE_KEYS.iter().zip(self.values.iter()) {
             map.serialize_entry(key, value)?;
         }
         map.end()
@@ -353,6 +420,44 @@ impl Player {
     }
 }
 
+/// One non-player staff member at a club. Read-only in the staff directory.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Staff {
+    pub uid: u32,
+    pub unique_id: Option<u32>,
+    pub name: Option<String>,
+    pub first_name: Option<String>,
+    pub last_name: Option<String>,
+    pub common_name: Option<String>,
+    pub full_name: Option<String>,
+    pub legal_name: Option<String>,
+    pub birth_date: Option<String>,
+    pub age: Option<i32>,
+    pub nation_id: Option<u16>,
+    pub nation_name: Option<String>,
+    pub club_uid: Option<u32>,
+    pub club_name: Option<String>,
+    pub team_id: Option<u32>,
+    pub job_code: Option<u8>,
+    pub job_name: Option<String>,
+    pub ca: Option<u16>,
+    pub pa: Option<i16>,
+    pub wage: Option<u32>,
+    pub contract_start: Option<String>,
+    pub contract_end: Option<String>,
+    pub has_contract: bool,
+    /// Displayed 1-20 values. `None` when the ability block is not readable.
+    pub attributes: Option<StaffAttributes>,
+    /// Stored values: authority/youngsters are 1-20, the other attributes are 1-100.
+    pub raw_attributes: Option<StaffAttributes>,
+    /// Role suitability in [`crate::layout::STAFF_ROLE_KEYS`] order, each 1-20.
+    pub roles: Option<[u8; 15]>,
+    pub best_role_index: Option<u8>,
+    pub best_role_name: Option<String>,
+    pub best_role_score: Option<u8>,
+    pub personality: Option<Personality>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Club {
     pub uid: u32,
@@ -483,6 +588,9 @@ pub struct SaveSummary {
 pub struct ParseReport {
     pub save: SaveSummary,
     pub players: usize,
+    pub staff: usize,
+    pub staff_with_attributes: usize,
+    pub staff_with_roles: usize,
     pub clubs: usize,
     pub season_stats: usize,
     pub contracts: usize,

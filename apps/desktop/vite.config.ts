@@ -1,5 +1,5 @@
 import { readFileSync } from "node:fs";
-import { defineConfig } from "vite";
+import { defineConfig } from "vitest/config";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 import path from "node:path";
@@ -26,6 +26,9 @@ export default defineConfig({
     },
   },
   clearScreen: false,
+  test: {
+    exclude: ["node_modules/**", "tests/**"],
+  },
   server: {
     port: 1420,
     strictPort: true,

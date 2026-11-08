@@ -26,6 +26,13 @@ export interface AttributeRule {
   max: number | null;
 }
 
+export interface StaffRoleRule {
+  id: string;
+  key: string;
+  min: number | null;
+  max: number | null;
+}
+
 export interface Filters {
   search: string;
   clubUids: number[];
@@ -107,6 +114,46 @@ export const EMPTY_CLUB_FILTERS: ClubFilters = {
   hasStadium: null,
 };
 
+export interface StaffFilters {
+  search: string;
+  clubUids: number[];
+  nationIds: number[];
+  jobCodes: number[];
+  ageMin: number | null;
+  ageMax: number | null;
+  caMin: number | null;
+  caMax: number | null;
+  paMin: number | null;
+  paMax: number | null;
+  wageMin: number | null;
+  wageMax: number | null;
+  contractEndBefore: string | null;
+  contractEndAfter: string | null;
+  hasContract: boolean | null;
+  attributes: AttributeRule[];
+  roles: StaffRoleRule[];
+}
+
+export const EMPTY_STAFF_FILTERS: StaffFilters = {
+  search: "",
+  clubUids: [],
+  nationIds: [],
+  jobCodes: [],
+  ageMin: null,
+  ageMax: null,
+  caMin: null,
+  caMax: null,
+  paMin: null,
+  paMax: null,
+  wageMin: null,
+  wageMax: null,
+  contractEndBefore: null,
+  contractEndAfter: null,
+  hasContract: null,
+  attributes: [],
+  roles: [],
+};
+
 export const EMPTY_FILTERS: Filters = {
   search: "",
   clubUids: [],
@@ -167,7 +214,7 @@ export interface PendingEdit {
   request: PlayerEditRequest;
 }
 
-export type ViewMode = "players" | "clubs";
+export type ViewMode = "players" | "clubs" | "staff";
 
 interface AppState {
   saveId: number | null;
@@ -186,6 +233,11 @@ interface AppState {
   clubPageSize: number;
   selectedClubUid: number | null;
   clubEditOpen: boolean;
+  staffFilters: StaffFilters;
+  staffSort: SortRule[];
+  staffPage: number;
+  staffPageSize: number;
+  selectedStaffUid: number | null;
   compareUids: number[];
   hiddenEnabled: boolean;
   displayMode: DisplayMode;
@@ -217,6 +269,17 @@ interface AppState {
   setClubPage: (page: number) => void;
   setSelectedClubUid: (uid: number | null) => void;
   setClubEditOpen: (open: boolean) => void;
+  patchStaffFilters: (patch: Partial<StaffFilters>) => void;
+  resetStaffFilters: () => void;
+  setStaffSort: (by: string, additive?: boolean) => void;
+  setStaffPage: (page: number) => void;
+  setSelectedStaffUid: (uid: number | null) => void;
+  addStaffAttribute: (key: string) => void;
+  updateStaffAttribute: (id: string, patch: Partial<AttributeRule>) => void;
+  removeStaffAttribute: (id: string) => void;
+  addStaffRole: (key: string) => void;
+  updateStaffRole: (id: string, patch: Partial<StaffRoleRule>) => void;
+  removeStaffRole: (id: string) => void;
   saveView: (name: string) => void;
   applyView: (id: string) => void;
   deleteView: (id: string) => void;
@@ -272,6 +335,11 @@ export const useAppStore = create<AppState>((set, get) => ({
   clubPageSize: 100,
   selectedClubUid: null,
   clubEditOpen: false,
+  staffFilters: EMPTY_STAFF_FILTERS,
+  staffSort: [{ by: "ca", dir: "desc" }],
+  staffPage: 0,
+  staffPageSize: 100,
+  selectedStaffUid: null,
   compareUids: [],
   hiddenEnabled: false,
   displayMode: "display",
@@ -304,6 +372,10 @@ export const useAppStore = create<AppState>((set, get) => ({
       clubPage: 0,
       selectedClubUid: null,
       clubEditOpen: false,
+      staffFilters: EMPTY_STAFF_FILTERS,
+      staffSort: [{ by: "ca", dir: "desc" }],
+      staffPage: 0,
+      selectedStaffUid: null,
       compareUids: [],
       editOpen: false,
       pendingOpen: false,
@@ -317,6 +389,9 @@ export const useAppStore = create<AppState>((set, get) => ({
       selectedUid: null,
       selectedClubUid: null,
       clubEditOpen: false,
+      staffFilters: EMPTY_STAFF_FILTERS,
+      staffPage: 0,
+      selectedStaffUid: null,
       compareUids: [],
       settingsOpen: false,
       compareOpen: false,
@@ -362,6 +437,100 @@ export const useAppStore = create<AppState>((set, get) => ({
   setSelectedClubUid: (selectedClubUid) =>
     set({ selectedClubUid, inspectorOpen: selectedClubUid != null }),
   setClubEditOpen: (clubEditOpen) => set({ clubEditOpen }),
+  patchStaffFilters: (patch) =>
+    set((state) => ({ staffFilters: { ...state.staffFilters, ...patch }, staffPage: 0 })),
+  resetStaffFilters: () => set({ staffFilters: EMPTY_STAFF_FILTERS, staffPage: 0 }),
+  setStaffSort: (by, additive = false) =>
+    set((state) => {
+      if (!additive) {
+        const current = state.staffSort[0];
+        const dir: "asc" | "desc" =
+          state.staffSort.length === 1 && current?.by === by && current.dir === "desc"
+            ? "asc"
+            : "desc";
+        return { staffSort: [{ by, dir }], staffPage: 0 };
+      }
+      const existing = state.staffSort.find((rule) => rule.by === by);
+      if (existing) {
+        return {
+          staffSort: state.staffSort.map((rule) =>
+            rule.by === by ? { ...rule, dir: rule.dir === "desc" ? "asc" : "desc" } : rule,
+          ),
+          staffPage: 0,
+        };
+      }
+      return {
+        staffSort: [...state.staffSort, { by, dir: "desc" as const }].slice(0, 4),
+        staffPage: 0,
+      };
+    }),
+  setStaffPage: (staffPage) => set({ staffPage }),
+  setSelectedStaffUid: (selectedStaffUid) =>
+    set({ selectedStaffUid, inspectorOpen: selectedStaffUid != null }),
+  addStaffAttribute: (key) =>
+    set((state) => {
+      if (state.staffFilters.attributes.some((rule) => rule.key === key)) return state;
+      return {
+        staffFilters: {
+          ...state.staffFilters,
+          attributes: [
+            ...state.staffFilters.attributes,
+            { id: `${key}-${Date.now()}`, key, min: null, max: null },
+          ],
+        },
+        staffPage: 0,
+      };
+    }),
+  updateStaffAttribute: (id, patch) =>
+    set((state) => ({
+      staffFilters: {
+        ...state.staffFilters,
+        attributes: state.staffFilters.attributes.map((rule) =>
+          rule.id === id ? { ...rule, ...patch } : rule,
+        ),
+      },
+      staffPage: 0,
+    })),
+  removeStaffAttribute: (id) =>
+    set((state) => ({
+      staffFilters: {
+        ...state.staffFilters,
+        attributes: state.staffFilters.attributes.filter((rule) => rule.id !== id),
+      },
+      staffPage: 0,
+    })),
+  addStaffRole: (key) =>
+    set((state) => {
+      if (state.staffFilters.roles.some((rule) => rule.key === key)) return state;
+      return {
+        staffFilters: {
+          ...state.staffFilters,
+          roles: [
+            ...state.staffFilters.roles,
+            { id: `${key}-${Date.now()}`, key, min: 10, max: null },
+          ],
+        },
+        staffPage: 0,
+      };
+    }),
+  updateStaffRole: (id, patch) =>
+    set((state) => ({
+      staffFilters: {
+        ...state.staffFilters,
+        roles: state.staffFilters.roles.map((rule) =>
+          rule.id === id ? { ...rule, ...patch } : rule,
+        ),
+      },
+      staffPage: 0,
+    })),
+  removeStaffRole: (id) =>
+    set((state) => ({
+      staffFilters: {
+        ...state.staffFilters,
+        roles: state.staffFilters.roles.filter((rule) => rule.id !== id),
+      },
+      staffPage: 0,
+    })),
   saveView: (name) => {
     const trimmed = name.trim();
     if (!trimmed) return;

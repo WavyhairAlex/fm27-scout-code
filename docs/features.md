@@ -8,6 +8,9 @@
   copied before parsing so a save in progress cannot be read half-written.
 - Players: 46,273 records with attributes, hidden attributes, CA/PA, positions,
   personality, traits, contracts, value and status.
+- Staff: club staff directory with the current job, CA/PA, wage and contract dates,
+  21 profile attributes and a 15-role suitability vector. Unreadable attributes or
+  roles stay absent instead of becoming zero.
 - Clubs: more than 26,000 records with team mapping, reputation, last season's
   league position, the current league for the top divisions the resolver covers,
   and, for tracked clubs, training, youth, junior-coaching and youth-recruitment
@@ -42,6 +45,9 @@
 ## Desktop UI
 
 - Filters, multi-column sorting and player profiles.
+- Separate staff workspace with club/job/nation filters, attribute and role-suitability
+  rules, profile attributes, role scores, contract terms and sortable role columns.
+  Staff are read-only.
 - Separate club workspace with searchable club table, overview, squad, finance
   history and owned-stadium/facility-rating panels. The squad lists CA and PA
   with sortable headers, and facility ratings use the game's ten named tiers.

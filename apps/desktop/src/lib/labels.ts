@@ -300,6 +300,148 @@ const ROLE_GROUPS_EN: Record<string, string> = {
   前锋: "Forwards",
 };
 
+const STAFF_ATTRIBUTE_LABELS: Record<Locale, Record<string, string>> = {
+  en: {
+    authority: "Authority",
+    working_with_youngsters: "Working With Youngsters",
+    determination: "Determination",
+    goalkeeping: "Goalkeeping",
+    judging_player_ability: "Judging Player Ability",
+    judging_player_potential: "Judging Player Potential",
+    people_management: "People Management",
+    motivating: "Motivating",
+    physiotherapy: "Physiotherapy",
+    tactical_knowledge: "Tactical Knowledge",
+    attacking: "Attacking",
+    defending: "Defending",
+    fitness: "Fitness",
+    possession: "Possession",
+    technical: "Technical",
+    tactical: "Tactical",
+    data_analysis: "Data Analysis",
+    sports_science: "Sports Science",
+    negotiating: "Negotiating",
+    judging_staff_ability: "Judging Staff Ability",
+    set_pieces: "Set Pieces",
+  },
+  "zh-CN": {
+    authority: "权威",
+    working_with_youngsters: "与年轻球员共事",
+    determination: "意志力",
+    goalkeeping: "门将训练",
+    judging_player_ability: "判断球员能力",
+    judging_player_potential: "判断球员潜力",
+    people_management: "人员管理",
+    motivating: "激励",
+    physiotherapy: "理疗",
+    tactical_knowledge: "战术知识",
+    attacking: "进攻训练",
+    defending: "防守训练",
+    fitness: "体能训练",
+    possession: "控球训练",
+    technical: "技术训练",
+    tactical: "战术训练",
+    data_analysis: "数据分析",
+    sports_science: "运动科学",
+    negotiating: "谈判",
+    judging_staff_ability: "判断职员能力",
+    set_pieces: "定位球训练",
+  },
+};
+
+const STAFF_ROLE_LABELS: Record<Locale, Record<string, string>> = {
+  en: {
+    manager: "Manager",
+    assistant_manager: "Assistant Manager",
+    coach: "Coach",
+    physio: "Physio",
+    scout: "Scout",
+    gk_coach: "Goalkeeping Coach",
+    fitness_coach: "Fitness Coach",
+    chairperson: "Chairperson",
+    director_of_football: "Director of Football",
+    head_of_youth_development: "Head of Youth Development",
+    loan_manager: "Loan Manager",
+    technical_director: "Technical Director",
+    data_analyst: "Data Analyst",
+    sports_scientist: "Sports Scientist",
+    set_piece_coach: "Set Piece Coach",
+  },
+  "zh-CN": {
+    manager: "主教练",
+    assistant_manager: "助理教练",
+    coach: "教练",
+    physio: "理疗师",
+    scout: "球探",
+    gk_coach: "门将教练",
+    fitness_coach: "体能教练",
+    chairperson: "主席",
+    director_of_football: "足球总监",
+    head_of_youth_development: "青训主管",
+    loan_manager: "租借经理",
+    technical_director: "技术总监",
+    data_analyst: "数据分析师",
+    sports_scientist: "运动科学家",
+    set_piece_coach: "定位球教练",
+  },
+};
+
+const STAFF_JOB_LABELS_ZH: Record<number, string> = {
+  2: "教练",
+  4: "主席",
+  6: "董事",
+  8: "总经理",
+  10: "足球总监",
+  12: "理疗师",
+  14: "球探",
+  16: "主教练",
+  20: "助理教练",
+  22: "定位球教练",
+  26: "体能教练",
+  34: "门将教练",
+  38: "首席队医",
+  40: "运动科学主管",
+  48: "运动科学家",
+  50: "首席理疗师",
+  58: "数据分析师",
+  60: "表现分析师",
+  62: "数据分析师",
+  64: "青训主管",
+  70: "主席",
+  86: "租借经理",
+  88: "技术总监",
+};
+
+/** Staff profile attribute name; unknown keys stay as stored. */
+export function staffAttributeLabel(key: string, locale: Locale): string {
+  return STAFF_ATTRIBUTE_LABELS[locale][key] ?? key;
+}
+
+/** Role-suitability name from the save's role order, or its stored English name. */
+export function staffRoleLabel(
+  key: string | null | undefined,
+  fallback: string | null | undefined,
+  locale: Locale,
+): string | null {
+  if (key) {
+    const label = STAFF_ROLE_LABELS[locale][key];
+    if (label) return label;
+  }
+  return fallback ?? key ?? null;
+}
+
+/** The in-game job title; unconfirmed codes keep their English fallback or raw code. */
+export function staffJobLabel(
+  code: number | null | undefined,
+  fallback: string | null | undefined,
+  locale: Locale,
+): string | null {
+  if (code != null && locale === "zh-CN" && STAFF_JOB_LABELS_ZH[code]) {
+    return STAFF_JOB_LABELS_ZH[code];
+  }
+  return fallback ?? (code != null ? `Job #${code}` : null);
+}
+
 const TRAIT_LABELS_ZH: Record<number, string> = {
   0: "左路带球",
   1: "右路带球",

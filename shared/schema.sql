@@ -263,6 +263,68 @@ CREATE TABLE IF NOT EXISTS contracts (
 CREATE INDEX IF NOT EXISTS contracts_wage ON contracts(save_id, wage);
 CREATE INDEX IF NOT EXISTS contracts_end ON contracts(save_id, end_date);
 
+CREATE TABLE IF NOT EXISTS staff (
+  save_id         INTEGER NOT NULL,
+  uid             INTEGER NOT NULL,
+  unique_id       INTEGER,
+  name            TEXT,
+  first_name      TEXT,
+  last_name       TEXT,
+  common_name     TEXT,
+  full_name       TEXT,
+  legal_name      TEXT,
+  birth_date      TEXT,
+  age             INTEGER,
+  nation_id       INTEGER,
+  nation_name     TEXT,
+  club_uid        INTEGER,
+  club_name       TEXT,
+  team_id         INTEGER,
+  job_code        INTEGER,
+  job_name        TEXT,
+  ca              INTEGER,
+  pa              INTEGER,
+  wage            INTEGER,
+  contract_start  TEXT,
+  contract_end    TEXT,
+  has_contract    INTEGER NOT NULL DEFAULT 0,
+  attributes_json TEXT,
+  raw_attributes_json TEXT,
+  roles_json      TEXT,
+  role_manager    INTEGER,
+  role_assistant_manager INTEGER,
+  role_coach      INTEGER,
+  role_physio     INTEGER,
+  role_scout      INTEGER,
+  role_gk_coach   INTEGER,
+  role_fitness_coach INTEGER,
+  role_chairperson INTEGER,
+  role_director_of_football INTEGER,
+  role_head_of_youth_development INTEGER,
+  role_loan_manager INTEGER,
+  role_technical_director INTEGER,
+  role_data_analyst INTEGER,
+  role_sports_scientist INTEGER,
+  role_set_piece_coach INTEGER,
+  best_role_index INTEGER,
+  best_role_name  TEXT,
+  best_role_score INTEGER,
+  data_json       TEXT NOT NULL,
+  PRIMARY KEY (save_id, uid),
+  FOREIGN KEY (save_id) REFERENCES saves(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS staff_name ON staff(save_id, name);
+CREATE INDEX IF NOT EXISTS staff_club ON staff(save_id, club_uid);
+CREATE INDEX IF NOT EXISTS staff_nation ON staff(save_id, nation_id);
+CREATE INDEX IF NOT EXISTS staff_job ON staff(save_id, job_code);
+CREATE INDEX IF NOT EXISTS staff_age ON staff(save_id, age);
+CREATE INDEX IF NOT EXISTS staff_ca ON staff(save_id, ca);
+CREATE INDEX IF NOT EXISTS staff_pa ON staff(save_id, pa);
+CREATE INDEX IF NOT EXISTS staff_wage ON staff(save_id, wage);
+CREATE INDEX IF NOT EXISTS staff_contract_end ON staff(save_id, contract_end);
+CREATE INDEX IF NOT EXISTS staff_best_role ON staff(save_id, best_role_score);
+
 CREATE TABLE IF NOT EXISTS clubs (
   save_id         INTEGER NOT NULL,
   uid             INTEGER NOT NULL,

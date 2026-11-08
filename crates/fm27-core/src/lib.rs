@@ -30,6 +30,7 @@ pub mod reference;
 pub mod roles;
 pub mod season_stats;
 pub mod stadiums;
+pub mod staff;
 pub mod stats_moneyball;
 pub mod store;
 pub mod suspensions;
@@ -42,6 +43,7 @@ pub use editor::{EditChange, PlayerEditor};
 pub use error::{Error, Result};
 pub use model::{
     Club, ClubDetail, ClubLink, Contract, FinanceMonth, ParseReport, Player, SaveSummary, Stadium,
+    Staff,
 };
 pub use parse::{
     ParseProgress, ParsedSave, parse_save, parse_save_with_progress, parser_display_version,

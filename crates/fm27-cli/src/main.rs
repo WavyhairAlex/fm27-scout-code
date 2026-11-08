@@ -75,6 +75,20 @@ enum Command {
         #[arg(long)]
         output: Option<PathBuf>,
     },
+    /// Parse a save and print staff as JSON.
+    Staff {
+        save: PathBuf,
+        #[arg(long, default_value_t = 20)]
+        limit: usize,
+        #[arg(long)]
+        output: Option<PathBuf>,
+        /// Keep only staff whose role-suitability vector decoded.
+        #[arg(long)]
+        with_roles: bool,
+        /// Case-insensitive search over name, club and job.
+        #[arg(long)]
+        search: Option<String>,
+    },
     /// Parse a save and print the parse report.
     Validate { save: PathBuf },
     /// Edit one player in a copy of a save. The source save is never modified.
@@ -236,6 +250,7 @@ fn main() -> Result<()> {
                     "save_id": id,
                     "db": db,
                     "players": parsed.players.len(),
+                    "staff": parsed.staff.len(),
                     "clubs": parsed.clubs.len(),
                     "season_stats": parsed.report.season_stats,
                     "contracts": parsed.report.contracts,
@@ -306,6 +321,48 @@ fn main() -> Result<()> {
             serde_json::to_writer(&mut writer, &parsed.competitions)?;
             writer.flush()?;
             if output.is_some() {
+                println!();
+            }
+        }
+        Command::Staff {
+            save,
+            limit,
+            output,
+            with_roles,
+            search,
+        } => {
+            let parsed = parse_save(&save)?;
+            let needle = search.map(|value| value.to_lowercase());
+            let selected: Vec<_> = parsed
+                .staff
+                .iter()
+                .filter(|row| !with_roles || row.roles.is_some())
+                .filter(|row| {
+                    needle.as_ref().is_none_or(|needle| {
+                        row.name
+                            .as_deref()
+                            .is_some_and(|name| name.to_lowercase().contains(needle))
+                            || row
+                                .club_name
+                                .as_deref()
+                                .is_some_and(|club| club.to_lowercase().contains(needle))
+                            || row
+                                .job_name
+                                .as_deref()
+                                .is_some_and(|job| job.to_lowercase().contains(needle))
+                    })
+                })
+                .take(limit)
+                .collect();
+            let mut writer: Box<dyn Write> = match &output {
+                Some(path) => Box::new(BufWriter::new(std::fs::File::create(path)?)),
+                None => Box::new(BufWriter::new(io::stdout().lock())),
+            };
+            serde_json::to_writer_pretty(&mut writer, &selected)?;
+            writer.flush()?;
+            if let Some(path) = output {
+                eprintln!("wrote {}", path.display());
+            } else {
                 println!();
             }
         }

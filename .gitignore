@@ -12,6 +12,8 @@
 *.db
 *.db-shm
 *.db-wal
+/apps/desktop/test-results
+/apps/desktop/playwright-report
 .DS_Store
 *.tsbuildinfo
 HANDOFF.md

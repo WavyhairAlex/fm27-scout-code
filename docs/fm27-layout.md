@@ -244,6 +244,71 @@ passes, interceptions, headers, clearances, blocks, sprints, possession, saves, 
 Rust implementation: `crates/fm27-core/src/season_stats.rs`; container region support:
 `crates/fm27-core/src/container.rs`.
 
+## Staff objects
+
+Staff objects use the person-header shape with kind byte `1` at header +12. Verified on
+`27.0.0+2486695` and `27.0.0+2493426`:
+
+```text
+header             pindex u32
+uid                +4   u32 (previous person's Unique ID)
+uid copy           +8   u32
+kind               +12  01
+entry count        +13  u8 (7-byte entries follow)
+ability block      header + 21 + 7 * entry_count
+  CA               +0   u16 (1..200)
+  PA               +2   i16 (1..200)
+  r4               +4   u8 (not the displayed job; never used as one)
+  sentinel         +13  12
+  preferences      +14  26 bytes (1..100)
+  block 40         +40  26 bytes (1..100)
+```
+
+The closing person header has `pindex + 1` and a doubled uid; its uid is this person's
+Unique ID. Job codes are read from the current contract record at `tag + selector + 16`,
+or from a no-contract role record at `tag + 32`:
+
+```text
+contract tag      01 00 6c 07
+selector          tag + 5   u32 (pindex + 1)
+team              tag + 9   u32
+wage              tag + 17  u32
+job               selector + 16
+offer marker      selector + 19 (a second tag marks an offer, not a held job)
+
+no-contract tag   01 00 6c 07
+lead              tag + 14  05 05
+selector          tag + 16  u32 (pindex + 1)
+team              tag + 20  u32
+job               tag + 32  u8
+```
+
+Staff profile attributes, displayed on the 1–20 scale:
+
+```text
+preferences +4    authority               1..20
+preferences +12   working with youngsters  1..20
+preferences +13   determination            1..100 (divide by 5 for display)
+block 40 index    1 goalkeeping            2 judging player ability
+                  3 judging player potential 4 people management
+                  5 motivating             6 physiotherapy
+                  7 tactical knowledge     8 attacking
+                  9 defending              10 fitness
+                  11 possession            12 technical
+                  13 tactical              18 data analysis
+                  21 sports science        23 negotiating
+                  24 judging staff ability 25 set pieces
+```
+
+Role suitability is a 15-byte vector found inside the person's object, within 4 KiB of its
+header: each byte is 1..20, preceded by `01`, followed by four zero bytes, and at least one
+value is 10 or higher. The order is **Manager, Assistant Manager, Coach, Physio, Scout,
+Goalkeeping Coach, Fitness Coach, Chairperson, Director of Football, Head of Youth
+Development, Loan Manager, Technical Director, Data Analyst, Sports Scientist, Set Piece
+Coach**.
+
+Rust implementation: `crates/fm27-core/src/staff.rs`.
+
 ## Section schemas observed on the reference save
 
 `game_db` 4000, `game_info` 47, `save_game_summary` 31, `contract_man` 14,

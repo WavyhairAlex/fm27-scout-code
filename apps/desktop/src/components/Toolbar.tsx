@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import {
   BarChart3,
+  BriefcaseBusiness,
   ChevronDown,
   ClipboardList,
   Database,
@@ -38,6 +39,8 @@ export function Toolbar() {
   const patchFilters = useAppStore((state) => state.patchFilters);
   const clubFilters = useAppStore((state) => state.clubFilters);
   const patchClubFilters = useAppStore((state) => state.patchClubFilters);
+  const staffFilters = useAppStore((state) => state.staffFilters);
+  const patchStaffFilters = useAppStore((state) => state.patchStaffFilters);
   const hiddenEnabled = useAppStore((state) => state.hiddenEnabled);
   const setHiddenEnabled = useAppStore((state) => state.setHiddenEnabled);
   const compareUids = useAppStore((state) => state.compareUids);
@@ -52,7 +55,12 @@ export function Toolbar() {
   const { chooseAndOpen, openPath } = useOpenSave();
   const { data: saves = [] } = useSaves();
   const [saveMenuOpen, setSaveMenuOpen] = useState(false);
-  const searchValue = viewMode === "clubs" ? clubFilters.search : filters.search;
+  const searchValue =
+    viewMode === "clubs"
+      ? clubFilters.search
+      : viewMode === "staff"
+        ? staffFilters.search
+        : filters.search;
   const [search, setSearch] = useState(searchValue);
   const saveMenuRef = useRef<HTMLDivElement>(null);
   const debounceRef = useRef<number | null>(null);
@@ -75,6 +83,7 @@ export function Toolbar() {
     if (debounceRef.current) window.clearTimeout(debounceRef.current);
     debounceRef.current = window.setTimeout(() => {
       if (viewMode === "clubs") patchClubFilters({ search: value });
+      else if (viewMode === "staff") patchStaffFilters({ search: value });
       else patchFilters({ search: value });
     }, 180);
   };
@@ -206,6 +215,19 @@ export function Toolbar() {
             <Shield size={11} />
             {t("toolbar.clubs")}
           </button>
+          <button
+            type="button"
+            onClick={() => setViewMode("staff")}
+            className={cn(
+              "focus-ring flex h-6 items-center gap-1 rounded-[5px] px-2 text-[10px] font-medium transition-colors",
+              viewMode === "staff"
+                ? "bg-[var(--surface)] text-[var(--ink)] shadow-sm"
+                : "text-[var(--muted)] hover:text-[var(--ink)]",
+            )}
+          >
+            <BriefcaseBusiness size={11} />
+            {t("toolbar.staff")}
+          </button>
         </div>
       </div>
 
@@ -216,13 +238,21 @@ export function Toolbar() {
             className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-[var(--muted)]"
           />
           <Input
-            id={viewMode === "clubs" ? "club-search" : "global-search"}
+            id={
+              viewMode === "clubs"
+                ? "club-search"
+                : viewMode === "staff"
+                  ? "staff-search"
+                  : "global-search"
+            }
             value={search}
             onChange={(event) => updateSearch(event.target.value)}
             placeholder={
               viewMode === "clubs"
                 ? t("clubs.searchPlaceholder")
-                : t("toolbar.searchPlaceholder")
+                : viewMode === "staff"
+                  ? t("toolbar.searchStaffPlaceholder")
+                  : t("toolbar.searchPlaceholder")
             }
             className="h-8 pl-8 pr-16"
           />

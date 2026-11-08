@@ -2,12 +2,15 @@ import { describe, expect, it } from "vitest";
 import {
   MOCK_PLAYERS,
   MOCK_SAVE_ID,
+  MOCK_STAFF,
   mockAnalysisOverview,
   mockClubDetail,
   mockClubFilterOptions,
   mockQuery,
   mockQueryClubs,
+  mockQueryStaff,
   mockSquadAnalysis,
+  mockStaffFilterOptions,
   mockStatsMoneyball,
   mockValueFinder,
 } from "./mock";
@@ -212,6 +215,69 @@ describe("mock value finder", () => {
     });
     expect(page.total).toBeGreaterThan(0);
     expect(page.rows.length).toBeGreaterThan(0);
+  });
+});
+
+describe("mock staff query", () => {
+  it("searches staff by name, club and job", () => {
+    const page = mockQueryStaff({
+      save_id: MOCK_SAVE_ID,
+      search: "Coach",
+      page_size: 200,
+    });
+    expect(page.total).toBeGreaterThan(0);
+    for (const row of page.rows) {
+      const haystack = [row.name, row.club_name, row.nation_name, row.job_name]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase();
+      expect(haystack).toContain("coach");
+    }
+  });
+
+  it("filters role suitability and profile attributes", () => {
+    const page = mockQueryStaff({
+      save_id: MOCK_SAVE_ID,
+      roles: [{ key: "coach", min: 15 }],
+      attributes: [{ key: "motivating", min: 12 }],
+      has_contract: true,
+      page_size: 200,
+    });
+    expect(page.total).toBeGreaterThan(0);
+    for (const row of page.rows) {
+      expect(row.roles?.[2] ?? 0).toBeGreaterThanOrEqual(15);
+      expect(row.attributes?.motivating ?? 0).toBeGreaterThanOrEqual(12);
+      expect(row.has_contract).toBe(true);
+    }
+  });
+
+  it("sorts and pages staff rows", () => {
+    const first = mockQueryStaff({
+      save_id: MOCK_SAVE_ID,
+      sort: [{ by: "role", dir: "desc" }],
+      page: 0,
+      page_size: 10,
+    });
+    const second = mockQueryStaff({
+      save_id: MOCK_SAVE_ID,
+      sort: [{ by: "role", dir: "desc" }],
+      page: 1,
+      page_size: 10,
+    });
+    expect(first.total).toBe(second.total);
+    expect(first.rows[0].best_role_score ?? 0).toBeGreaterThanOrEqual(
+      first.rows[1].best_role_score ?? 0,
+    );
+    expect(first.rows.some((row) => second.rows.some((next) => next.uid === row.uid))).toBe(false);
+  });
+
+  it("provides staff facets and value ranges", () => {
+    const options = mockStaffFilterOptions();
+    expect(options.clubs.length).toBeGreaterThan(0);
+    expect(options.jobs.length).toBeGreaterThan(0);
+    expect(options.with_contract + options.without_contract).toBe(MOCK_STAFF.length);
+    expect(options.with_attributes).toBe(MOCK_STAFF.length);
+    expect(options.with_roles).toBe(MOCK_STAFF.length);
   });
 });
 

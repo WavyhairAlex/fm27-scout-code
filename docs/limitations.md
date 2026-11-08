@@ -37,6 +37,13 @@
   windows, so it no longer depends on the typed array being populated.
 - Contract clauses, loans and contract chains are parsed; a few unobserved
   fallback structures are explicitly left blank.
+- Staff rows cover people with a club job. National-team appointments have a
+  team id but no club mapping and are excluded, as are people a club lists
+  without any held or no-contract role record and the human manager, whose
+  object has no standard ability block. On the reference saves that leaves 39 of
+  13,809 rows for Milan and 52 of 14,225 for Parma. Staff profile attributes and
+  role suitability stay blank when their blocks cannot be read uniquely; staff
+  are read-only.
 - System-generated players are identified by the game's Unique ID range
   (`2,002,000,000` and above). A generated person that reuses a deleted database
   ID cannot be told apart from a database person by the save alone.

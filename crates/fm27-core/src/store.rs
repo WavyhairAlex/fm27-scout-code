@@ -10,11 +10,13 @@ use rusqlite::{Connection, OptionalExtension, Row, params, params_from_iter};
 use serde::{Deserialize, Serialize};
 
 use crate::error::{Error, Result};
-use crate::layout::{ATTRIBUTE_KEYS, HIDDEN_ATTRIBUTE_KEYS, PERSONALITY_KEYS, POSITION_KEYS};
+use crate::layout::{
+    ATTRIBUTE_KEYS, HIDDEN_ATTRIBUTE_KEYS, PERSONALITY_KEYS, POSITION_KEYS, STAFF_ATTRIBUTE_KEYS,
+};
 use crate::model::{
     Attributes, Club, ClubDetail, ClubLink, Competition, Contract, FinanceMonth,
     GENERATED_UNIQUE_ID_MINIMUM, ParseReport, Personality, Player, Positions, SaveSummary, Stadium,
-    Trait, attribute_index, is_generated_unique_id,
+    Staff, StaffAttributes, Trait, attribute_index, is_generated_unique_id,
 };
 use crate::parse::ParsedSave;
 
@@ -59,6 +61,13 @@ const PLAYER_ROWS_SELECT: &str =
             p.unique_id
      FROM players p
      LEFT JOIN contracts c ON c.save_id = p.save_id AND c.player_uid = p.uid";
+
+const STAFF_ROWS_SELECT: &str = "SELECT s.uid, s.unique_id, s.name, s.age, s.club_uid, s.club_name,
+            s.nation_id, s.nation_name, s.job_code, s.job_name, s.ca, s.pa, s.wage,
+            s.contract_start, s.contract_end, s.has_contract, s.attributes_json,
+            s.roles_json, s.best_role_index, s.best_role_name, s.best_role_score,
+            s.data_json
+     FROM staff s";
 
 const MAX_EXPORT_ROWS: usize = 500_000;
 
@@ -179,6 +188,80 @@ pub struct PlayerPage {
     pub page: u32,
     pub page_size: u32,
     pub rows: Vec<PlayerRow>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(default)]
+pub struct StaffRoleFilter {
+    /// One of [`STAFF_ROLE_KEYS`].
+    pub key: String,
+    pub min: Option<u8>,
+    pub max: Option<u8>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(default)]
+pub struct StaffQuery {
+    pub save_id: i64,
+    pub search: Option<String>,
+    pub uids: Vec<u32>,
+    pub club_uids: Vec<u32>,
+    pub nation_ids: Vec<u16>,
+    pub job_codes: Vec<u8>,
+    pub age_min: Option<i32>,
+    pub age_max: Option<i32>,
+    pub ca_min: Option<u16>,
+    pub ca_max: Option<u16>,
+    pub pa_min: Option<i16>,
+    pub pa_max: Option<i16>,
+    pub wage_min: Option<u32>,
+    pub wage_max: Option<u32>,
+    pub contract_end_before: Option<String>,
+    pub contract_end_after: Option<String>,
+    pub has_contract: Option<bool>,
+    /// Staff profile attributes, keyed by [`STAFF_ATTRIBUTE_KEYS`].
+    pub attributes: Vec<AttributeFilter>,
+    /// Role-suitability thresholds, keyed by [`STAFF_ROLE_KEYS`].
+    pub roles: Vec<StaffRoleFilter>,
+    pub sort: Vec<SortRule>,
+    pub sort_by: Option<String>,
+    pub sort_dir: Option<String>,
+    pub page: Option<u32>,
+    pub page_size: Option<u32>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct StaffRow {
+    pub uid: u32,
+    pub unique_id: Option<u32>,
+    pub name: Option<String>,
+    pub age: Option<i32>,
+    pub club_uid: Option<u32>,
+    pub club_name: Option<String>,
+    pub nation_id: Option<u16>,
+    pub nation_name: Option<String>,
+    pub job_code: Option<u8>,
+    pub job_name: Option<String>,
+    pub ca: Option<u16>,
+    pub pa: Option<i16>,
+    pub wage: Option<u32>,
+    pub contract_start: Option<String>,
+    pub contract_end: Option<String>,
+    pub has_contract: bool,
+    pub attributes: Option<StaffAttributes>,
+    pub roles: Option<[u8; 15]>,
+    pub best_role_index: Option<u8>,
+    pub best_role_name: Option<String>,
+    pub best_role_score: Option<u8>,
+    pub personality: Option<Personality>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct StaffPage {
+    pub total: u64,
+    pub page: u32,
+    pub page_size: u32,
+    pub rows: Vec<StaffRow>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -345,6 +428,7 @@ pub struct SaveRecord {
     pub parser_version: String,
     pub parsed_at: String,
     pub players: u64,
+    pub staff: u64,
     pub clubs: u64,
     pub contracts: u64,
 }
@@ -385,6 +469,25 @@ pub struct FilterOptions {
     pub max_value: Option<u32>,
     pub min_wage: Option<u32>,
     pub max_wage: Option<u32>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct StaffFilterOptions {
+    pub clubs: Vec<FilterOption>,
+    pub nations: Vec<FilterOption>,
+    pub jobs: Vec<FilterOption>,
+    pub min_age: Option<i32>,
+    pub max_age: Option<i32>,
+    pub min_ca: Option<u16>,
+    pub max_ca: Option<u16>,
+    pub min_pa: Option<i16>,
+    pub max_pa: Option<i16>,
+    pub min_wage: Option<u32>,
+    pub max_wage: Option<u32>,
+    pub with_contract: u64,
+    pub without_contract: u64,
+    pub with_attributes: u64,
+    pub with_roles: u64,
 }
 
 impl Store {
@@ -620,6 +723,88 @@ impl Store {
                         serde_json::to_string(&contract.chain)?,
                     ])?;
                 }
+            }
+        }
+
+        {
+            let mut staff_stmt = transaction.prepare(
+                "INSERT INTO staff
+                 (save_id, uid, unique_id, name, first_name, last_name, common_name, full_name,
+                  legal_name, birth_date, age, nation_id, nation_name, club_uid, club_name,
+                  team_id, job_code, job_name, ca, pa, wage, contract_start, contract_end,
+                  has_contract, attributes_json, raw_attributes_json, roles_json,
+                  role_manager, role_assistant_manager, role_coach, role_physio, role_scout,
+                  role_gk_coach, role_fitness_coach, role_chairperson, role_director_of_football,
+                  role_head_of_youth_development, role_loan_manager, role_technical_director,
+                  role_data_analyst, role_sports_scientist, role_set_piece_coach,
+                  best_role_index, best_role_name, best_role_score, data_json)
+                 VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18,
+                         ?19,?20,?21,?22,?23,?24,?25,?26,?27,?28,?29,?30,?31,?32,?33,?34,
+                         ?35,?36,?37,?38,?39,?40,?41,?42,?43,?44,?45,?46)",
+            )?;
+            for staff in &parsed.staff {
+                let roles = staff.roles.as_ref();
+                let role = |index: usize| roles.map(|values| i64::from(values[index]));
+                staff_stmt.execute(params![
+                    save_id,
+                    staff.uid,
+                    staff.unique_id,
+                    staff.name,
+                    staff.first_name,
+                    staff.last_name,
+                    staff.common_name,
+                    staff.full_name,
+                    staff.legal_name,
+                    staff.birth_date,
+                    staff.age,
+                    staff.nation_id,
+                    staff.nation_name,
+                    staff.club_uid,
+                    staff.club_name,
+                    staff.team_id,
+                    staff.job_code.map(i64::from),
+                    staff.job_name,
+                    staff.ca,
+                    staff.pa,
+                    staff.wage,
+                    staff.contract_start,
+                    staff.contract_end,
+                    staff.has_contract,
+                    staff
+                        .attributes
+                        .as_ref()
+                        .map(serde_json::to_string)
+                        .transpose()?,
+                    staff
+                        .raw_attributes
+                        .as_ref()
+                        .map(serde_json::to_string)
+                        .transpose()?,
+                    staff
+                        .roles
+                        .as_ref()
+                        .map(serde_json::to_string)
+                        .transpose()?,
+                    role(0),
+                    role(1),
+                    role(2),
+                    role(3),
+                    role(4),
+                    role(5),
+                    role(6),
+                    role(7),
+                    role(8),
+                    role(9),
+                    role(10),
+                    role(11),
+                    role(12),
+                    role(13),
+                    role(14),
+                    staff.best_role_index.map(i64::from),
+                    staff.best_role_name,
+                    staff.best_role_score.map(i64::from),
+                    serde_json::to_string(staff)?,
+                ])?;
             }
         }
 
@@ -887,6 +1072,7 @@ impl Store {
             "SELECT s.id, s.path, s.file_name, s.game, s.build, s.game_date, s.parser_version,
                     s.parsed_at,
                     (SELECT COUNT(*) FROM players p WHERE p.save_id = s.id),
+                    (SELECT COUNT(*) FROM staff st WHERE st.save_id = s.id),
                     (SELECT COUNT(*) FROM clubs c WHERE c.save_id = s.id),
                     (SELECT COUNT(*) FROM contracts c WHERE c.save_id = s.id)
              FROM saves s ORDER BY s.parsed_at DESC",
@@ -902,8 +1088,9 @@ impl Store {
                 parser_version: row.get(6)?,
                 parsed_at: row.get(7)?,
                 players: row.get(8)?,
-                clubs: row.get(9)?,
-                contracts: row.get(10)?,
+                staff: row.get(9)?,
+                clubs: row.get(10)?,
+                contracts: row.get(11)?,
             })
         })?;
         rows.collect::<std::result::Result<Vec<_>, _>>()
@@ -1055,6 +1242,71 @@ impl Store {
     pub fn query_all(&self, query: &PlayerQuery) -> Result<Vec<PlayerRow>> {
         let mut rows = Vec::new();
         self.stream_players(query, |row| {
+            rows.push(row);
+            Ok(())
+        })?;
+        Ok(rows)
+    }
+
+    pub fn query_staff(&self, query: &StaffQuery) -> Result<StaffPage> {
+        let mut params: Vec<Value> = Vec::new();
+        let where_sql = build_staff_where(query, &mut params)?;
+        let count_sql = format!("SELECT COUNT(*) FROM staff s WHERE {where_sql}");
+        let total: u64 =
+            self.conn
+                .query_row(&count_sql, params_from_iter(params.iter()), |row| {
+                    row.get(0)
+                })?;
+        let page = query.page.unwrap_or(0);
+        let page_size = query.page_size.unwrap_or(150).clamp(1, 500);
+        let order = staff_order_by(query);
+        let sql = format!(
+            "{STAFF_ROWS_SELECT}
+             WHERE {where_sql}
+             {order}
+             LIMIT ? OFFSET ?"
+        );
+        let mut page_params = params;
+        page_params.push(Value::Integer(page_size as i64));
+        page_params.push(Value::Integer((page as i64) * page_size as i64));
+        let mut statement = self.conn.prepare(&sql)?;
+        let rows = statement.query_map(params_from_iter(page_params.iter()), map_staff_row)?;
+        let rows = rows.collect::<std::result::Result<Vec<_>, _>>()?;
+        Ok(StaffPage {
+            total,
+            page,
+            page_size,
+            rows,
+        })
+    }
+
+    /// Stream every matching staff row through `consume`, for CSV/JSON export.
+    pub fn stream_staff<F>(&self, query: &StaffQuery, mut consume: F) -> Result<usize>
+    where
+        F: FnMut(StaffRow) -> Result<()>,
+    {
+        let mut params: Vec<Value> = Vec::new();
+        let where_sql = build_staff_where(query, &mut params)?;
+        let order = staff_order_by(query);
+        let sql = format!(
+            "{STAFF_ROWS_SELECT}
+             WHERE {where_sql}
+             {order}
+             LIMIT {MAX_EXPORT_ROWS}"
+        );
+        let mut statement = self.conn.prepare(&sql)?;
+        let mut rows = statement.query(params_from_iter(params.iter()))?;
+        let mut count = 0usize;
+        while let Some(row) = rows.next()? {
+            consume(map_staff_row(row)?)?;
+            count += 1;
+        }
+        Ok(count)
+    }
+
+    pub fn query_all_staff(&self, query: &StaffQuery) -> Result<Vec<StaffRow>> {
+        let mut rows = Vec::new();
+        self.stream_staff(query, |row| {
             rows.push(row);
             Ok(())
         })?;
@@ -2387,6 +2639,132 @@ impl Store {
         })
     }
 
+    pub fn staff_filter_options(
+        &self,
+        save_id: i64,
+        query: Option<&StaffQuery>,
+    ) -> Result<StaffFilterOptions> {
+        let mut base = query.cloned().unwrap_or_default();
+        base.save_id = save_id;
+
+        let mut club_query = base.clone();
+        club_query.club_uids.clear();
+        let clubs = self.staff_facet_counts(
+            &club_query,
+            "s.club_uid",
+            "MAX(s.club_name)",
+            Some("s.club_uid IS NOT NULL"),
+            "COUNT(*) DESC, s.club_uid",
+        )?;
+
+        let mut nation_query = base.clone();
+        nation_query.nation_ids.clear();
+        let nations = self.staff_facet_counts(
+            &nation_query,
+            "s.nation_id",
+            "COALESCE(MAX(s.nation_name), 'Nation #' || s.nation_id)",
+            Some("s.nation_id IS NOT NULL"),
+            "COUNT(*) DESC, s.nation_id",
+        )?;
+
+        let mut job_query = base.clone();
+        job_query.job_codes.clear();
+        let jobs = self.staff_facet_counts(
+            &job_query,
+            "s.job_code",
+            "COALESCE(MAX(s.job_name), 'Job #' || s.job_code)",
+            Some("s.job_code IS NOT NULL"),
+            "COUNT(*) DESC, s.job_code",
+        )?;
+
+        let ranges = self.conn.query_row(
+            "SELECT MIN(age), MAX(age), MIN(ca), MAX(ca), MIN(pa), MAX(pa),
+                    MIN(wage), MAX(wage)
+             FROM staff WHERE save_id = ?1",
+            params![save_id],
+            |row| {
+                Ok((
+                    row.get::<_, Option<i32>>(0)?,
+                    row.get::<_, Option<i32>>(1)?,
+                    row.get::<_, Option<u16>>(2)?,
+                    row.get::<_, Option<u16>>(3)?,
+                    row.get::<_, Option<i16>>(4)?,
+                    row.get::<_, Option<i16>>(5)?,
+                    row.get::<_, Option<u32>>(6)?,
+                    row.get::<_, Option<u32>>(7)?,
+                ))
+            },
+        )?;
+        let coverage = self.conn.query_row(
+            "SELECT
+               COALESCE(SUM(CASE WHEN has_contract = 1 THEN 1 ELSE 0 END), 0),
+               COALESCE(SUM(CASE WHEN has_contract = 0 THEN 1 ELSE 0 END), 0),
+               COALESCE(SUM(CASE WHEN attributes_json IS NOT NULL THEN 1 ELSE 0 END), 0),
+               COALESCE(SUM(CASE WHEN roles_json IS NOT NULL THEN 1 ELSE 0 END), 0)
+             FROM staff WHERE save_id = ?1",
+            params![save_id],
+            |row| {
+                Ok((
+                    row.get::<_, i64>(0)?,
+                    row.get::<_, i64>(1)?,
+                    row.get::<_, i64>(2)?,
+                    row.get::<_, i64>(3)?,
+                ))
+            },
+        )?;
+
+        Ok(StaffFilterOptions {
+            clubs,
+            nations,
+            jobs,
+            min_age: ranges.0,
+            max_age: ranges.1,
+            min_ca: ranges.2,
+            max_ca: ranges.3,
+            min_pa: ranges.4,
+            max_pa: ranges.5,
+            min_wage: ranges.6,
+            max_wage: ranges.7,
+            with_contract: coverage.0 as u64,
+            without_contract: coverage.1 as u64,
+            with_attributes: coverage.2 as u64,
+            with_roles: coverage.3 as u64,
+        })
+    }
+
+    fn staff_facet_counts(
+        &self,
+        query: &StaffQuery,
+        group: &str,
+        name: &str,
+        extra: Option<&str>,
+        order: &str,
+    ) -> Result<Vec<FilterOption>> {
+        let mut params: Vec<Value> = Vec::new();
+        let mut where_sql = build_staff_where(query, &mut params)?;
+        if let Some(extra) = extra {
+            where_sql.push_str(" AND ");
+            where_sql.push_str(extra);
+        }
+        let sql = format!(
+            "SELECT {group}, {name}, COUNT(*)
+             FROM staff s
+             WHERE {where_sql}
+             GROUP BY {group}
+             ORDER BY {order}"
+        );
+        let mut statement = self.conn.prepare(&sql)?;
+        let rows = statement.query_map(params_from_iter(params.iter()), |row| {
+            Ok(FilterOption {
+                id: row.get(0)?,
+                name: row.get(1)?,
+                count: row.get(2)?,
+            })
+        })?;
+        rows.collect::<std::result::Result<Vec<_>, _>>()
+            .map_err(Error::from)
+    }
+
     fn facet_counts(
         &self,
         query: &PlayerQuery,
@@ -2671,6 +3049,53 @@ fn map_player_row(row: &Row<'_>, include_hidden: bool) -> rusqlite::Result<Playe
         player.personality = None;
     }
     Ok(player)
+}
+
+fn map_staff_row(row: &Row<'_>) -> rusqlite::Result<StaffRow> {
+    let data_json: String = row.get(21)?;
+    let personality = serde_json::from_str::<Staff>(&data_json)
+        .ok()
+        .and_then(|staff| staff.personality);
+    Ok(StaffRow {
+        uid: row.get(0)?,
+        unique_id: row.get(1)?,
+        name: row.get(2)?,
+        age: row.get(3)?,
+        club_uid: row.get(4)?,
+        club_name: row.get(5)?,
+        nation_id: row.get(6)?,
+        nation_name: row.get(7)?,
+        job_code: row
+            .get::<_, Option<i64>>(8)?
+            .and_then(|value| u8::try_from(value).ok()),
+        job_name: row.get(9)?,
+        ca: row
+            .get::<_, Option<i64>>(10)?
+            .and_then(|value| u16::try_from(value).ok()),
+        pa: row
+            .get::<_, Option<i64>>(11)?
+            .and_then(|value| i16::try_from(value).ok()),
+        wage: row
+            .get::<_, Option<i64>>(12)?
+            .and_then(|value| u32::try_from(value).ok()),
+        contract_start: row.get(13)?,
+        contract_end: row.get(14)?,
+        has_contract: row.get::<_, i64>(15)? != 0,
+        attributes: row
+            .get::<_, Option<String>>(16)?
+            .and_then(|text| serde_json::from_str(&text).ok()),
+        roles: row
+            .get::<_, Option<String>>(17)?
+            .and_then(|text| serde_json::from_str(&text).ok()),
+        best_role_index: row
+            .get::<_, Option<i64>>(18)?
+            .and_then(|value| u8::try_from(value).ok()),
+        best_role_name: row.get(19)?,
+        best_role_score: row
+            .get::<_, Option<i64>>(20)?
+            .and_then(|value| u8::try_from(value).ok()),
+        personality,
+    })
 }
 
 fn club_query_uses_aggregate_filters(query: &ClubQuery) -> bool {
@@ -3050,6 +3475,115 @@ fn build_where(query: &PlayerQuery, params: &mut Vec<Value>) -> Result<String> {
     Ok(clauses.join(" AND "))
 }
 
+fn build_staff_where(query: &StaffQuery, params: &mut Vec<Value>) -> Result<String> {
+    let mut clauses = vec!["s.save_id = ?".to_owned()];
+    params.push(Value::Integer(query.save_id));
+
+    if let Some(search) = query
+        .search
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+    {
+        clauses.push(
+            "(s.name LIKE ? COLLATE NOCASE OR s.club_name LIKE ? COLLATE NOCASE \
+              OR s.job_name LIKE ? COLLATE NOCASE OR s.nation_name LIKE ? COLLATE NOCASE)"
+                .to_owned(),
+        );
+        let pattern = format!("%{search}%");
+        for _ in 0..4 {
+            params.push(Value::Text(pattern.clone()));
+        }
+    }
+    if !query.uids.is_empty() {
+        let placeholders = vec!["?"; query.uids.len()].join(",");
+        clauses.push(format!("s.uid IN ({placeholders})"));
+        for id in &query.uids {
+            params.push(Value::Integer(*id as i64));
+        }
+    }
+    if !query.club_uids.is_empty() {
+        let placeholders = vec!["?"; query.club_uids.len()].join(",");
+        clauses.push(format!("s.club_uid IN ({placeholders})"));
+        for id in &query.club_uids {
+            params.push(Value::Integer(*id as i64));
+        }
+    }
+    if !query.nation_ids.is_empty() {
+        let placeholders = vec!["?"; query.nation_ids.len()].join(",");
+        clauses.push(format!("s.nation_id IN ({placeholders})"));
+        for id in &query.nation_ids {
+            params.push(Value::Integer(*id as i64));
+        }
+    }
+    if !query.job_codes.is_empty() {
+        let placeholders = vec!["?"; query.job_codes.len()].join(",");
+        clauses.push(format!("s.job_code IN ({placeholders})"));
+        for code in &query.job_codes {
+            params.push(Value::Integer(i64::from(*code)));
+        }
+    }
+    add_range(query.age_min, query.age_max, "s.age", params, &mut clauses);
+    add_range(query.ca_min, query.ca_max, "s.ca", params, &mut clauses);
+    add_range(query.pa_min, query.pa_max, "s.pa", params, &mut clauses);
+    add_range(
+        query.wage_min,
+        query.wage_max,
+        "s.wage",
+        params,
+        &mut clauses,
+    );
+    if let Some(before) = &query.contract_end_before {
+        clauses.push("s.contract_end <= ?".to_owned());
+        params.push(Value::Text(before.clone()));
+    }
+    if let Some(after) = &query.contract_end_after {
+        clauses.push("s.contract_end >= ?".to_owned());
+        params.push(Value::Text(after.clone()));
+    }
+    if let Some(has_contract) = query.has_contract {
+        clauses.push("s.has_contract = ?".to_owned());
+        params.push(Value::Integer(if has_contract { 1 } else { 0 }));
+    }
+    for filter in &query.attributes {
+        if !STAFF_ATTRIBUTE_KEYS.contains(&filter.key.as_str()) {
+            return Err(Error::parse(format!(
+                "unknown staff attribute filter {:?}",
+                filter.key
+            )));
+        }
+        let expression = format!("json_extract(s.attributes_json, '$.{}')", filter.key);
+        add_range(filter.min, filter.max, &expression, params, &mut clauses);
+    }
+    for filter in &query.roles {
+        let column = staff_role_column(&filter.key)
+            .ok_or_else(|| Error::parse(format!("unknown staff role filter {:?}", filter.key)))?;
+        add_range(filter.min, filter.max, column, params, &mut clauses);
+    }
+    Ok(clauses.join(" AND "))
+}
+
+fn staff_role_column(key: &str) -> Option<&'static str> {
+    Some(match key {
+        "manager" => "s.role_manager",
+        "assistant_manager" => "s.role_assistant_manager",
+        "coach" => "s.role_coach",
+        "physio" => "s.role_physio",
+        "scout" => "s.role_scout",
+        "gk_coach" => "s.role_gk_coach",
+        "fitness_coach" => "s.role_fitness_coach",
+        "chairperson" => "s.role_chairperson",
+        "director_of_football" => "s.role_director_of_football",
+        "head_of_youth_development" => "s.role_head_of_youth_development",
+        "loan_manager" => "s.role_loan_manager",
+        "technical_director" => "s.role_technical_director",
+        "data_analyst" => "s.role_data_analyst",
+        "sports_scientist" => "s.role_sports_scientist",
+        "set_piece_coach" => "s.role_set_piece_coach",
+        _ => return None,
+    })
+}
+
 fn add_range<T: Into<i64>>(
     min: Option<T>,
     max: Option<T>,
@@ -3147,6 +3681,73 @@ fn sort_expression(by: &str) -> String {
                 return format!("json_extract(p.attributes_json, '$.{key}')");
             }
             "p.ca".to_owned()
+        }
+    }
+}
+
+fn staff_order_by(query: &StaffQuery) -> String {
+    let mut rules: Vec<(String, bool)> = query
+        .sort
+        .iter()
+        .filter(|rule| !rule.by.trim().is_empty())
+        .map(|rule| (rule.by.clone(), rule.dir.eq_ignore_ascii_case("asc")))
+        .collect();
+    if rules.is_empty() {
+        if let Some(by) = query.sort_by.as_deref().filter(|value| !value.is_empty()) {
+            rules.push((
+                by.to_owned(),
+                query
+                    .sort_dir
+                    .as_deref()
+                    .is_some_and(|value| value.eq_ignore_ascii_case("asc")),
+            ));
+        }
+    }
+    if rules.is_empty() {
+        rules.push(("ca".to_owned(), false));
+    }
+    let mut parts = Vec::new();
+    for (by, ascending) in rules {
+        let expression = staff_sort_expression(&by);
+        let direction = if ascending { "ASC" } else { "DESC" };
+        parts.push(format!("CASE WHEN {expression} IS NULL THEN 1 ELSE 0 END"));
+        parts.push(format!("{expression} {direction}"));
+    }
+    parts.push("s.uid ASC".to_owned());
+    format!("ORDER BY {}", parts.join(", "))
+}
+
+fn staff_sort_expression(by: &str) -> String {
+    match by {
+        "name" => "s.name".to_owned(),
+        "age" => "s.age".to_owned(),
+        "club" | "club_name" => "s.club_name".to_owned(),
+        "nation" | "nation_id" => "s.nation_id".to_owned(),
+        "nation_name" => "s.nation_name".to_owned(),
+        "job" | "job_code" => "s.job_code".to_owned(),
+        "job_name" => "s.job_name".to_owned(),
+        "ca" => "s.ca".to_owned(),
+        "pa" => "s.pa".to_owned(),
+        "wage" => "s.wage".to_owned(),
+        "contract_end" => "s.contract_end".to_owned(),
+        "best_role" | "best_role_name" => "s.best_role_name".to_owned(),
+        "role" | "best_role_score" => "s.best_role_score".to_owned(),
+        "uid" => "s.uid".to_owned(),
+        other => {
+            if let Some(key) = other.strip_prefix("attr_")
+                && STAFF_ATTRIBUTE_KEYS.contains(&key)
+            {
+                return format!("json_extract(s.attributes_json, '$.{key}')");
+            }
+            if let Some(key) = other.strip_prefix("role_")
+                && let Some(column) = staff_role_column(key)
+            {
+                return column.to_owned();
+            }
+            if let Some(column) = staff_role_column(other) {
+                return column.to_owned();
+            }
+            "s.ca".to_owned()
         }
     }
 }
@@ -3632,5 +4233,159 @@ mod tests {
         with_unknown.include_unknown_fee = true;
         let page = store.value_finder(&with_unknown).expect("value finder");
         assert_eq!(page.total, 3);
+    }
+
+    #[test]
+    fn staff_filters_use_attribute_json_and_role_columns() {
+        let query = StaffQuery {
+            attributes: vec![AttributeFilter {
+                key: "authority".to_owned(),
+                min: Some(15),
+                max: None,
+            }],
+            roles: vec![StaffRoleFilter {
+                key: "coach".to_owned(),
+                min: Some(12),
+                max: None,
+            }],
+            ..StaffQuery::default()
+        };
+        let mut params = Vec::new();
+        let sql = build_staff_where(&query, &mut params).expect("staff filters should be valid");
+        assert!(sql.contains("json_extract(s.attributes_json, '$.authority') >= ?"));
+        assert!(sql.contains("s.role_coach >= ?"));
+
+        let mut unknown_attribute = query.clone();
+        unknown_attribute.attributes[0].key = "not_a_staff_attribute".to_owned();
+        assert!(build_staff_where(&unknown_attribute, &mut Vec::new()).is_err());
+
+        let mut unknown_role = query;
+        unknown_role.roles[0].key = "not_a_staff_role".to_owned();
+        assert!(build_staff_where(&unknown_role, &mut Vec::new()).is_err());
+    }
+
+    #[test]
+    fn staff_query_filters_sorts_and_pages() {
+        let store = Store::open_in_memory().expect("store");
+        store
+            .conn
+            .execute_batch(
+                r#"INSERT INTO saves
+                     (id, path, file_name, file_size, mtime_ns, fingerprint, game, build,
+                      parser_version, parsed_at)
+                   VALUES (1, '/tmp/test.fm', 'test.fm', 1, 1, 'fp', 'FM27', '27.0.0',
+                           'test', 'now');
+                   INSERT INTO staff
+                     (save_id, uid, name, age, club_uid, club_name, nation_id, nation_name,
+                      job_code, job_name, ca, pa, wage, contract_end, has_contract,
+                      attributes_json, roles_json,
+                      role_manager, role_assistant_manager, role_coach, role_physio,
+                      role_scout, role_gk_coach, role_fitness_coach, role_chairperson,
+                      role_director_of_football, role_head_of_youth_development,
+                      role_loan_manager, role_technical_director, role_data_analyst,
+                      role_sports_scientist, role_set_piece_coach,
+                      best_role_index, best_role_name, best_role_score, data_json)
+                   VALUES
+                     (1, 1, 'Alice', 45, 10, 'Test Club', 1, 'England',
+                      16, 'Manager', 150, 170, 9000, '2029-06-30', 1,
+                      '{"authority":18,"coaching":14}', '[18,5,12,3,6,4,5,7,9,2,3,4,5,3,6]',
+                      18, 5, 12, 3, 6, 4, 5, 7, 9, 2, 3, 4, 5, 3, 6,
+                      0, 'Manager', 18, '{}'),
+                     (1, 2, 'Bob', 38, 10, 'Test Club', 1, 'England',
+                      2, 'Coach', 140, 150, 5000, '2028-06-30', 1,
+                      '{"authority":10,"coaching":17}', '[6,9,16,3,4,5,6,2,3,8,2,5,4,6,7]',
+                      6, 9, 16, 3, 4, 5, 6, 2, 3, 8, 2, 5, 4, 6, 7,
+                      2, 'Coach', 16, '{}');"#,
+            )
+            .expect("seed");
+
+        let page = store
+            .query_staff(&StaffQuery {
+                save_id: 1,
+                roles: vec![StaffRoleFilter {
+                    key: "coach".to_owned(),
+                    min: Some(15),
+                    max: None,
+                }],
+                ..StaffQuery::default()
+            })
+            .expect("query");
+        assert_eq!(page.total, 1);
+        assert_eq!(page.rows[0].name.as_deref(), Some("Bob"));
+        assert_eq!(
+            page.rows[0]
+                .attributes
+                .as_ref()
+                .and_then(|a| a.get("authority")),
+            Some(10)
+        );
+        assert_eq!(page.rows[0].roles.as_ref().map(|roles| roles[2]), Some(16));
+
+        let page = store
+            .query_staff(&StaffQuery {
+                save_id: 1,
+                sort: vec![SortRule {
+                    by: "role_coach".to_owned(),
+                    dir: "desc".to_owned(),
+                }],
+                page_size: Some(1),
+                ..StaffQuery::default()
+            })
+            .expect("sorted query");
+        assert_eq!(page.total, 2);
+        assert_eq!(page.rows[0].name.as_deref(), Some("Bob"));
+        assert_eq!(page.rows[0].best_role_name.as_deref(), Some("Coach"));
+
+        let options = store.staff_filter_options(1, None).expect("options");
+        assert_eq!(options.jobs.len(), 2);
+        assert_eq!(options.with_contract, 2);
+        assert_eq!(options.with_attributes, 2);
+        assert_eq!(options.with_roles, 2);
+
+        let directory = tempfile::tempdir().expect("tempdir");
+        let csv_path = directory.path().join("staff.csv");
+        let mut writer =
+            crate::export::StaffExportWriter::create(&csv_path, "csv").expect("csv writer");
+        let streamed = store
+            .stream_staff(
+                &StaffQuery {
+                    save_id: 1,
+                    ..StaffQuery::default()
+                },
+                |row| writer.write_row(&row),
+            )
+            .expect("stream staff");
+        assert_eq!(streamed, 2);
+        writer.finish().expect("finish csv");
+        let csv = std::fs::read_to_string(&csv_path).expect("csv");
+        assert!(csv.starts_with("uid,unique_id,name,age,club,nation_id,nation_name,job"));
+        assert!(csv.contains("Alice"));
+        assert!(csv.contains(",England,Coach,140,150,"));
+
+        let json_path = directory.path().join("staff.json");
+        let mut writer =
+            crate::export::StaffExportWriter::create(&json_path, "json").expect("json writer");
+        store
+            .stream_staff(
+                &StaffQuery {
+                    save_id: 1,
+                    sort: vec![SortRule {
+                        by: "name".to_owned(),
+                        dir: "asc".to_owned(),
+                    }],
+                    ..StaffQuery::default()
+                },
+                |row| writer.write_row(&row),
+            )
+            .expect("stream staff json");
+        writer.finish().expect("finish json");
+        let value: serde_json::Value =
+            serde_json::from_str(&std::fs::read_to_string(&json_path).expect("json"))
+                .expect("parse");
+        let rows = value.as_array().expect("array");
+        assert_eq!(rows.len(), 2);
+        assert_eq!(rows[0]["name"], "Alice");
+        assert_eq!(rows[0]["attributes"]["authority"], 18);
+        assert_eq!(rows[0]["roles"][4], 6);
     }
 }

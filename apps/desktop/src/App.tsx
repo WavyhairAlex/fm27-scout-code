@@ -3,6 +3,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { FilterSidebar } from "./components/FilterSidebar";
 import { PlayerTable } from "./components/PlayerTable";
 import { ClubsView } from "./components/ClubsView";
+import { StaffView } from "./components/StaffView";
 import { Inspector } from "./components/Inspector";
 import { Toolbar } from "./components/Toolbar";
 import { Onboarding } from "./components/Onboarding";
@@ -33,8 +34,10 @@ export default function App() {
   const inspectorOpen = useAppStore((state) => state.inspectorOpen);
   const selectedUid = useAppStore((state) => state.selectedUid);
   const selectedClubUid = useAppStore((state) => state.selectedClubUid);
+  const selectedStaffUid = useAppStore((state) => state.selectedStaffUid);
   const setSelectedUid = useAppStore((state) => state.setSelectedUid);
   const setSelectedClubUid = useAppStore((state) => state.setSelectedClubUid);
+  const setSelectedStaffUid = useAppStore((state) => state.setSelectedStaffUid);
   const setExportOpen = useAppStore((state) => state.setExportOpen);
   const setEditOpen = useAppStore((state) => state.setEditOpen);
   const setPendingOpen = useAppStore((state) => state.setPendingOpen);
@@ -86,7 +89,13 @@ export default function App() {
       if (meta && event.key.toLowerCase() === "f") {
         event.preventDefault();
         document
-          .getElementById(viewMode === "clubs" ? "club-search" : "global-search")
+          .getElementById(
+            viewMode === "clubs"
+              ? "club-search"
+              : viewMode === "staff"
+                ? "staff-search"
+                : "global-search",
+          )
           ?.focus();
         return;
       }
@@ -108,6 +117,7 @@ export default function App() {
         else if (pendingOpen) setPendingOpen(false);
         else if (helpOpen) setHelpOpen(false);
         else if (viewMode === "clubs" && selectedClubUid != null) setSelectedClubUid(null);
+        else if (viewMode === "staff" && selectedStaffUid != null) setSelectedStaffUid(null);
         else if (selectedUid != null) setSelectedUid(null);
       }
     };
@@ -121,6 +131,7 @@ export default function App() {
     helpOpen,
     pendingOpen,
     selectedClubUid,
+    selectedStaffUid,
     selectedUid,
     setCompareOpen,
     setEditOpen,
@@ -128,6 +139,7 @@ export default function App() {
     setPendingOpen,
     setHelpOpen,
     setSelectedClubUid,
+    setSelectedStaffUid,
     setSelectedUid,
     setSettingsOpen,
     settingsOpen,
@@ -239,6 +251,8 @@ export default function App() {
           <Onboarding />
         ) : viewMode === "clubs" ? (
           <ClubsView />
+        ) : viewMode === "staff" ? (
+          <StaffView />
         ) : (
           <>
             {sidebarOpen && <FilterSidebar />}

@@ -8,8 +8,10 @@ import {
   getGrowthHistory,
   getPlayer,
   getPlayerRoles,
+  getStaffFilterOptions,
   getSquadAnalysis,
   listSaves,
+  queryStaff,
   queryClubs,
   queryPlayers,
   queryStatsMoneyball,
@@ -19,10 +21,16 @@ import type {
   ClubQuery,
   PlayerQuery,
   SortRule,
+  StaffQuery,
   StatsMoneyballRequest,
   ValueFinderRequest,
 } from "./types";
-import { useAppStore, type ClubFilters, type Filters } from "@/store/app";
+import {
+  useAppStore,
+  type ClubFilters,
+  type Filters,
+  type StaffFilters,
+} from "@/store/app";
 
 export function buildPlayerQuery(
   saveId: number,
@@ -115,6 +123,50 @@ export function buildClubQuery(
   };
 }
 
+export function buildStaffQuery(
+  saveId: number,
+  filters: StaffFilters,
+  sort: SortRule[],
+  page: number,
+  pageSize: number,
+): StaffQuery {
+  const primary = sort[0];
+  return {
+    save_id: saveId,
+    search: filters.search || null,
+    uids: [],
+    club_uids: filters.clubUids,
+    nation_ids: filters.nationIds,
+    job_codes: filters.jobCodes,
+    age_min: filters.ageMin,
+    age_max: filters.ageMax,
+    ca_min: filters.caMin,
+    ca_max: filters.caMax,
+    pa_min: filters.paMin,
+    pa_max: filters.paMax,
+    wage_min: filters.wageMin,
+    wage_max: filters.wageMax,
+    contract_end_before: filters.contractEndBefore,
+    contract_end_after: filters.contractEndAfter,
+    has_contract: filters.hasContract,
+    attributes: filters.attributes.map((rule) => ({
+      key: rule.key,
+      min: rule.min,
+      max: rule.max,
+    })),
+    roles: filters.roles.map((rule) => ({
+      key: rule.key,
+      min: rule.min,
+      max: rule.max,
+    })),
+    sort,
+    sort_by: primary?.by ?? "ca",
+    sort_dir: primary?.dir ?? "desc",
+    page,
+    page_size: pageSize,
+  };
+}
+
 export function useSaves() {
   return useQuery({
     queryKey: ["saves"],
@@ -132,7 +184,7 @@ export function useAppInfo(enabled = true) {
   });
 }
 
-export function usePlayerPage() {
+export function usePlayerPage(enabled = true) {
   const saveId = useAppStore((state) => state.saveId);
   const filters = useAppStore((state) => state.filters);
   const sort = useAppStore((state) => state.sort);
@@ -145,7 +197,7 @@ export function usePlayerPage() {
   return useQuery({
     queryKey: ["players", query],
     queryFn: () => queryPlayers(query!),
-    enabled: query != null,
+    enabled: query != null && enabled,
     placeholderData: keepPreviousData,
     staleTime: 15_000,
   });
@@ -184,6 +236,51 @@ export function useClubPage() {
     enabled: query != null,
     placeholderData: keepPreviousData,
     staleTime: 15_000,
+  });
+}
+
+export function useStaffPage(enabled = true) {
+  const saveId = useAppStore((state) => state.saveId);
+  const filters = useAppStore((state) => state.staffFilters);
+  const sort = useAppStore((state) => state.staffSort);
+  const page = useAppStore((state) => state.staffPage);
+  const pageSize = useAppStore((state) => state.staffPageSize);
+  const query = saveId ? buildStaffQuery(saveId, filters, sort, page, pageSize) : null;
+  return useQuery({
+    queryKey: ["staff", query],
+    queryFn: () => queryStaff(query!),
+    enabled: query != null && enabled,
+    placeholderData: keepPreviousData,
+    staleTime: 15_000,
+  });
+}
+
+export function useStaffFilterOptions() {
+  const saveId = useAppStore((state) => state.saveId);
+  const filters = useAppStore((state) => state.staffFilters);
+  const query = saveId
+    ? buildStaffQuery(saveId, filters, [], 0, 1)
+    : null;
+  return useQuery({
+    queryKey: ["staff-filter-options", query],
+    queryFn: () => getStaffFilterOptions(saveId!, query),
+    enabled: saveId != null,
+    placeholderData: keepPreviousData,
+    staleTime: 15_000,
+  });
+}
+
+export function useStaffDetail(uid: number | null) {
+  const saveId = useAppStore((state) => state.saveId);
+  const query: StaffQuery | null =
+    saveId != null && uid != null
+      ? { save_id: saveId, uids: [uid], page: 0, page_size: 1 }
+      : null;
+  return useQuery({
+    queryKey: ["staff-detail", saveId, uid],
+    queryFn: () => queryStaff(query!),
+    enabled: query != null,
+    staleTime: 60_000,
   });
 }
 

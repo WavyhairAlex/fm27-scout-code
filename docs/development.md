@@ -65,6 +65,9 @@ cargo build --release -p fm27-cli
 # Export CSV
 ./target/release/fm27scout players "/path/to/save.fm" --limit 50000 --format csv --output players.csv
 
+# Staff directory (JSON)
+./target/release/fm27scout staff "/path/to/save.fm" --limit 50000 --output staff.json
+
 # Parse and write the SQLite cache
 ./target/release/fm27scout index "/path/to/save.fm" --db fm27scout.db
 

@@ -224,6 +224,33 @@ Alexander-Arnold (status byte `5`, flags `0x00`) is not listed in game, the flag
 rule reports 454 transfer-listed and 1,495 loan-listed players; the old `+40 = 5` rule
 reported 756 transfer-listed players.
 
+## Staff
+
+Staff records are person objects whose header kind byte is `1`. A header is accepted only
+when the pindex and uid are non-zero, the uid copy matches (or the uid is an allocated
+`>= 2,000,000,000` id), CA/PA fall in 1..200 and the ability block carries the sentinel
+`12`. The 7-byte entry count shifts the ability block, so the header, not a fixed offset,
+locates CA/PA.
+
+The current job comes from the held contract record or the no-contract role record. A
+second contract tag 19 bytes after the selector marks an offer and is rejected. When several
+held records exist, the latest start date wins.
+
+Profile attributes use the preference area and the 26-byte block at ability +40. Authority
+and working with youngsters are already 1..20; determination is stored 1..100 and divided
+by five. The other 18 attributes use the same 1..100 encoding. A row keeps raw values too,
+so the UI can switch scales without re-parsing.
+
+Role suitability is a 15-byte vector of 1..20 scores found within 4 KiB of the person
+header. The search requires a unique candidate; two candidates leave the field `None`
+rather than picking one. Missing attributes or roles are `None`, never zero.
+
+On the reference saves the decoder finds 14,173 of fmsave's 14,225 staff rows for Parma and
+13,770 of 13,809 for Milan, with **0 differences** on CA, PA, wage, contract dates,
+contract presence, club and job across every matched row. The remaining rows are people a
+club lists without any contract or no-contract role record, plus the human manager, whose
+object has no standard ability block; those are documented limitations.
+
 ## Validation
 
 The Rust output is normalized to the same JSON keys as the oracle and compared for all
