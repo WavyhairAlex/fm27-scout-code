@@ -23,7 +23,6 @@ struct ChainRecord {
     has_terms: bool,
     squad_status: Option<u8>,
     list_flags: Option<u8>,
-    list_code: Option<u8>,
     event_count: Option<u32>,
     clauses: Vec<Clause>,
     contract_type: Option<u8>,
@@ -115,9 +114,8 @@ impl ContractDecoder<'_> {
                 })
                 .collect();
             if let Some((index, record)) = selected {
-                let transfer_listed = record.has_terms
-                    && (record.list_code == Some(ContractLayout::LIST_CODE_TRANSFER)
-                        || record.list_flags.is_some_and(|flags| flags & 1 != 0));
+                let transfer_listed =
+                    record.has_terms && record.list_flags.is_some_and(|flags| flags & 1 != 0);
                 let loan_listed =
                     record.has_terms && record.list_flags.is_some_and(|flags| flags & 2 != 0);
                 (
@@ -361,7 +359,6 @@ impl ContractDecoder<'_> {
                 has_terms: false,
                 squad_status: None,
                 list_flags: None,
-                list_code: None,
                 event_count: None,
                 clauses: Vec::new(),
                 contract_type: None,
@@ -371,7 +368,6 @@ impl ContractDecoder<'_> {
         let end = decode_date(game_db, tail + ContractLayout::TAIL_END_OFFSET);
         let squad_status = read_u8(game_db, tail + ContractLayout::TAIL_SQUAD_STATUS_OFFSET);
         let list_flags = read_u8(game_db, tail + ContractLayout::TAIL_LIST_FLAGS_OFFSET);
-        let list_code = read_u8(game_db, tail + ContractLayout::TAIL_LIST_CODE_OFFSET);
         let event_count = read_u32(game_db, tail + ContractLayout::TAIL_EVENT_COUNT_OFFSET);
         let (clauses, contract_type) = if let Some((base, count)) =
             locate_clause_base(game_db, tail).or_else(|| locate_clause_base_fallback(game_db, tail))
@@ -396,7 +392,6 @@ impl ContractDecoder<'_> {
             has_terms: true,
             squad_status,
             list_flags,
-            list_code,
             event_count,
             clauses,
             contract_type,
@@ -784,5 +779,98 @@ fn positive_offset(base: usize, offset: i32) -> Option<usize> {
         base.checked_add(offset as usize)
     } else {
         base.checked_sub(offset.unsigned_abs() as usize)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::layout::encode_date;
+
+    const TAIL: usize = 1000;
+    const TAG: usize = TAIL + ContractLayout::TAIL_BASE_OFFSET;
+    const PINDEX: u32 = 41;
+    const CLUB_UID: u32 = 99;
+    const TEAM_ID: u32 = 7;
+
+    fn write_date(bytes: &mut [u8], offset: usize, date: NaiveDate) {
+        let encoded = encode_date(date, 0).expect("encode date");
+        bytes[offset..offset + 4].copy_from_slice(&encoded);
+    }
+
+    /// One in-effect contract record whose tail carries the given listing flags
+    /// and status byte.
+    fn synthetic_game_db(list_flags: u8, status_code: u8) -> Vec<u8> {
+        let mut bytes = vec![0u8; 4096];
+        bytes[TAG..TAG + ContractLayout::TAG.len()].copy_from_slice(ContractLayout::TAG);
+        bytes[TAG + ContractLayout::SELECTOR_OFFSET..TAG + ContractLayout::SELECTOR_OFFSET + 4]
+            .copy_from_slice(&(PINDEX + 1).to_le_bytes());
+        bytes[TAG + ContractLayout::TEAM_ID_OFFSET..TAG + ContractLayout::TEAM_ID_OFFSET + 4]
+            .copy_from_slice(&TEAM_ID.to_le_bytes());
+        bytes[TAG + ContractLayout::WAGE_OFFSET..TAG + ContractLayout::WAGE_OFFSET + 4]
+            .copy_from_slice(&123_456u32.to_le_bytes());
+        let start = positive_offset(TAG, ContractLayout::START_OFFSET).expect("start offset");
+        write_date(
+            &mut bytes,
+            start,
+            NaiveDate::from_ymd_opt(2026, 7, 1).unwrap(),
+        );
+
+        bytes[TAIL + ContractLayout::TAIL_SENTINEL_BYTE_OFFSET] =
+            ContractLayout::TAIL_SENTINEL_BYTE_VALUE;
+        bytes[TAIL + ContractLayout::TAIL_SENTINEL_WORD_OFFSET
+            ..TAIL + ContractLayout::TAIL_SENTINEL_WORD_OFFSET + 4]
+            .copy_from_slice(&ContractLayout::TAIL_SENTINEL_WORD_VALUE.to_le_bytes());
+        bytes[TAIL + ContractLayout::TAIL_EVENT_COUNT_OFFSET
+            ..TAIL + ContractLayout::TAIL_EVENT_COUNT_OFFSET + 4]
+            .copy_from_slice(&0u32.to_le_bytes());
+        write_date(
+            &mut bytes,
+            TAIL + ContractLayout::TAIL_END_OFFSET,
+            NaiveDate::from_ymd_opt(2029, 6, 30).unwrap(),
+        );
+        bytes[TAIL + ContractLayout::TAIL_SQUAD_STATUS_OFFSET] = 4;
+        bytes[TAIL + ContractLayout::TAIL_LIST_FLAGS_OFFSET] = list_flags;
+        bytes[TAIL + ContractLayout::TAIL_STATUS_CODE_OFFSET] = status_code;
+        bytes
+    }
+
+    fn decode_synthetic(list_flags: u8, status_code: u8) -> Contract {
+        let game_db = synthetic_game_db(list_flags, status_code);
+        let club_names = HashMap::from([(CLUB_UID, "Test FC".to_owned())]);
+        let club_by_team = HashMap::from([(TEAM_ID, (CLUB_UID, 0u8))]);
+        let decoder = ContractDecoder {
+            club_names: &club_names,
+            club_by_team: &club_by_team,
+            clock: NaiveDate::from_ymd_opt(2027, 8, 13).unwrap(),
+        };
+        let record_offset =
+            (TAG as i64 - ContractLayout::CHAIN_WINDOW_START_OFFSET as i64) as usize;
+        decoder
+            .decode(&game_db, record_offset, 2000, false, PINDEX, Some(CLUB_UID))
+            .expect("contract decodes")
+    }
+
+    #[test]
+    fn a_zero_flags_byte_is_not_listed_even_when_the_status_byte_is_five() {
+        // Trent Alexander-Arnold carries status byte 5 but is not listed in game.
+        let contract = decode_synthetic(0, 5);
+        assert!(!contract.transfer_listed);
+        assert!(!contract.loan_listed);
+    }
+
+    #[test]
+    fn list_flag_bits_select_transfer_and_loan_listing() {
+        let transfer = decode_synthetic(1, 0);
+        assert!(transfer.transfer_listed);
+        assert!(!transfer.loan_listed);
+
+        let loan = decode_synthetic(2, 0);
+        assert!(!loan.transfer_listed);
+        assert!(loan.loan_listed);
+
+        let both = decode_synthetic(3, 0);
+        assert!(both.transfer_listed);
+        assert!(both.loan_listed);
     }
 }

@@ -168,7 +168,7 @@ tail event count     +42
 tail end date        +28
 tail squad status    +36
 tail list flags      +39  bit 0 transfer, bit 1 loan
-tail list code       +40  5 = transfer listed by club
+tail status code     +40  often 5, not a listing indicator
 clause step          8
 clause entries       base - 4
 head gate            base - 35 (value 5)

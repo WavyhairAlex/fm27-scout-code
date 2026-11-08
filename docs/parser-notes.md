@@ -217,9 +217,12 @@ Loans use the tail-shaped block before a no-terms chain record: marker `FFFFFFFF
 
 The in-effect contract tail also carries transfer status. At +39 the flags byte uses
 bit 0 for listed for transfer and bit 1 for listed for loan; other bits (for example
-`0x40`) appear on many players and are unrelated to the listing result. At +40 the
-listing code is `5` for a club-placed transfer listing. The reference save has 206
-transfer-listed and 1,301 loan-listed players.
+`0x40`) appear on many players and are unrelated to the listing result. The status
+byte at +40 is often `5`, but it is also set on players who are not listed, including
+key players, so it is not read as a listing indicator. On a save where Trent
+Alexander-Arnold (status byte `5`, flags `0x00`) is not listed in game, the flag-only
+rule reports 454 transfer-listed and 1,495 loan-listed players; the old `+40 = 5` rule
+reported 756 transfer-listed players.
 
 ## Validation
 

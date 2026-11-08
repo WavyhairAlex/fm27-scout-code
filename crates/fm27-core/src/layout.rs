@@ -26,9 +26,9 @@ pub fn editable_builds() -> String {
 /// competition name table was populated, before club leagues were resolved, and
 /// before the closing person header accepted descending Unique IDs.
 pub const PARSER_VERSION: &str = concat!(
-    "1.1.1",
-    "+nation-names+listing+injury-windows+club-finance+stadiums+club-facilities+youth-level-edt",
-    "+competition-names+club-leagues+season-stats+unique-ids"
+    "1.1.2",
+    "+nation-names+listing+listing-flags+injury-windows+club-finance+stadiums",
+    "+club-facilities+youth-level-edt+competition-names+club-leagues+season-stats+unique-ids"
 );
 pub const EARLIEST_YEAR: i32 = 1901;
 pub const LATEST_YEAR: i32 = 2200;
@@ -454,9 +454,9 @@ impl ContractLayout {
     /// Bit 0 is transfer listed, bit 1 is loan listed. Other bits are game flags
     /// (for example 0x40 on players the club will not sell).
     pub const TAIL_LIST_FLAGS_OFFSET: usize = 39;
-    /// `5` when the club has placed the player on the transfer list.
-    pub const TAIL_LIST_CODE_OFFSET: usize = 40;
-    pub const LIST_CODE_TRANSFER: u8 = 5;
+    /// A status byte that is often `5`, but also on players who are not listed,
+    /// including key players. It is not a transfer-listing indicator.
+    pub const TAIL_STATUS_CODE_OFFSET: usize = 40;
     pub const TAIL_E24_OFFSET: usize = 24;
     pub const TAIL_EVENT_COUNT_OFFSET: usize = 42;
     pub const TAIL_STRUCT_END: usize = 46;
