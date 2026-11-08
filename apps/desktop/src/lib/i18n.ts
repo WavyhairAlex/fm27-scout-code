@@ -381,6 +381,9 @@ const en = {
   "inspector.growthSnapshots": "{count} snapshots",
   "inspector.growthNote":
     "Snapshots are grouped by save name. Re-opening the same career later appends a point automatically; the save is never modified.",
+  "inspector.growthPage": "Page {page} of {pages}",
+  "inspector.growthPrevPage": "Previous page",
+  "inspector.growthNextPage": "Next page",
   "inspector.positionRatings": "Position ratings",
   "inspector.natural": "Natural ≥ 18",
   "inspector.accomplished": "Accomplished 15–17",
@@ -1265,6 +1268,9 @@ const zhCN: Record<TranslationKey, string> = {
   "inspector.growthSnapshots": "{count} 个快照",
   "inspector.growthNote":
     "快照以存档名称归组；同一生涯再次打开并解析后会自动追加，不会修改存档。",
+  "inspector.growthPage": "第 {page} / {pages} 页",
+  "inspector.growthPrevPage": "上一页",
+  "inspector.growthNextPage": "下一页",
   "inspector.positionRatings": "位置评分",
   "inspector.natural": "天然位置 ≥ 18",
   "inspector.accomplished": "可胜任 15–17",

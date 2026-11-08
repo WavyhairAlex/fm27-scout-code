@@ -4,6 +4,7 @@ import {
   BriefcaseBusiness,
   CalendarDays,
   Check,
+  ChevronLeft,
   ChevronRight,
   CircleDot,
   ClipboardList,
@@ -681,6 +682,70 @@ function RolesPanel({ roles, bestId }: { roles: RoleScore[]; bestId: string | nu
   );
 }
 
+const GROWTH_HISTORY_PAGE_SIZE = 10;
+
+export function GrowthHistory({ points }: { points: SnapshotPoint[] }) {
+  const { t, formatValue } = useI18n();
+  const [historyPage, setHistoryPage] = useState(0);
+  const newestFirst = [...points].reverse();
+  const pageCount = Math.max(1, Math.ceil(newestFirst.length / GROWTH_HISTORY_PAGE_SIZE));
+  const currentPage = Math.min(historyPage, pageCount - 1);
+  const pagePoints = newestFirst.slice(
+    currentPage * GROWTH_HISTORY_PAGE_SIZE,
+    (currentPage + 1) * GROWTH_HISTORY_PAGE_SIZE,
+  );
+  return (
+    <div className="space-y-1.5">
+      <div className="space-y-1">
+        {pagePoints.map((point) => (
+          <div key={point.game_date} className="flex items-center justify-between rounded-[6px] border border-[var(--line)] bg-[var(--surface-2)] px-2 py-1.5 text-[10px]">
+            <div className="min-w-0">
+              <div className="font-mono text-[var(--ink)]">{point.game_date}</div>
+              <div className="truncate text-[9px] text-[var(--muted)]">
+                {point.club_name ?? t("common.freeAgent")}
+              </div>
+            </div>
+            <div className="flex items-center gap-3 font-mono">
+              <span className="text-[var(--success)]">CA {point.ca ?? "—"}</span>
+              <span className="text-[var(--gold)]">PA {point.pa ?? "—"}</span>
+              <span className="text-[var(--muted)]">{formatValue(point.transfer_value)}</span>
+            </div>
+          </div>
+        ))}
+      </div>
+      {pageCount > 1 && (
+        <div className="flex items-center justify-between gap-2 px-0.5">
+          <span className="font-mono text-[9px] text-[var(--muted)]" aria-live="polite">
+            {t("inspector.growthPage", { page: currentPage + 1, pages: pageCount })}
+          </span>
+          <div className="flex items-center gap-1">
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-5 w-5"
+              disabled={currentPage <= 0}
+              onClick={() => setHistoryPage(currentPage - 1)}
+              aria-label={t("inspector.growthPrevPage")}
+            >
+              <ChevronLeft size={11} />
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-5 w-5"
+              disabled={currentPage + 1 >= pageCount}
+              onClick={() => setHistoryPage(currentPage + 1)}
+              aria-label={t("inspector.growthNextPage")}
+            >
+              <ChevronRight size={11} />
+            </Button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function GrowthPanel({
   points,
   gameDate,
@@ -690,7 +755,7 @@ function GrowthPanel({
   gameDate: string | null;
   injuries: Player["injuries"];
 }) {
-  const { t, locale, formatValue } = useI18n();
+  const { t, locale } = useI18n();
   const [expanded, setExpanded] = useState(false);
   const hasGrowth = points.length >= 2;
   const first = points[0];
@@ -738,23 +803,7 @@ function GrowthPanel({
               <span className="ml-auto">{first.game_date} → {last.game_date}</span>
             </div>
           </div>
-          <div className="space-y-1">
-            { [...points].reverse().map((point) => (
-              <div key={point.game_date} className="flex items-center justify-between rounded-[6px] border border-[var(--line)] bg-[var(--surface-2)] px-2 py-1.5 text-[10px]">
-                <div className="min-w-0">
-                  <div className="font-mono text-[var(--ink)]">{point.game_date}</div>
-                  <div className="truncate text-[9px] text-[var(--muted)]">
-                    {point.club_name ?? t("common.freeAgent")}
-                  </div>
-                </div>
-                <div className="flex items-center gap-3 font-mono">
-                  <span className="text-[var(--success)]">CA {point.ca ?? "—"}</span>
-                  <span className="text-[var(--gold)]">PA {point.pa ?? "—"}</span>
-                  <span className="text-[var(--muted)]">{formatValue(point.transfer_value)}</span>
-                </div>
-              </div>
-            ))}
-          </div>
+          <GrowthHistory points={points} />
           <p className="text-[9px] leading-relaxed text-[var(--muted)]">
             {t("inspector.growthNote")}
           </p>
