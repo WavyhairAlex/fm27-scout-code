@@ -139,6 +139,7 @@ function buildPlayer(index: number): Player {
   const first = FIRST_NAMES[index % FIRST_NAMES.length];
   const last = LAST_NAMES[(index * 7 + 3) % LAST_NAMES.length];
   const [club, clubUid, nation] = CLUBS[index % CLUBS.length];
+  const secondNation = index % 4 === 0 ? NATIONS[(index + 12) % NATIONS.length] : null;
   const [pos1, pos2] = POSITION_SETS[index % POSITION_SETS.length];
   const isKeeper = pos1 === "GK";
   const ca = index === 0 ? 158 : Math.round(70 + random() * 110);
@@ -186,7 +187,9 @@ function buildPlayer(index: number): Player {
     nation_id: nation,
     nation_name: NATION_NAMES[nation] ?? `国家 #${nation}`,
     gender: index % 5 === 0 ? 1 : 0,
-    second_nation_ids: [],
+    second_nation_ids: secondNation == null ? [] : [secondNation],
+    second_nation_names:
+      secondNation == null ? [] : [NATION_NAMES[secondNation] ?? `国家 #${secondNation}`],
     home_grown_nation_ids: [nation],
     home_grown_club_uids: [clubUid],
     home_grown_club_names: [club],

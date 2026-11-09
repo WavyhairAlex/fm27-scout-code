@@ -227,6 +227,8 @@ export interface Player {
   nation_name: string | null;
   gender: number | null;
   second_nation_ids: number[];
+  /** Resolved names aligned with second_nation_ids; null when the save-local id is unnamed. */
+  second_nation_names: (string | null)[];
   home_grown_nation_ids: number[];
   home_grown_club_uids: (number | null)[];
   home_grown_club_names: (string | null)[];

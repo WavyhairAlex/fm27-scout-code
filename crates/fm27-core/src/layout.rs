@@ -24,13 +24,14 @@ pub fn editable_builds() -> String {
 /// complete player-trait and nation-name tables landed, before the current
 /// injury windows were read from the stride-14 arrays, before the bundled
 /// competition name table was populated, before club leagues were resolved,
-/// before the closing person header accepted descending Unique IDs, and before
-/// staff objects were decoded into their own cached table.
+/// before the closing person header accepted descending Unique IDs, before
+/// staff objects were decoded into their own cached table, and before players
+/// carried resolved names for their other nationalities.
 pub const PARSER_VERSION: &str = concat!(
-    "1.1.3",
+    "1.1.4",
     "+nation-names+listing+listing-flags+injury-windows+club-finance+stadiums",
     "+club-facilities+youth-level-edt+competition-names+club-leagues+season-stats+unique-ids",
-    "+staff"
+    "+staff+second-nations"
 );
 pub const EARLIEST_YEAR: i32 = 1901;
 pub const LATEST_YEAR: i32 = 2200;

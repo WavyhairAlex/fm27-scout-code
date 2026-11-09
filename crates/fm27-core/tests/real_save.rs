@@ -95,6 +95,42 @@ fn parses_the_reference_career() {
 
 #[test]
 #[ignore = "requires a real FM27 save and FM27_TEST_SAVE"]
+fn resolves_second_nationality_names() {
+    let path = std::env::var("FM27_TEST_SAVE").expect("set FM27_TEST_SAVE");
+    let parsed = parse_save(&path).expect("parse save");
+
+    let with_second: Vec<_> = parsed
+        .players
+        .iter()
+        .filter(|player| !player.second_nation_ids.is_empty())
+        .collect();
+    assert!(!with_second.is_empty(), "players with other nationalities");
+
+    let mut total = 0usize;
+    let mut resolved = 0usize;
+    for player in &with_second {
+        assert_eq!(
+            player.second_nation_ids.len(),
+            player.second_nation_names.len(),
+            "names stay aligned with ids for {}",
+            player.uid
+        );
+        for name in &player.second_nation_names {
+            total += 1;
+            if name.is_some() {
+                resolved += 1;
+            }
+        }
+    }
+    assert!(resolved > 0, "at least one name resolves");
+    assert!(
+        resolved * 100 >= total * 99,
+        "at least 99% of other nationalities resolve ({resolved}/{total})"
+    );
+}
+
+#[test]
+#[ignore = "requires a real FM27 save and FM27_TEST_SAVE"]
 fn caches_queries_and_exports_the_reference_career() {
     use fm27_core::export::write_export;
     use fm27_core::store::{PlayerQuery, Store};

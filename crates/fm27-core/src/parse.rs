@@ -429,6 +429,7 @@ pub fn parse_save_with_progress(
         let (transfer_listed, loan_listed) = contract.as_ref().map_or((false, false), |contract| {
             (contract.transfer_listed, contract.loan_listed)
         });
+        let second_nation_names = resolve_nation_names(&nations, &second_nation_ids);
 
         players.push(Player {
             uid: record.uid,
@@ -448,6 +449,7 @@ pub fn parse_save_with_progress(
                 .map(str::to_owned),
             gender,
             second_nation_ids,
+            second_nation_names,
             home_grown_nation_ids,
             home_grown_club_uids,
             home_grown_club_names,
@@ -668,6 +670,20 @@ fn derive_positions(ratings: &[u8; 15]) -> (Vec<String>, Vec<String>) {
     (natural, accomplished)
 }
 
+/// Resolve save-local second-nation ids to the bundled names, keeping the
+/// one-to-one alignment with `second_nation_ids`. `None` marks an id the name
+/// table does not cover or a value outside the nation-table index range.
+fn resolve_nation_names(nations: &NationIndex, ids: &[u32]) -> Vec<Option<String>> {
+    ids.iter()
+        .map(|id| {
+            u16::try_from(*id)
+                .ok()
+                .and_then(|id| nations.name_for(id))
+                .map(str::to_owned)
+        })
+        .collect()
+}
+
 pub(crate) fn closing_person_header(
     game_db: &[u8],
     person_id: u32,
@@ -726,6 +742,22 @@ mod tests {
     fn parser_display_version_strips_the_cache_suffix() {
         assert!(!parser_display_version().contains('+'));
         assert!(parser_version().starts_with(parser_display_version()));
+    }
+
+    #[test]
+    fn second_nation_names_stay_aligned_with_ids() {
+        let mut nations = NationIndex::default();
+        nations.name_by_id.insert(70, "克罗地亚".to_owned());
+        let names = resolve_nation_names(&nations, &[70, 999, 70, 70_000]);
+        assert_eq!(
+            names,
+            vec![
+                Some("克罗地亚".to_owned()),
+                None,
+                Some("克罗地亚".to_owned()),
+                None
+            ]
+        );
     }
 
     #[test]

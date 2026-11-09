@@ -351,6 +351,10 @@ pub struct Player {
     #[serde(default)]
     pub gender: Option<u8>,
     pub second_nation_ids: Vec<u32>,
+    /// Resolved names for `second_nation_ids`, aligned by index. `None` when the
+    /// bundled nation-name table does not cover the save-local nation id.
+    #[serde(default)]
+    pub second_nation_names: Vec<Option<String>>,
     pub home_grown_nation_ids: Vec<u32>,
     pub home_grown_club_uids: Vec<Option<u32>>,
     pub home_grown_club_names: Vec<Option<String>>,

@@ -128,6 +128,15 @@ export function Inspector() {
   }
 
   const attributes = displayMode === "display" ? player.attributes : player.raw_attributes;
+  const otherNations = (player.second_nation_names ?? [])
+    .map(
+      (name, index) =>
+        nationLabel(name, locale) ??
+        (player.second_nation_ids[index] != null
+          ? t("common.nationNumber", { id: player.second_nation_ids[index] })
+          : t("common.unknownNation")),
+    )
+    .filter((label) => label.length > 0);
   const maxValue = displayMode === "display" ? 20 : 100;
   const hiddenTab: Array<[Tab, string]> = hiddenEnabled
     ? [["hidden", t("inspector.tab.hidden")]]
@@ -254,6 +263,14 @@ export function Inspector() {
                       <Badge tone="gold">{t("pending.badge")}</Badge>
                     )}
                   </div>
+                  {otherNations.length > 0 && (
+                    <div className="mt-0.5 text-[11px] text-[var(--muted)]">
+                      <span className="opacity-70">
+                        {t("inspector.otherNationalities")}:
+                      </span>{" "}
+                      {otherNations.join(" · ")}
+                    </div>
+                  )}
                 </div>
                 <div className="flex shrink-0 flex-col items-end gap-1">
                   <div className="flex gap-1">

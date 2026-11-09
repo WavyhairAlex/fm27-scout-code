@@ -61,6 +61,8 @@
   injury history / suspended / on loan / free agent / available.
 - Player origin: system-generated newgens are marked in the table and profile and
   can be included, excluded or isolated with the player-origin filter.
+- Other nationalities: the profile lists every other eligible nation the save
+  stores, resolved through the bundled nation-name table.
 - Role scores: 29 FM-style roles weighted by key attributes and combined with
   position familiarity; the detail panel shows every role and the best role.
 - Value finder (experimental): role/CA quality against transfer value plus three
