@@ -340,7 +340,6 @@ export interface PlayerQuery {
   pa_min?: number | null;
   pa_max?: number | null;
   pa_ca_gap_min?: number | null;
-  pa_unknown?: boolean | null;
   /** `true` keeps only system-generated players, `false` keeps only database players. */
   generated?: boolean | null;
   positions?: string[];

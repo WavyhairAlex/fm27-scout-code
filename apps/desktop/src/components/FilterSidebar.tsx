@@ -62,8 +62,7 @@ export function FilterSidebar() {
     if (
       filters.paMin != null ||
       filters.paMax != null ||
-      filters.paCaGapMin != null ||
-      filters.paUnknown != null
+      filters.paCaGapMin != null
     )
       count++;
     if (filters.generated != null) count++;
@@ -445,11 +444,6 @@ export function FilterSidebar() {
               className="h-7 w-16 font-mono text-[10px]"
             />
           </div>
-          <Checkbox
-            checked={filters.paUnknown === true}
-            onChange={(checked) => patchFilters({ paUnknown: checked ? true : null })}
-            label={t("filter.paUnknown")}
-          />
         </Section>
 
         <Section title={t("filter.positions")} icon={<CircleHelp size={12} />}>

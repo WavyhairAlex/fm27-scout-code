@@ -544,7 +544,6 @@ export function mockQuery(query: PlayerQuery): {
   if (query.pa_ca_gap_min != null) {
     rows = rows.filter((row) => row.pa != null && row.pa - row.ca >= query.pa_ca_gap_min!);
   }
-  if (query.pa_unknown === true) rows = rows.filter((row) => row.pa_range_code != null);
   if (query.generated === true) rows = rows.filter((row) => row.generated);
   if (query.generated === false) rows = rows.filter((row) => !row.generated);
   if (query.positions?.length) {

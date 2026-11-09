@@ -120,7 +120,6 @@ pub struct PlayerQuery {
     pub pa_max: Option<u16>,
     /// Minimum (potential - current) ability gap, used by the wonderkid view.
     pub pa_ca_gap_min: Option<u16>,
-    pub pa_unknown: Option<bool>,
     /// `true` keeps only system-generated players, `false` keeps only database players.
     pub generated: Option<bool>,
     pub positions: Vec<String>,
@@ -3396,13 +3395,6 @@ fn build_where(query: &PlayerQuery, params: &mut Vec<Value>) -> Result<String> {
     if let Some(gap) = query.pa_ca_gap_min {
         clauses.push("(p.pa - p.ca) >= ?".to_owned());
         params.push(Value::Integer(gap as i64));
-    }
-    if let Some(unknown) = query.pa_unknown {
-        clauses.push(if unknown {
-            "p.pa_range_code IS NOT NULL".to_owned()
-        } else {
-            "p.pa IS NOT NULL".to_owned()
-        });
     }
     if let Some(generated) = query.generated {
         if generated {
