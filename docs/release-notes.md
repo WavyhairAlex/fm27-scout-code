@@ -1,5 +1,38 @@
 # Release notes
 
+## 1.5.0 — Staff directory and other nationalities
+
+### Added
+
+- Read-only staff directory:
+  - club staff with their current job, CA/PA, weekly wage and contract dates;
+  - 21 profile attributes and a 15-role suitability vector;
+  - separate Staff workspace with club, job and nation filters, attribute and
+    role-suitability rules, sortable role columns and a profile inspector;
+  - CSV/JSON export and the `staff` CLI command.
+- Player other nationalities in the profile, resolved through the bundled
+  nation-name table; Basque Country and Monaco names added.
+- Growth history pagination, ten records per page.
+
+### Fixed
+
+- System-generated players whose Unique ID is stored in descending order now
+  keep their unique id, name and newgen marker.
+- Transfer listing is derived only from contract flags; the status byte that
+  often holds `5` for key players no longer marks them as listed.
+- Player table rows keep a fixed height.
+
+### Notes
+
+- Staff are read-only. National-team appointments, people a club lists without
+  any held or no-contract role record, and the human manager are excluded.
+  Profile attributes and role suitability stay blank when their blocks cannot
+  be read uniquely.
+- Staff rows were validated against the fmsave reference on both supported
+  builds; matched rows agree on name, club, job, CA, PA, wage and contract end.
+- The parser cache version changed, so existing saves are re-parsed once after
+  upgrading.
+
 ## 1.4.0 — Contract editing and display currency
 
 ### Added

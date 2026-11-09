@@ -15,6 +15,7 @@ A macOS scouting workbench for Football Manager 27 with an optional, experimenta
 
 - Reads FM27 `27.0.0+2486695` and `27.0.0+2493426` saves directly; SQLite cache and server-side pagination keep 46k+ players responsive.
 - Filters, multi-column sorting, player profiles, 2–4 player comparison, CSV/JSON export, role scores, growth history and an analysis centre.
+- Staff directory: club staff with current job, CA/PA, wage and contract dates, 21 profile attributes and 15 role-suitability ratings. Read-only.
 - Club workspace: searchable club table, squad summary, monthly finances, owned stadiums and facility ratings (corporate, training, youth, junior coaching, youth recruitment and youth level). Finance rows and detailed facility ratings exist only for the league nations the save tracks.
 - Optional save editor for CA/PA, attributes, hidden attributes, determination, personality and traits. Edits are staged across players and written in one batch to a new save.
 - Current permanent contract edits: weekly wage and end date. Free agents, contracts without terms, expired contracts and loan terms are read-only.
