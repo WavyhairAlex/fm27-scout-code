@@ -13,6 +13,9 @@ CREATE TABLE IF NOT EXISTS saves (
   save_name       TEXT NOT NULL DEFAULT '',
   career_key      TEXT NOT NULL DEFAULT '',
   game_date       TEXT,
+  managed_club_uid INTEGER,
+  managed_club_name TEXT,
+  manager_name    TEXT,
   db_version      TEXT,
   parser_version  TEXT NOT NULL,
   parsed_at       TEXT NOT NULL

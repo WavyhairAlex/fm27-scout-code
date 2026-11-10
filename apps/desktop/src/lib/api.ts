@@ -16,6 +16,7 @@ import type {
   EditPlayerResult,
   ExportReport,
   FilterOptions,
+  ManagedClub,
   OpenSaveResult,
   ParseProgress,
   Player,
@@ -52,6 +53,7 @@ import {
   mockClubFilterOptions,
   mockFilterOptions,
   mockGrowthHistory,
+  mockManagedClub,
   mockPlayerRoles,
   mockQuery,
   mockQueryClubs,
@@ -527,9 +529,17 @@ export async function logMessage(message: string): Promise<void> {
   }
 }
 
-export async function getAnalysisOverview(saveId: number): Promise<AnalysisOverview> {
-  if (!isTauri) return mockAnalysisOverview();
-  return timedInvoke<AnalysisOverview>("analysis_overview", { saveId });
+export async function getManagedClub(saveId: number): Promise<ManagedClub | null> {
+  if (!isTauri) return mockManagedClub();
+  return timedInvoke<ManagedClub | null>("managed_club", { saveId });
+}
+
+export async function getAnalysisOverview(
+  saveId: number,
+  clubUid: number | null = null,
+): Promise<AnalysisOverview> {
+  if (!isTauri) return mockAnalysisOverview(clubUid);
+  return timedInvoke<AnalysisOverview>("analysis_overview", { saveId, clubUid });
 }
 
 export async function listCompetitions(saveId: number): Promise<Competition[]> {

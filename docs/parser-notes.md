@@ -48,6 +48,24 @@ Stale snapshots are removed on the next launch.
   unset, so the summary clock is authoritative (2026-07-13).
 - `db_version` is read from `game_info` at offset 8.
 
+## Managed club
+
+- `humans` carries the human-manager count at offset 8 (u16) and the first
+  selector at offset 10 (u32). The selector is the manager's person id plus one.
+- Route 1 scans `game_db` for the selector five bytes after a contract record tag
+  (`01 00 6c 07`), decodes the chain record, and keeps records whose team
+  resolves to a club and whose end date is not before the in-game date. A record
+  with a parsed tail beats one without, then the later end wins.
+- Route 2 scans the length-prefixed strings of `save_game_summary` from offset 8
+  (length 2..120, every code point at least 0x20). A club short name immediately
+  followed by that club's uid is a link; the string ending exactly where the club
+  name starts is the manager name.
+- The contract record is authoritative. When the summary links another club, the
+  parser keeps the contract club and records a warning. With no contract record,
+  exactly one summary link supplies the club; multiple links leave it unknown.
+- The reader runs only on the two verified builds; an unverified build records a
+  warning and leaves the managed club unknown rather than applying these offsets.
+
 ## Name pools
 
 The pools are preceded by the signature `55 b5 00 00 00 00 00 00 00 04 00 00 00 01 00 00 00 08 00 00 00 00 00 00`

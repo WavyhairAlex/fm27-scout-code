@@ -778,12 +778,26 @@ async fn growth_history(
 }
 
 #[tauri::command]
+async fn managed_club(
+    state: State<'_, AppState>,
+    save_id: i64,
+) -> Result<Option<fm27_core::ManagedClub>, String> {
+    run_read_command(state, move |store| {
+        store.managed_club(save_id).map_err(error_string)
+    })
+    .await
+}
+
+#[tauri::command]
 async fn analysis_overview(
     state: State<'_, AppState>,
     save_id: i64,
+    club_uid: Option<u32>,
 ) -> Result<AnalysisOverview, String> {
     run_read_command(state, move |store| {
-        store.analysis_overview(save_id).map_err(error_string)
+        store
+            .analysis_overview(save_id, club_uid)
+            .map_err(error_string)
     })
     .await
 }
@@ -1150,6 +1164,7 @@ pub fn run() {
             trait_options,
             player_roles,
             growth_history,
+            managed_club,
             analysis_overview,
             squad_analysis,
             list_competitions,

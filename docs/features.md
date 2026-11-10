@@ -59,8 +59,10 @@
   outside Full mode.
 - Hidden-attribute toggle, off by default (Full mode only).
 - Light and dark themes.
-- Analysis centre: age/CA distributions, club strength ranking, squad depth and
-  a wonderkid radar (age + PA + CA gap).
+- Analysis centre: the save's managed club is detected from the `humans` section
+  and checked against the save summary. Overview, squad depth and needs follow
+  that club; the overview keeps a save-wide club strength ranking so the managed
+  club can be compared with the rest of the database.
 - Quick filters: wonderkids, expiring contracts, high potential, injured /
   injury history / suspended / on loan / free agent / available.
 - Player origin: system-generated newgens are marked in the table and profile and

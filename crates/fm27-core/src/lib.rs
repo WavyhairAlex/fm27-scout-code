@@ -18,6 +18,7 @@ pub mod injuries;
 pub mod layout;
 mod layout_tests;
 pub mod leagues;
+pub mod managed;
 pub mod metadata;
 pub mod model;
 pub mod moneyball;
@@ -43,8 +44,8 @@ pub use club_editor::{
 pub use editor::{EditChange, PlayerEditor};
 pub use error::{Error, Result};
 pub use model::{
-    Club, ClubDetail, ClubLink, Contract, FinanceMonth, ParseReport, Player, SaveSummary, Stadium,
-    Staff,
+    Club, ClubDetail, ClubLink, Contract, FinanceMonth, ManagedClub, ParseReport, Player,
+    SaveSummary, Stadium, Staff,
 };
 pub use parse::{
     ParseProgress, ParsedSave, parse_save, parse_save_with_progress, parser_display_version,

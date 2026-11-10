@@ -11,6 +11,7 @@ import type {
   DistributionBand,
   FilterOptions,
   FinanceMonth,
+  ManagedClub,
   Player,
   PlayerQuery,
   PlayerRow,
@@ -364,6 +365,14 @@ export const MOCK_SUMMARY: SaveSummary = {
   section_count: 75,
   decompressed_bytes: 192548055,
 };
+
+export function mockManagedClub(): ManagedClub {
+  return {
+    club_uid: 1099,
+    club_name: "Casciavit Milano",
+    manager_name: "Demo Manager",
+  };
+}
 
 export const MOCK_SAVE: SaveRecord = {
   id: MOCK_SAVE_ID,
@@ -1625,9 +1634,15 @@ function roundOne(value: number): number {
   return Math.round(value * 10) / 10;
 }
 
-export function mockAnalysisOverview(): AnalysisOverview {
-  const ages = MOCK_PLAYERS.map((player) => player.age).filter((age): age is number => age != null);
-  const ca = MOCK_PLAYERS.map((player) => player.ca).sort((a, b) => a - b);
+export function mockAnalysisOverview(clubUid: number | null = null): AnalysisOverview {
+  const players =
+    clubUid == null
+      ? MOCK_PLAYERS
+      : MOCK_PLAYERS.filter((player) => player.club_uid === clubUid);
+  const ages = players.map((player) => player.age).filter((age): age is number => age != null);
+  const ca = players.map((player) => player.ca).sort((a, b) => a - b);
+  // Club strength is always save-wide so a scoped overview can compare against
+  // the rest of the database.
   const clubs = new Map<number, ClubOverview>();
   for (const player of MOCK_PLAYERS) {
     if (player.club_uid == null || !player.club_name) continue;
@@ -1655,20 +1670,31 @@ export function mockAnalysisOverview(): AnalysisOverview {
     }))
     .sort((left, right) => right.avg_ca - left.avg_ca)
     .slice(0, 12);
+  if (clubUid != null && !topClubs.some((club) => club.club_uid === clubUid)) {
+    const entry = clubs.get(clubUid);
+    if (entry && entry.players > 0) {
+      topClubs.push({
+        ...entry,
+        avg_ca: roundOne(entry.avg_ca / entry.players),
+        avg_age: roundOne(entry.avg_age / entry.players),
+      });
+      topClubs.sort((left, right) => right.avg_ca - left.avg_ca);
+    }
+  }
   const contractYears = new Map<string, number>();
-  for (const player of MOCK_PLAYERS) {
+  for (const player of players) {
     const year = player.contract?.end?.slice(0, 4);
     if (year) contractYears.set(year, (contractYears.get(year) ?? 0) + 1);
   }
   return {
-    total_players: MOCK_PLAYERS.length,
+    total_players: players.length,
     total_clubs: new Set(MOCK_PLAYERS.map((player) => player.club_uid)).size,
     average_age: roundOne(ages.reduce((sum, age) => sum + age, 0) / Math.max(1, ages.length)),
     median_ca: ca[Math.floor(ca.length / 2)] ?? 0,
-    total_value: MOCK_PLAYERS.reduce((sum, player) => sum + (player.transfer_value ?? 0), 0),
-    free_agents: MOCK_PLAYERS.filter((player) => player.club_uid == null).length,
-    loanees: MOCK_PLAYERS.filter((player) => player.on_loan).length,
-    expiring_contracts: MOCK_PLAYERS.filter(
+    total_value: players.reduce((sum, player) => sum + (player.transfer_value ?? 0), 0),
+    free_agents: players.filter((player) => player.club_uid == null).length,
+    loanees: players.filter((player) => player.on_loan).length,
+    expiring_contracts: players.filter(
       (player) => player.contract?.end != null && player.contract.end <= "2027-07-13",
     ).length,
     game_date: "2026-07-13",

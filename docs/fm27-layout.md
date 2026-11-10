@@ -309,6 +309,22 @@ Coach**.
 
 Rust implementation: `crates/fm27-core/src/staff.rs`.
 
+## Managed club
+
+`humans` schema 24 names the human managers:
+
+```text
++8   u16 human-manager count
++10  u32 first manager's selector (person id + 1)
+```
+
+The selector appears five bytes after a contract record tag in `game_db`. The
+`save_game_summary` strings are the independent check: a club short name
+followed by its club uid; the adjacent preceding string is the manager name.
+Details and conflict rules are in [parser-notes.md](parser-notes.md).
+
+Rust implementation: `crates/fm27-core/src/managed.rs`.
+
 ## Section schemas observed on the reference save
 
 `game_db` 4000, `game_info` 47, `save_game_summary` 31, `contract_man` 14,

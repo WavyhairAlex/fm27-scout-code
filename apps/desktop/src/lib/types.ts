@@ -931,6 +931,12 @@ export interface SaveRecord {
   contracts: number;
 }
 
+export interface ManagedClub {
+  club_uid: number;
+  club_name: string;
+  manager_name: string | null;
+}
+
 export interface SaveSummary {
   path: string;
   file_name: string;

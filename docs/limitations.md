@@ -37,6 +37,10 @@
   windows, so it no longer depends on the typed array being populated.
 - Contract clauses, loans and contract chains are parsed; a few unobserved
   fallback structures are explicitly left blank.
+- The managed club is read from the first human manager only, and only on the
+  verified builds. When the manager is between jobs, or when the summary links
+  several clubs and no contract record settles the choice, the club stays unknown
+  and the analysis centre falls back to save-wide figures and the club picker.
 - Staff rows cover people with a club job. National-team appointments have a
   team id but no club mapping and are excluded, as are people a club lists
   without any held or no-contract role record and the human manager, whose

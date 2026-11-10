@@ -7,6 +7,7 @@ import {
   mockClubDetail,
   mockClubFilterOptions,
   mockFilterOptions,
+  mockManagedClub,
   mockQuery,
   mockQueryClubs,
   mockQueryStaff,
@@ -166,6 +167,16 @@ describe("mock player query", () => {
     const squad = mockSquadAnalysis(clubUid!);
     expect(squad.player_count).toBeGreaterThan(0);
     expect(squad.players[0].club_uid).toBe(clubUid);
+
+    const managed = mockManagedClub();
+    expect(managed.club_uid).toBe(clubUid);
+    const scoped = mockAnalysisOverview(managed.club_uid);
+    expect(scoped.total_players).toBe(
+      MOCK_PLAYERS.filter((player) => player.club_uid === managed.club_uid).length,
+    );
+    expect(scoped.total_players).toBeLessThan(overview.total_players);
+    expect(scoped.total_clubs).toBe(overview.total_clubs);
+    expect(scoped.top_clubs.some((club) => club.club_uid === managed.club_uid)).toBe(true);
   });
 
 describe("mock club query", () => {

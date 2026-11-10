@@ -25,13 +25,14 @@ pub fn editable_builds() -> String {
 /// injury windows were read from the stride-14 arrays, before the bundled
 /// competition name table was populated, before club leagues were resolved,
 /// before the closing person header accepted descending Unique IDs, before
-/// staff objects were decoded into their own cached table, and before players
-/// carried resolved names for their other nationalities.
+/// staff objects were decoded into their own cached table, before players
+/// carried resolved names for their other nationalities, and before the managed
+/// club was read from the first human manager.
 pub const PARSER_VERSION: &str = concat!(
-    "1.1.4",
+    "1.1.5",
     "+nation-names+listing+listing-flags+injury-windows+club-finance+stadiums",
     "+club-facilities+youth-level-edt+competition-names+club-leagues+season-stats+unique-ids",
-    "+staff+second-nations"
+    "+staff+second-nations+managed-club"
 );
 pub const EARLIEST_YEAR: i32 = 1901;
 pub const LATEST_YEAR: i32 = 2200;
@@ -492,6 +493,32 @@ impl ContractLayout {
     pub const FALLBACK_NONZERO_OFFSET: usize = 8;
     pub const FALLBACK_NONZERO_LENGTH: usize = 8;
     pub const FALLBACK_GATE_LENGTH: usize = 16;
+}
+
+/// The `humans` section names the save's human managers. The first selector is the
+/// manager's person id plus one; the matching person header in `game_db` stores that
+/// person id followed by the doubled uid.
+#[derive(Debug, Clone, Copy)]
+pub struct HumansLayout;
+
+impl HumansLayout {
+    pub const HUMAN_COUNT_OFFSET: usize = 8;
+    pub const FIRST_SELECTOR_OFFSET: usize = 10;
+    pub const PERSON_UID_OFFSET: usize = 4;
+    pub const PERSON_UID_COPY_OFFSET: usize = 8;
+}
+
+/// The readable strings in `save_game_summary`, used as the independent check for
+/// the managed club. A string is a u32 byte length followed by that many UTF-8 bytes;
+/// every code point is at least a space.
+#[derive(Debug, Clone, Copy)]
+pub struct SummaryStringsLayout;
+
+impl SummaryStringsLayout {
+    pub const STRINGS_START_OFFSET: usize = 8;
+    pub const MIN_LENGTH: usize = 2;
+    pub const MAX_LENGTH: usize = 120;
+    pub const LOWEST_CODE_POINT: char = '\u{20}';
 }
 
 /// FM27 staff objects. The header is a person id followed by the doubled uid, the

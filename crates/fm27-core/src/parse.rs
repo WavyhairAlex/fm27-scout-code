@@ -20,8 +20,8 @@ use crate::layout::{
 };
 use crate::metadata::{SaveMetadata, read_metadata};
 use crate::model::{
-    Attributes, Club, Competition, FinanceMonth, ParseReport, Player, Positions, Reputation,
-    SaveSummary, Stadium, Staff, TransferValueState,
+    Attributes, Club, Competition, FinanceMonth, ManagedClub, ParseReport, Player, Positions,
+    Reputation, SaveSummary, Stadium, Staff, TransferValueState,
 };
 use crate::names::NamePools;
 use crate::nations::NationIndex;
@@ -42,6 +42,7 @@ pub struct ParseProgress {
 pub struct ParsedSave {
     pub metadata: SaveMetadata,
     pub summary: SaveSummary,
+    pub managed_club: Option<ManagedClub>,
     pub players: Vec<Player>,
     pub staff: Vec<Staff>,
     pub clubs: Vec<Club>,
@@ -207,6 +208,15 @@ pub fn parse_save_with_progress(
         club_names: &clubs.name_by_uid,
         club_by_team: &clubs.fielding_team_to_club,
         clock: reference_date,
+    };
+    let managed_club = if crate::layout::is_editable_build(&metadata.build) {
+        crate::managed::read_managed_club(&save, &game_db, &clubs, reference_date, &mut warnings)
+    } else {
+        warnings.push(format!(
+            "managed club unavailable: build {} is not verified",
+            metadata.build
+        ));
+        None
     };
 
     let mut players = Vec::with_capacity(record_index.records.len());
@@ -637,6 +647,7 @@ pub fn parse_save_with_progress(
     Ok(ParsedSave {
         metadata,
         summary,
+        managed_club,
         players,
         staff,
         clubs: clubs.clubs,

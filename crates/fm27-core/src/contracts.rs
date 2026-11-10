@@ -48,6 +48,14 @@ impl ContractLocation {
     }
 }
 
+/// The fields a managed-club scan needs from one chain record.
+#[derive(Debug, Clone, Copy)]
+pub struct ChainRecordSummary {
+    pub club_uid: Option<u32>,
+    pub has_terms: bool,
+    pub end: Option<NaiveDate>,
+}
+
 /// One staff contract record. Staff rows use the latest started record for the
 /// employer, job and terms; the full player contract chain is not needed.
 #[derive(Debug, Clone)]
@@ -263,6 +271,20 @@ impl ContractDecoder<'_> {
             loan_end,
             chain,
         })
+    }
+
+    /// Decode one chain record for the managed-club scan.
+    pub fn decode_chain_record_summary(
+        &self,
+        game_db: &[u8],
+        tag_offset: usize,
+    ) -> ChainRecordSummary {
+        let record = self.decode_chain_record(game_db, tag_offset);
+        ChainRecordSummary {
+            club_uid: record.club_uid,
+            has_terms: record.has_terms,
+            end: record.end,
+        }
     }
 
     /// Decode one staff contract record at `tag_offset`. The job code is the byte

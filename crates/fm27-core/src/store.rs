@@ -15,8 +15,8 @@ use crate::layout::{
 };
 use crate::model::{
     Attributes, Club, ClubDetail, ClubLink, Competition, Contract, FinanceMonth,
-    GENERATED_UNIQUE_ID_MINIMUM, ParseReport, Personality, Player, Positions, SaveSummary, Stadium,
-    Staff, StaffAttributes, Trait, attribute_index, is_generated_unique_id,
+    GENERATED_UNIQUE_ID_MINIMUM, ManagedClub, ParseReport, Personality, Player, Positions,
+    SaveSummary, Stadium, Staff, StaffAttributes, Trait, attribute_index, is_generated_unique_id,
 };
 use crate::parse::ParsedSave;
 
@@ -562,8 +562,9 @@ impl Store {
         transaction.execute(
             "INSERT INTO saves
              (path, file_name, file_size, mtime_ns, fingerprint, game, build, save_name,
-              career_key, game_date, db_version, parser_version, parsed_at)
-             VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13)",
+              career_key, game_date, managed_club_uid, managed_club_name, manager_name,
+              db_version, parser_version, parsed_at)
+             VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16)",
             params![
                 parsed.summary.path,
                 parsed.summary.file_name,
@@ -575,6 +576,18 @@ impl Store {
                 parsed.summary.save_name,
                 career_key,
                 parsed.summary.game_date,
+                parsed
+                    .managed_club
+                    .as_ref()
+                    .map(|club| club.club_uid as i64),
+                parsed
+                    .managed_club
+                    .as_ref()
+                    .map(|club| club.club_name.as_str()),
+                parsed
+                    .managed_club
+                    .as_ref()
+                    .and_then(|club| club.manager_name.as_deref()),
                 parsed.summary.db_version,
                 crate::layout::PARSER_VERSION,
                 Utc::now().to_rfc3339(),
@@ -2122,7 +2135,34 @@ impl Store {
         Ok(points)
     }
 
-    pub fn analysis_overview(&self, save_id: i64) -> Result<AnalysisOverview> {
+    /// The club run by the save's first human manager, when parsing found one.
+    pub fn managed_club(&self, save_id: i64) -> Result<Option<ManagedClub>> {
+        let row: Option<(Option<u32>, Option<String>, Option<String>)> = self
+            .conn
+            .query_row(
+                "SELECT managed_club_uid, managed_club_name, manager_name
+                 FROM saves WHERE id = ?1",
+                params![save_id],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+            )
+            .optional()?;
+        Ok(row.and_then(|(club_uid, club_name, manager_name)| {
+            club_uid.map(|club_uid| ManagedClub {
+                club_uid,
+                club_name: club_name.unwrap_or_else(|| format!("Club {club_uid}")),
+                manager_name,
+            })
+        }))
+    }
+
+    /// Save-wide analysis, or one club's analysis when `club_uid` is set. Club
+    /// strength always stays save-wide so the managed club can be compared with
+    /// the rest of the database.
+    pub fn analysis_overview(
+        &self,
+        save_id: i64,
+        club_uid: Option<u32>,
+    ) -> Result<AnalysisOverview> {
         let game_date_text: Option<String> = self
             .conn
             .query_row(
@@ -2176,38 +2216,42 @@ impl Store {
         let mut clubs: HashMap<u32, (String, u64, u64, u16, u64, u64)> = HashMap::new();
 
         for row in rows {
-            let (age, ca, _pa, value, club_uid, club_name, contract_end, on_loan) = row?;
-            player_count += 1;
-            if let Some(age) = age {
-                age_sum += age as i64;
-                age_count += 1;
-                *age_counts.entry(age_band_label(age)).or_default() += 1;
-            }
-            if ca > 0 {
-                ca_values.push(ca);
-                *ca_counts.entry(ca_band_label(ca)).or_default() += 1;
-            }
-            if let Some(value) = value {
-                total_value += value as u64;
-            }
-            if club_uid.is_none() {
-                free_agents += 1;
-            }
-            if on_loan == Some(true) {
-                loanees += 1;
-            }
-            if let (Some(end), Some(cutoff)) = (contract_end.as_deref(), cutoff) {
-                if end <= cutoff.format("%Y-%m-%d").to_string().as_str()
-                    && game_date
-                        .is_none_or(|start| end >= start.format("%Y-%m-%d").to_string().as_str())
-                {
-                    expiring += 1;
+            let (age, ca, _pa, value, row_club_uid, club_name, contract_end, on_loan) = row?;
+            let in_scope = club_uid.is_none() || row_club_uid == club_uid;
+            if in_scope {
+                player_count += 1;
+                if let Some(age) = age {
+                    age_sum += age as i64;
+                    age_count += 1;
+                    *age_counts.entry(age_band_label(age)).or_default() += 1;
+                }
+                if ca > 0 {
+                    ca_values.push(ca);
+                    *ca_counts.entry(ca_band_label(ca)).or_default() += 1;
+                }
+                if let Some(value) = value {
+                    total_value += value as u64;
+                }
+                if row_club_uid.is_none() {
+                    free_agents += 1;
+                }
+                if on_loan == Some(true) {
+                    loanees += 1;
+                }
+                if let (Some(end), Some(cutoff)) = (contract_end.as_deref(), cutoff) {
+                    if end <= cutoff.format("%Y-%m-%d").to_string().as_str()
+                        && game_date.is_none_or(|start| {
+                            end >= start.format("%Y-%m-%d").to_string().as_str()
+                        })
+                    {
+                        expiring += 1;
+                    }
+                }
+                if let Some(year) = contract_end.as_deref().and_then(contract_year) {
+                    *contract_years.entry(year).or_default() += 1;
                 }
             }
-            if let Some(year) = contract_end.as_deref().and_then(contract_year) {
-                *contract_years.entry(year).or_default() += 1;
-            }
-            if let (Some(uid), Some(name)) = (club_uid, club_name) {
+            if let (Some(uid), Some(name)) = (row_club_uid, club_name) {
                 let entry = clubs.entry(uid).or_insert((name, 0, 0, 0, 0, 0));
                 entry.1 += 1;
                 entry.2 += ca as u64;
@@ -2224,27 +2268,45 @@ impl Store {
         ca_values.sort_unstable();
         let median_ca = ca_values.get(ca_values.len() / 2).copied().unwrap_or(0);
         let mut top_clubs: Vec<ClubOverview> = clubs
-            .into_iter()
+            .iter()
             .filter(|(_, (_, players, _, _, _, _))| *players >= 10)
             .map(
                 |(club_uid, (club_name, players, ca_sum, max_ca, age_sum, value))| ClubOverview {
-                    club_uid,
-                    club_name,
-                    players,
-                    avg_ca: round1(ca_sum as f64 / players as f64),
-                    max_ca,
-                    avg_age: round1(age_sum as f64 / players as f64),
-                    total_value: value,
+                    club_uid: *club_uid,
+                    club_name: club_name.clone(),
+                    players: *players,
+                    avg_ca: round1(*ca_sum as f64 / *players as f64),
+                    max_ca: *max_ca,
+                    avg_age: round1(*age_sum as f64 / *players as f64),
+                    total_value: *value,
                 },
             )
             .collect();
-        top_clubs.sort_by(|left, right| {
+        let by_strength = |left: &ClubOverview, right: &ClubOverview| {
             right
                 .avg_ca
                 .total_cmp(&left.avg_ca)
                 .then_with(|| right.players.cmp(&left.players))
-        });
+        };
+        top_clubs.sort_by(by_strength);
         top_clubs.truncate(12);
+        if let Some(scope_uid) = club_uid
+            && !top_clubs.iter().any(|club| club.club_uid == scope_uid)
+            && let Some((club_name, players, ca_sum, max_ca, age_sum, value)) =
+                clubs.get(&scope_uid)
+            && *players > 0
+        {
+            top_clubs.push(ClubOverview {
+                club_uid: scope_uid,
+                club_name: club_name.clone(),
+                players: *players,
+                avg_ca: round1(*ca_sum as f64 / *players as f64),
+                max_ca: *max_ca,
+                avg_age: round1(*age_sum as f64 / *players as f64),
+                total_value: *value,
+            });
+            top_clubs.sort_by(by_strength);
+        }
 
         Ok(AnalysisOverview {
             total_players: player_count,
@@ -3108,6 +3170,9 @@ fn migrate(conn: &Connection) -> Result<()> {
     const COLUMNS: &[(&str, &str, &str)] = &[
         ("saves", "save_name", "TEXT NOT NULL DEFAULT ''"),
         ("saves", "career_key", "TEXT NOT NULL DEFAULT ''"),
+        ("saves", "managed_club_uid", "INTEGER"),
+        ("saves", "managed_club_name", "TEXT"),
+        ("saves", "manager_name", "TEXT"),
         ("players", "nation_name", "TEXT"),
         ("players", "league_competition_id", "INTEGER"),
         ("players", "league_name", "TEXT"),
@@ -4195,6 +4260,51 @@ mod tests {
             })
             .expect("mixed gender query");
         assert_eq!(mixed.total, 3);
+    }
+
+    #[test]
+    fn analysis_overview_scopes_to_one_club_and_reads_the_managed_club() {
+        let store = Store::open_in_memory().expect("store");
+        store
+            .conn
+            .execute_batch(
+                "INSERT INTO saves
+                   (id, path, file_name, file_size, mtime_ns, fingerprint, game, build,
+                    managed_club_uid, managed_club_name, manager_name, parser_version, parsed_at)
+                 VALUES (1, '/tmp/test.fm', 'test.fm', 1, 1, 'fp', 'FM27', '27.0.0',
+                         1099, 'Milan', 'Alice', 'test', 'now');
+                 INSERT INTO players
+                   (save_id, uid, name, age, ca, transfer_value, club_uid, club_name,
+                    positions_json, attributes_json, raw_attributes_json, data_json)
+                 VALUES
+                   (1, 1, 'One', 24, 150, 1000, 1099, 'Milan', '{}', '{}', '{}', '{}'),
+                   (1, 2, 'Two', 20, 100, 2000, 1099, 'Milan', '{}', '{}', '{}', '{}'),
+                   (1, 3, 'Other', 30, 120, 3000, 1708, 'Barcelona', '{}', '{}', '{}', '{}');",
+            )
+            .expect("seed");
+
+        let managed = store.managed_club(1).expect("managed club").expect("row");
+        assert_eq!(managed.club_uid, 1099);
+        assert_eq!(managed.club_name, "Milan");
+        assert_eq!(managed.manager_name.as_deref(), Some("Alice"));
+
+        let global = store.analysis_overview(1, None).expect("global overview");
+        assert_eq!(global.total_players, 3);
+        assert_eq!(global.total_value, 6000);
+
+        let scoped = store
+            .analysis_overview(1, Some(1099))
+            .expect("scoped overview");
+        assert_eq!(scoped.total_players, 2);
+        assert_eq!(scoped.average_age, 22.0);
+        assert_eq!(scoped.median_ca, 150);
+        assert_eq!(scoped.total_value, 3000);
+        assert!(
+            scoped
+                .top_clubs
+                .iter()
+                .any(|club| club.club_uid == 1099 && club.players == 2)
+        );
     }
 
     #[test]

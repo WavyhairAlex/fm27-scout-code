@@ -2,6 +2,7 @@ import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import {
   appInfo,
   getAnalysisOverview,
+  getManagedClub,
   getClub,
   getClubFilterOptions,
   getFilterOptions,
@@ -378,11 +379,23 @@ export function useGrowthHistory(uid: number | null) {
   });
 }
 
-export function useAnalysisOverview(enabled = true) {
+export function useManagedClub(saveId: number | null) {
+  return useQuery({
+    queryKey: ["managed-club", saveId],
+    queryFn: () => getManagedClub(saveId!),
+    enabled: saveId != null,
+    staleTime: Infinity,
+  });
+}
+
+export function useAnalysisOverview(
+  enabled = true,
+  clubUid: number | null = null,
+) {
   const saveId = useAppStore((state) => state.saveId);
   return useQuery({
-    queryKey: ["analysis-overview", saveId],
-    queryFn: () => getAnalysisOverview(saveId!),
+    queryKey: ["analysis-overview", saveId, clubUid],
+    queryFn: () => getAnalysisOverview(saveId!, clubUid),
     enabled: saveId != null && enabled,
     staleTime: 60_000,
   });

@@ -1,7 +1,5 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
 import {
-  ArrowRight,
   BarChart3,
   CalendarClock,
   ChevronDown,
@@ -12,18 +10,17 @@ import {
   Loader2,
   RefreshCw,
   Shield,
-  Sparkles,
   Target,
   TrendingUp,
   Users,
 } from "lucide-react";
-import { exportStats, pickExportFile, queryPlayers } from "@/lib/api";
+import { exportStats, pickExportFile } from "@/lib/api";
 import {
   useAnalysisOverview,
   useFilterOptions,
+  useManagedClub,
   useSimilarStatsPlayers,
   useSquadAnalysis,
-  useSquadNeeds,
   useStatsMoneyball,
   useValueFinder,
 } from "@/lib/query";
@@ -45,7 +42,7 @@ import { SquadNeedsSection } from "./SquadNeeds";
 import { Badge, Button, Input, Modal, Select } from "./ui";
 import { MultiSelect } from "./MultiSelect";
 
-type AnalysisTab = "overview" | "squad" | "needs" | "wonderkids" | "value" | "stats";
+type AnalysisTab = "overview" | "squad" | "needs" | "value" | "stats";
 
 export function AnalysisDialog() {
   const { t, locale } = useI18n();
@@ -55,40 +52,21 @@ export function AnalysisDialog() {
   const dataMode = useAppStore((state) => state.dataMode);
   const summary = useAppStore((state) => state.summary);
   const setSelectedUid = useAppStore((state) => state.setSelectedUid);
-  const patchFilters = useAppStore((state) => state.patchFilters);
   const setInspectorOpen = useAppStore((state) => state.setInspectorOpen);
   const [tab, setTab] = useState<AnalysisTab>(
     dataMode === "full" ? "overview" : "stats",
   );
   const [clubUid, setClubUid] = useState<number | null>(null);
   const clubChosen = useRef(false);
-  const overview = useAnalysisOverview(open);
+  const managed = useManagedClub(saveId);
+  const managedClubUid = managed.data?.club_uid ?? null;
+  const overview = useAnalysisOverview(open && !managed.isLoading, managedClubUid);
   const options = useFilterOptions();
   const squad = useSquadAnalysis(tab === "squad" ? clubUid : null);
-  const [wonderkidMaxAge, setWonderkidMaxAge] = useState(21);
-  const [wonderkidMinPa, setWonderkidMinPa] = useState(140);
-  const [wonderkidMinGap, setWonderkidMinGap] = useState(10);
-  const wonderkids = useQuery({
-    queryKey: ["wonderkids", saveId, wonderkidMaxAge, wonderkidMinPa, wonderkidMinGap],
-    queryFn: () =>
-      queryPlayers({
-        save_id: saveId!,
-        age_max: wonderkidMaxAge,
-        pa_min: wonderkidMinPa,
-        pa_ca_gap_min: wonderkidMinGap,
-        sort_by: "pa",
-        sort_dir: "desc",
-        page: 0,
-        page_size: 50,
-        include_hidden: false,
-      }),
-    enabled: open && tab === "wonderkids" && saveId != null,
-    staleTime: 30_000,
-  });
 
   useEffect(() => {
     const allowed: AnalysisTab[] = [
-      ...(dataMode === "full" ? (["overview", "wonderkids"] as AnalysisTab[]) : []),
+      ...(dataMode === "full" ? (["overview"] as AnalysisTab[]) : []),
       "squad",
       "needs",
       ...(dataMode !== "moneyball" ? (["value"] as AnalysisTab[]) : []),
@@ -98,13 +76,25 @@ export function AnalysisDialog() {
   }, [dataMode, tab]);
 
   useEffect(() => {
+    clubChosen.current = false;
+    setClubUid(null);
+  }, [saveId]);
+
+  useEffect(() => {
     if (clubChosen.current || clubUid != null) return;
-    const first = overview.data?.top_clubs[0]?.club_uid ?? options.data?.clubs[0]?.id ?? null;
+    if (managed.isLoading) return;
+    const managedClub = managed.data?.club_uid;
+    if (managedClub != null) {
+      clubChosen.current = true;
+      setClubUid(managedClub);
+      return;
+    }
+    const first = options.data?.clubs[0]?.id ?? null;
     if (first != null) {
       clubChosen.current = true;
       setClubUid(first);
     }
-  }, [clubUid, options.data, overview.data]);
+  }, [clubUid, managed.data, managed.isLoading, options.data]);
 
   const chooseClub = (uid: number | null) => {
     clubChosen.current = true;
@@ -117,20 +107,6 @@ export function AnalysisDialog() {
   );
 
   if (!open) return null;
-
-  const applyWonderkidFilters = () => {
-    patchFilters({
-      ageMax: wonderkidMaxAge,
-      paMin: wonderkidMinPa,
-      paCaGapMin: wonderkidMinGap,
-      ageMin: null,
-      caMin: null,
-      caMax: null,
-      paMax: null,
-    });
-    setSelectedUid(null);
-    setOpen(false);
-  };
 
   return (
     <Modal
@@ -157,7 +133,6 @@ export function AnalysisDialog() {
             onClick={() => {
               void overview.refetch();
               if (tab === "squad") void squad.refetch();
-              if (tab === "wonderkids") void wonderkids.refetch();
             }}
           >
             <RefreshCw size={13} />
@@ -169,10 +144,7 @@ export function AnalysisDialog() {
       <div className="flex gap-1 border-b border-[var(--line)] px-4 pt-3">
         {[
           ...(dataMode === "full"
-            ? [
-                ["overview", t("analysis.tab.overview"), <BarChart3 size={12} key="overview" />],
-                ["wonderkids", t("analysis.tab.wonderkids"), <Sparkles size={12} key="wonderkids" />],
-              ]
+            ? [["overview", t("analysis.tab.overview"), <BarChart3 size={12} key="overview" />]]
             : []),
           ["squad", t("analysis.tab.squad"), <Users size={12} key="squad" />],
           ["needs", t("analysis.tab.needs"), <Target size={12} key="needs" />],
@@ -200,11 +172,13 @@ export function AnalysisDialog() {
 
       <div className="p-4">
         {tab === "overview" &&
-          (overview.isLoading ? (
+          (managed.isLoading || overview.isLoading ? (
             <LoadingBlock />
           ) : overview.data ? (
             <OverviewPanel
               data={overview.data}
+              managedClubUid={managedClubUid}
+              managedClubName={managed.data?.club_name ?? null}
               onClub={(uid) => {
                 chooseClub(uid);
                 setTab("squad");
@@ -285,26 +259,6 @@ export function AnalysisDialog() {
           </div>
         )}
 
-        {tab === "wonderkids" && (
-          <WonderkidPanel
-            maxAge={wonderkidMaxAge}
-            minPa={wonderkidMinPa}
-            minGap={wonderkidMinGap}
-            onMaxAge={setWonderkidMaxAge}
-            onMinPa={setWonderkidMinPa}
-            onMinGap={setWonderkidMinGap}
-            loading={wonderkids.isLoading}
-            rows={wonderkids.data?.rows ?? []}
-            total={wonderkids.data?.total ?? 0}
-            onApply={applyWonderkidFilters}
-            onPlayer={(uid) => {
-              setSelectedUid(uid);
-              setInspectorOpen(true);
-              setOpen(false);
-            }}
-          />
-        )}
-
         {tab === "value" && (
           <ValueFinderPanel
             saveId={saveId}
@@ -333,25 +287,47 @@ export function AnalysisDialog() {
 
 function OverviewPanel({
   data,
+  managedClubUid,
+  managedClubName,
   onClub,
 }: {
   data: AnalysisOverview;
+  managedClubUid: number | null;
+  managedClubName: string | null;
   onClub: (clubUid: number) => void;
 }) {
   const { t, locale, formatValue } = useI18n();
+  const scoped = managedClubUid != null;
   return (
     <div className="space-y-4">
+      {scoped && managedClubName && (
+        <div
+          data-testid="analysis-managed-club"
+          className="flex items-center gap-2 rounded-lg border border-[var(--accent-line)] bg-[var(--accent-soft)] px-3 py-2 text-[10px] text-[var(--accent-strong)]"
+        >
+          <Badge tone="accent">{t("analysis.managedClub")}</Badge>
+          <span className="font-medium">{managedClubName}</span>
+        </div>
+      )}
       <div className="grid grid-cols-3 gap-2 lg:grid-cols-6">
         <Stat
           icon={<Users size={13} />}
           label={t("analysis.players")}
           value={formatNumber(data.total_players, locale)}
         />
-        <Stat
-          icon={<Shield size={13} />}
-          label={t("analysis.clubs")}
-          value={formatNumber(data.total_clubs, locale)}
-        />
+        {scoped ? (
+          <Stat
+            icon={<Users size={13} />}
+            label={t("analysis.loanees")}
+            value={formatNumber(data.loanees, locale)}
+          />
+        ) : (
+          <Stat
+            icon={<Shield size={13} />}
+            label={t("analysis.clubs")}
+            value={formatNumber(data.total_clubs, locale)}
+          />
+        )}
         <Stat
           icon={<CalendarClock size={13} />}
           label={t("analysis.averageAge")}
@@ -408,10 +384,16 @@ function OverviewPanel({
                 {data.top_clubs.map((club, index) => (
                   <tr
                     key={club.club_uid}
-                    className="cursor-pointer border-t border-[var(--line)]/60 text-[10px] hover:bg-[var(--surface)]"
+                    className={cn(
+                      "cursor-pointer border-t border-[var(--line)]/60 text-[10px] hover:bg-[var(--surface)]",
+                      club.club_uid === managedClubUid &&
+                        "bg-[var(--accent-soft)]/60 hover:bg-[var(--accent-soft)]",
+                    )}
                     onClick={() => onClub(club.club_uid)}
                   >
-                    <td className="py-1.5 pr-2 font-mono text-[var(--muted)]">{index + 1}</td>
+                    <td className="py-1.5 pr-2 font-mono text-[var(--muted)]">
+                      {data.top_clubs.length > 12 && index === 12 ? "—" : index + 1}
+                    </td>
                     <td className="max-w-[190px] truncate py-1.5 font-medium text-[var(--ink)]">
                       {club.club_name}
                     </td>
@@ -438,11 +420,18 @@ function OverviewPanel({
           </div>
           <div className="rounded-xl border border-[var(--line)] bg-[var(--surface-2)] p-3">
             <SectionTitle>{t("analysis.status")}</SectionTitle>
-            <div className="mt-2 grid grid-cols-3 gap-2 text-center">
-              <MiniStat
-                label={t("analysis.freeAgents")}
-                value={formatNumber(data.free_agents, locale)}
-              />
+            <div
+              className={cn(
+                "mt-2 grid gap-2 text-center",
+                scoped ? "grid-cols-2" : "grid-cols-3",
+              )}
+            >
+              {!scoped && (
+                <MiniStat
+                  label={t("analysis.freeAgents")}
+                  value={formatNumber(data.free_agents, locale)}
+                />
+              )}
               <MiniStat
                 label={t("analysis.loanees")}
                 value={formatNumber(data.loanees, locale)}
@@ -594,114 +583,6 @@ function SquadPanel({
           </table>
         </div>
       </div>
-    </div>
-  );
-}
-
-function WonderkidPanel({
-  maxAge,
-  minPa,
-  minGap,
-  onMaxAge,
-  onMinPa,
-  onMinGap,
-  loading,
-  rows,
-  total,
-  onApply,
-  onPlayer,
-}: {
-  maxAge: number;
-  minPa: number;
-  minGap: number;
-  onMaxAge: (value: number) => void;
-  onMinPa: (value: number) => void;
-  onMinGap: (value: number) => void;
-  loading: boolean;
-  rows: import("@/lib/types").PlayerRow[];
-  total: number;
-  onApply: () => void;
-  onPlayer: (uid: number) => void;
-}) {
-  const { t, formatValue } = useI18n();
-  return (
-    <div className="space-y-3">
-      <div className="flex flex-wrap items-end gap-3 rounded-xl border border-[var(--line)] bg-[var(--surface-2)] p-3">
-        <NumberField
-          label={t("analysis.wonderkidAge")}
-          value={maxAge}
-          min={15}
-          max={30}
-          onChange={onMaxAge}
-        />
-        <NumberField
-          label={t("analysis.wonderkidPa")}
-          value={minPa}
-          min={80}
-          max={200}
-          onChange={onMinPa}
-        />
-        <NumberField
-          label={t("analysis.wonderkidGap")}
-          value={minGap}
-          min={0}
-          max={80}
-          onChange={onMinGap}
-        />
-        <div className="ml-auto flex items-center gap-2">
-          <span className="text-[10px] text-[var(--muted)]">
-            {t("analysis.matches", { count: total })}
-          </span>
-          <Button variant="primary" size="sm" onClick={onApply}>
-            {t("analysis.applyFilters")}
-            <ArrowRight size={12} />
-          </Button>
-        </div>
-      </div>
-      {loading ? (
-        <LoadingBlock />
-      ) : rows.length === 0 ? (
-        <EmptyHint text={t("analysis.noWonderkids")} />
-      ) : (
-        <div className="overflow-hidden rounded-xl border border-[var(--line)]">
-          <table className="w-full text-left">
-            <thead className="bg-[var(--surface-2)] text-[9px] uppercase tracking-wider text-[var(--muted)]">
-              <tr>
-                <th className="px-3 py-1.5">{t("analysis.table.player")}</th>
-                <th className="px-2 py-1.5">{t("analysis.table.club")}</th>
-                <th className="px-2 py-1.5 text-right">{t("analysis.table.age")}</th>
-                <th className="px-2 py-1.5">{t("analysis.table.positions")}</th>
-                <th className="px-2 py-1.5 text-right">CA</th>
-                <th className="px-2 py-1.5 text-right">PA</th>
-                <th className="px-2 py-1.5 text-right">{t("filter.paCaGap")}</th>
-                <th className="px-3 py-1.5 text-right">{t("analysis.table.value")}</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((player) => (
-                <tr
-                  key={player.uid}
-                  className="cursor-pointer border-t border-[var(--line)]/60 text-[10px] hover:bg-[var(--surface-2)]"
-                  onClick={() => onPlayer(player.uid)}
-                >
-                  <td className="px-3 py-1.5 font-medium text-[var(--ink)]">{player.name}</td>
-                  <td className="max-w-[160px] truncate px-2 py-1.5 text-[var(--muted)]">
-                    {player.club_name ?? t("common.freeAgent")}
-                  </td>
-                  <td className="px-2 py-1.5 text-right font-mono text-[var(--muted)]">{player.age ?? "—"}</td>
-                  <td className="px-2 py-1.5 font-mono text-[var(--accent-strong)]">{player.positions_text}</td>
-                  <td className="px-2 py-1.5 text-right font-mono">{player.ca}</td>
-                  <td className="px-2 py-1.5 text-right font-mono font-semibold text-[var(--gold)]">{player.pa ?? "?"}</td>
-                  <td className="px-2 py-1.5 text-right font-mono text-[var(--muted)]">
-                    {player.pa != null ? player.pa - player.ca : "—"}
-                  </td>
-                  <td className="px-3 py-1.5 text-right font-mono text-[var(--muted)]">{formatValue(player.transfer_value)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
     </div>
   );
 }

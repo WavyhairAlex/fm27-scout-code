@@ -572,6 +572,14 @@ pub struct Competition {
     pub stage_ids: Vec<u32>,
 }
 
+/// The club run by the save's first human manager.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ManagedClub {
+    pub club_uid: u32,
+    pub club_name: String,
+    pub manager_name: Option<String>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SaveSummary {
     pub path: String,

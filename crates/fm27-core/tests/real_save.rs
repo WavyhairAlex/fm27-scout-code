@@ -182,10 +182,23 @@ fn caches_queries_and_exports_the_reference_career() {
     assert_eq!(competitions[1].database_id, Some(2));
     assert_eq!(competitions[1].stage_ids, vec![187]);
 
-    let overview = store.analysis_overview(save_id).expect("overview");
+    let overview = store.analysis_overview(save_id, None).expect("overview");
     assert_eq!(overview.total_players, 46_273);
     assert!(!overview.top_clubs.is_empty());
     assert!(overview.median_ca > 0);
+
+    let scoped = store
+        .analysis_overview(save_id, Some(1099))
+        .expect("scoped overview");
+    assert!(scoped.total_players > 0);
+    assert!(scoped.total_players < overview.total_players);
+    assert!(scoped.top_clubs.iter().any(|club| club.club_uid == 1099));
+
+    let managed = store
+        .managed_club(save_id)
+        .expect("managed club")
+        .expect("managed club present");
+    assert_eq!(managed.club_uid, 1099);
 
     let wonderkids = store
         .query_players(&PlayerQuery {

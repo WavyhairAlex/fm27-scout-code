@@ -23,7 +23,7 @@
 - **球员详情**：非 Full 隐藏 CA/PA 徽章和成长页；Moneyball 再隐藏属性页和角色页；编辑按钮只在 Full 出现。
 - **对比**：非 Full 隐藏 CA/PA；Moneyball 隐藏属性对比并给出提示。
 - **俱乐部阵容**：非 Full 隐藏平均 CA/PA 和 CA/PA 列；非 Full 的阵容顺序改为按工资，避免用 CA 顺序泄露能力。分析中心的阵容面板同样处理。
-- **分析中心**：非 Full 隐藏概览和小妖页（都依赖 CA/PA）；Moneyball 隐藏性价比页（属性驱动）。
+- **分析中心**：非 Full 隐藏概览页（依赖 CA/PA）；Moneyball 隐藏性价比页（属性驱动）。
 - **数据版**：非 Full 隐藏 CA 列和最低 CA 筛选，请求里的 `ca_min` 置空；Moneyball 下价格模型不使用 CA/PA。
 - **性价比页**：非 Full 隐藏 CA；Fair play 的质量改为纯角色分（不再混 CA）。Moneyball 页面本身不显示。
 
