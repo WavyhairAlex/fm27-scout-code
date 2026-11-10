@@ -486,6 +486,12 @@ Phase 0 已完成，详细记录见 [`docs/moneyball-phase0.md`](moneyball-phase
 - 门将扑救数据实际覆盖 64.6%，建议单独榜单；`pressures_*` 和 `goals_outside_box` 在 FM27 中不可用。
 - 当前状态为 **Go**：自动验证与 Parma 16 人游戏内对照均已通过；可以进入 Phase 2 parser/schema 工作（`docs/moneyball-phase0.md`）。
 - Phase 2 已落地：容器 unlisted span frame、`season_stats.rs`、`player_season_stats` schema、core/advanced 评分、Tauri `stats_moneyball` 命令和 AnalysisDialog “数据版” tab。真实存档 156,272 行与参考实现一致。见 [`docs/moneyball-phase2.md`](moneyball-phase2.md)。
+- Sprint A 已落地：固定评分下限、对等组最小样本、经验贝叶斯收缩、npxG、不确定性区间、伤病窗口和统一位置分组。模型升级为 `stats-core-v2` / `stats-advanced-v2`，见 [`docs/moneyball-phase4.md`](moneyball-phase4.md)。
+- Sprint B 已落地：同存档折外公平价格模型（`hedonic-ridge-v1`）、`value_gap_pct` 与独立 `bargain_score`；`score` 只表示质量。见 [`docs/moneyball-phase5.md`](moneyball-phase5.md)。
+- Sprint C 已落地：8 个位置组、新统计字段、overall/league/calendar 窗口和年龄/合同进入 bargain；模型升级为 v3，价格模型为 `hedonic-ridge-v2`。见 [`docs/moneyball-phase6.md`](moneyball-phase6.md)。
+- Sprint D（第一部分）已落地：数据版 CSV/JSON 导出和同位置组相似球员检索。见 [`docs/moneyball-phase7.md`](moneyball-phase7.md)。
+- Sprint D（第二部分）已落地：Full / Fair play / Moneyball 三模式，覆盖球员表、筛选、详情、对比、俱乐部阵容、分析中心和数据版；非 Full 模式的价格模型不使用 CA/PA。见 [`docs/moneyball-phase8.md`](moneyball-phase8.md)。
+- Sprint E 已落地：阵容需求视图（最弱位置 + 同层升级候选）。赛程/积分榜 parser spike 结论为 No-Go，阻塞点是 fixture team id 无法映射到俱乐部，见 [`docs/league-fixtures-spike.md`](league-fixtures-spike.md)；阵容需求见 [`docs/moneyball-phase9.md`](moneyball-phase9.md)。
 
 ## 附录：代码与数据参考
 

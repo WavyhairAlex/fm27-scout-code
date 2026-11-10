@@ -14,8 +14,10 @@ import {
   queryStaff,
   queryClubs,
   queryPlayers,
+  getSquadNeeds,
   queryStatsMoneyball,
   queryValueFinder,
+  similarStatsPlayers,
 } from "./api";
 import type {
   ClubQuery,
@@ -219,6 +221,38 @@ export function useStatsMoneyball(request: StatsMoneyballRequest | null) {
     enabled: request != null,
     placeholderData: keepPreviousData,
     staleTime: 30_000,
+  });
+}
+
+export function useSquadNeeds(clubUid: number | null) {
+  const saveId = useAppStore((state) => state.saveId);
+  const request =
+    saveId != null && clubUid != null
+      ? {
+          save_id: saveId,
+          club_uid: clubUid,
+          model: "core" as const,
+          window: "overall" as const,
+          min_minutes: 300,
+        }
+      : null;
+  return useQuery({
+    queryKey: ["squad-needs", request],
+    queryFn: () => getSquadNeeds(request!),
+    enabled: request != null,
+    staleTime: 60_000,
+  });
+}
+
+export function useSimilarStatsPlayers(
+  request: StatsMoneyballRequest | null,
+  uid: number | null,
+) {
+  return useQuery({
+    queryKey: ["stats-similar", request, uid],
+    queryFn: () => similarStatsPlayers(request!, uid!, 8),
+    enabled: request != null && uid != null,
+    staleTime: 60_000,
   });
 }
 

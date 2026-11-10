@@ -196,6 +196,6 @@ cargo build --release -p fm27-cli
 - `docs/features.md` — implemented feature and parser coverage.
 - `docs/limitations.md` — supported builds, data gaps, safety boundaries and roadmap.
 - `docs/editor.md` — editing workflow, CA/PA behaviour and the RCA estimator.
-- `docs/moneyball-feasibility.md`, `docs/moneyball-phase0.md`, `docs/moneyball-phase2.md`, `docs/moneyball-phase3.md` — model design, validation and known biases.
+- `docs/moneyball-feasibility.md`, `docs/moneyball-phase0.md`, `docs/moneyball-phase2.md`, `docs/moneyball-phase3.md`, `docs/moneyball-phase4.md`, `docs/moneyball-phase5.md`, `docs/moneyball-phase6.md`, `docs/moneyball-phase7.md`, `docs/moneyball-phase8.md`, `docs/moneyball-phase9.md`, `docs/league-fixtures-spike.md` — model design, validation, parser spike and known biases.
 - `docs/performance-optimization.md` — performance review and implemented optimizations.
 - `docs/release.md` — versioning, CI release artifacts, updater signing and notarization.

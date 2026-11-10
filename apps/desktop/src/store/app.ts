@@ -18,6 +18,7 @@ import {
 const SAVED_VIEWS_KEY = "fm27scout.views.v1";
 const LANGUAGE_KEY = "fm27scout.language.v1";
 const CURRENCY_KEY = "fm27scout.currency.v1";
+const DATA_MODE_KEY = "fm27scout.dataMode.v1";
 
 export interface AttributeRule {
   id: string;
@@ -188,6 +189,7 @@ export interface SavedView {
 
 export type Theme = "system" | "light" | "dark";
 export type DisplayMode = "display" | "raw";
+export type DataMode = "full" | "fair_play" | "moneyball";
 
 export interface Toast {
   id: number;
@@ -238,6 +240,7 @@ interface AppState {
   selectedStaffUid: number | null;
   compareUids: number[];
   hiddenEnabled: boolean;
+  dataMode: DataMode;
   displayMode: DisplayMode;
   theme: Theme;
   language: Language;
@@ -292,6 +295,7 @@ interface AppState {
   toggleCompare: (uid: number) => void;
   clearCompare: () => void;
   setHiddenEnabled: (enabled: boolean) => void;
+  setDataMode: (mode: DataMode) => void;
   setDisplayMode: (mode: DisplayMode) => void;
   setTheme: (theme: Theme) => void;
   setLanguage: (language: Language) => void;
@@ -323,7 +327,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   viewMode: "players",
   filterOptions: null,
   filters: EMPTY_FILTERS,
-  sort: [{ by: "ca", dir: "desc" }],
+  sort: loadDataMode() === "full" ? [{ by: "ca", dir: "desc" }] : [{ by: "value", dir: "desc" }],
   page: 0,
   pageSize: 150,
   selectedUid: null,
@@ -340,6 +344,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   selectedStaffUid: null,
   compareUids: [],
   hiddenEnabled: false,
+  dataMode: loadDataMode(),
   displayMode: "display",
   theme: "system",
   language: loadLanguage(),
@@ -362,7 +367,10 @@ export const useAppStore = create<AppState>((set, get) => ({
       saveId,
       summary,
       filters: EMPTY_FILTERS,
-      sort: [{ by: "ca", dir: "desc" }],
+      sort:
+        get().dataMode === "full"
+          ? [{ by: "ca", dir: "desc" }]
+          : [{ by: "value", dir: "desc" }],
       page: 0,
       selectedUid: null,
       clubFilters: EMPTY_CLUB_FILTERS,
@@ -550,7 +558,9 @@ export const useAppStore = create<AppState>((set, get) => ({
       view.filters.availability === "injury_history"
         ? null
         : (view.filters.availability ?? null);
+    const dataMode = get().dataMode;
     const enableHidden =
+      dataMode === "full" &&
       !get().hiddenEnabled &&
       (view.filters.attributes ?? []).some((rule) => HIDDEN_FILTERS.has(rule.key));
     if (enableHidden) {
@@ -561,17 +571,38 @@ export const useAppStore = create<AppState>((set, get) => ({
         tone: "default",
       });
     }
+    const visibleAttributes =
+      dataMode === "full"
+        ? (view.filters.attributes ?? [])
+        : dataMode === "moneyball"
+          ? []
+          : (view.filters.attributes ?? []).filter((rule) => !HIDDEN_FILTERS.has(rule.key));
+    const visibleSort =
+      dataMode === "full"
+        ? view.sort
+        : view.sort?.filter(
+            (rule) => rule.by !== "ca" && rule.by !== "pa" && rule.by !== "best_role_score",
+          );
     set({
       filters: {
         ...EMPTY_FILTERS,
         ...view.filters,
         availability,
-        attributes: view.filters.attributes ?? [],
+        attributes: visibleAttributes,
         genders: view.filters.genders ?? [],
         listings: view.filters.listings ?? [],
+        caMin: dataMode === "full" ? view.filters.caMin : null,
+        caMax: dataMode === "full" ? view.filters.caMax : null,
+        paMin: dataMode === "full" ? view.filters.paMin : null,
+        paMax: dataMode === "full" ? view.filters.paMax : null,
+        paCaGapMin: dataMode === "full" ? view.filters.paCaGapMin : null,
       },
       ...(enableHidden ? { hiddenEnabled: true } : {}),
-      sort: view.sort?.length ? view.sort : [{ by: "ca", dir: "desc" }],
+      sort: visibleSort?.length
+        ? visibleSort
+        : dataMode === "full"
+          ? [{ by: "ca", dir: "desc" }]
+          : [{ by: "value", dir: "desc" }],
       page: 0,
       selectedUid: null,
     });
@@ -676,18 +707,53 @@ export const useAppStore = create<AppState>((set, get) => ({
     }),
   clearCompare: () => set({ compareUids: [] }),
   setHiddenEnabled: (hiddenEnabled) =>
-    set((state) => ({
-      hiddenEnabled,
-      filters: hiddenEnabled
-        ? state.filters
-        : {
-            ...state.filters,
-            attributes: state.filters.attributes.filter(
-              (rule) => !HIDDEN_FILTERS.has(rule.key),
-            ),
-          },
-      page: hiddenEnabled ? state.page : 0,
-    })),
+    set((state) => {
+      // Hidden attributes are a Full-mode tool; the menu shortcut must not
+      // re-enable them after switching to Fair play or Moneyball.
+      if (hiddenEnabled && state.dataMode !== "full") return state;
+      return {
+        hiddenEnabled,
+        filters: hiddenEnabled
+          ? state.filters
+          : {
+              ...state.filters,
+              attributes: state.filters.attributes.filter(
+                (rule) => !HIDDEN_FILTERS.has(rule.key),
+              ),
+            },
+        page: hiddenEnabled ? state.page : 0,
+      };
+    }),
+  setDataMode: (dataMode) => {
+    persistDataMode(dataMode);
+    set((state) => {
+      const full = dataMode === "full";
+      const visibleAttributes = full
+        ? state.filters.attributes
+        : dataMode === "moneyball"
+          ? []
+          : state.filters.attributes.filter((rule) => !HIDDEN_FILTERS.has(rule.key));
+      const sortUsesHiddenAbility = state.sort.some(
+        (rule) => rule.by === "ca" || rule.by === "pa" || rule.by === "best_role_score",
+      );
+      return {
+        dataMode,
+        hiddenEnabled: full ? state.hiddenEnabled : false,
+        filters: {
+          ...state.filters,
+          // CA/PA and the PA-CA gap are not visible outside Full mode.
+          caMin: full ? state.filters.caMin : null,
+          caMax: full ? state.filters.caMax : null,
+          paMin: full ? state.filters.paMin : null,
+          paMax: full ? state.filters.paMax : null,
+          paCaGapMin: full ? state.filters.paCaGapMin : null,
+          attributes: visibleAttributes,
+        },
+        sort: sortUsesHiddenAbility ? [{ by: "value", dir: "desc" }] : state.sort,
+        page: 0,
+      };
+    });
+  },
   setDisplayMode: (displayMode) => set({ displayMode }),
   setTheme: (theme) => set({ theme }),
   setLanguage: (language) => {
@@ -751,6 +817,27 @@ function persistLanguage(language: Language) {
   } catch {
     // Local storage can be unavailable in hardened webviews; the language still
     // applies for the current session.
+  }
+}
+
+function loadDataMode(): DataMode {
+  if (typeof window === "undefined") return "full";
+  try {
+    const value = window.localStorage.getItem(DATA_MODE_KEY);
+    return value === "fair_play" || value === "moneyball" || value === "full"
+      ? value
+      : "full";
+  } catch {
+    return "full";
+  }
+}
+
+function persistDataMode(mode: DataMode) {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(DATA_MODE_KEY, mode);
+  } catch {
+    // Local storage can be unavailable in hardened webviews.
   }
 }
 

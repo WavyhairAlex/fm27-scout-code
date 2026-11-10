@@ -12,13 +12,16 @@ use serde::{Deserialize, Serialize};
 
 use crate::error::{Error, Result};
 
-pub const VALUE_FINDER_MODEL: &str = "value-finder-v1";
+pub const VALUE_FINDER_MODEL: &str = "value-finder-v3";
 const COST_HORIZON_YEARS: f64 = 3.0;
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(default)]
 pub struct ValueFinderRequest {
     pub save_id: i64,
+    /// `full` (default), `fair_play` or `moneyball`. Non-full drops CA from the
+    /// quality composite.
+    pub mode: Option<String>,
     pub position_group: Option<String>,
     pub league: Option<String>,
     pub age_min: Option<i32>,
@@ -79,11 +82,13 @@ pub struct ValueFinderRow {
     pub loan_listed: bool,
     pub injury_status: String,
     pub recent_injury: Option<String>,
+    pub injury_recent: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ValueFinderMeta {
     pub model: String,
+    pub mode: String,
     pub scored: usize,
     pub filtered: usize,
     pub cost_horizon_years: f64,
@@ -115,6 +120,8 @@ pub struct ValueFinderCandidate {
     pub role_name: Option<String>,
     pub role_score: Option<u8>,
     pub role_position: Option<String>,
+    /// Natural positions from the save, best first. Drives the shared group.
+    pub positions_text: Option<String>,
     pub transfer_value: Option<u32>,
     pub transfer_value_state: String,
     pub wage: Option<u32>,
@@ -124,22 +131,62 @@ pub struct ValueFinderCandidate {
     pub loan_listed: bool,
     pub injury_status: String,
     pub recent_injury: Option<String>,
+    /// True when the most recent injury is inside the history window.
+    pub injury_recent: bool,
 }
 
-/// Group a role position into the six groups the UI compares inside.
+/// The comparison groups. Midfield is split into holding, central and wide
+/// roles because their stat profiles differ too much for one template.
+pub const POSITION_GROUPS: [&str; 8] = ["GK", "DC", "FB", "DM", "MC", "WM", "AMC", "ST"];
+
+/// Group a role position into the comparison groups.
 pub fn position_group(position: Option<&str>) -> &'static str {
-    let Some(position) = position else {
-        return "OTHER";
-    };
+    position.map(group_for_position).unwrap_or("OTHER")
+}
+
+fn group_for_position(position: &str) -> &'static str {
     match position.trim().to_ascii_uppercase().as_str() {
         "GK" => "GK",
         "DC" | "SW" => "DC",
         "DL" | "DR" | "WBL" | "WBR" => "FB",
-        "DM" | "MC" | "ML" | "MR" => "MID",
-        "AMC" | "AML" | "AMR" => "AM",
+        "DM" => "DM",
+        "MC" => "MC",
+        "ML" | "MR" | "AML" | "AMR" => "WM",
+        "AMC" => "AMC",
         "STC" | "ST" | "SC" => "ST",
         _ => "OTHER",
     }
+}
+
+/// True when a row's group matches a request filter. `MID` and `AM` are the
+/// pre-Sprint-C groups; saved views keep working by matching their new parts.
+pub fn position_filter_matches(filter: &str, group: &str) -> bool {
+    match filter {
+        "MID" => matches!(group, "DM" | "MC" | "WM"),
+        "AM" => matches!(group, "WM" | "AMC"),
+        _ => filter == group,
+    }
+}
+
+/// Group a player from the save's natural positions (best first) with an
+/// optional fallback. Both moneyball models use this, so the same player is
+/// compared inside the same group everywhere.
+pub fn position_group_for(text: Option<&str>, fallback: Option<&str>) -> &'static str {
+    let from_text = text.and_then(|text| {
+        let tokens: Vec<&str> = text
+            .split('/')
+            .map(str::trim)
+            .filter(|token| !token.is_empty())
+            .collect();
+        if tokens.iter().any(|token| token.eq_ignore_ascii_case("GK")) {
+            return Some("GK");
+        }
+        tokens
+            .first()
+            .map(|token| group_for_position(token))
+            .filter(|group| *group != "OTHER")
+    });
+    from_text.unwrap_or_else(|| position_group(fallback))
 }
 
 /// Average-rank percentile: ties share their average rank and the result is in
@@ -239,7 +286,7 @@ fn flags_for(
     if candidate.injury_status == "injured" {
         flags.push("injured".to_owned());
     }
-    if candidate.recent_injury.is_some() {
+    if candidate.injury_recent {
         flags.push("injury_history".to_owned());
     }
     if candidate.league_name.is_none() {
@@ -254,6 +301,9 @@ fn flags_for(
     flags
 }
 
+/// Data-completeness score for the attribute-based model. Role scores carry no
+/// sample size, so this is deliberately not an uncertainty interval; the
+/// stats-based model computes one from attempts and minutes instead.
 fn confidence_for(candidate: &ValueFinderCandidate, fee_known: bool, wage_known: bool) -> f64 {
     let mut confidence: f64 = 0.55;
     if fee_known {
@@ -325,6 +375,7 @@ fn compare_rows(
 pub struct ValueFinderBaseline {
     rows: Vec<ValueFinderRow>,
     leagues: Vec<String>,
+    mode: String,
 }
 
 pub fn validate_value_request(request: &ValueFinderRequest) -> Result<()> {
@@ -334,7 +385,8 @@ pub fn validate_value_request(request: &ValueFinderRequest) -> Result<()> {
         .map(str::trim)
         .filter(|value| !value.is_empty())
         .map(|value| value.to_ascii_uppercase())
-        && !matches!(group.as_str(), "GK" | "DC" | "FB" | "MID" | "AM" | "ST")
+        && !POSITION_GROUPS.contains(&group.as_str())
+        && !matches!(group.as_str(), "MID" | "AM")
     {
         return Err(Error::parse(format!("unknown position group {group:?}")));
     }
@@ -346,10 +398,19 @@ pub fn validate_value_request(request: &ValueFinderRequest) -> Result<()> {
     Ok(())
 }
 
-pub fn score_value_baseline(candidates: Vec<ValueFinderCandidate>) -> ValueFinderBaseline {
+pub fn score_value_baseline(
+    candidates: Vec<ValueFinderCandidate>,
+    mode: &str,
+) -> ValueFinderBaseline {
+    let use_ca = mode == "full";
     let groups: Vec<&'static str> = candidates
         .iter()
-        .map(|candidate| position_group(candidate.role_position.as_deref()))
+        .map(|candidate| {
+            position_group_for(
+                candidate.positions_text.as_deref(),
+                candidate.role_position.as_deref(),
+            )
+        })
         .collect();
     let leagues: Vec<String> = {
         let mut names = std::collections::BTreeSet::new();
@@ -393,7 +454,7 @@ pub fn score_value_baseline(candidates: Vec<ValueFinderCandidate>) -> ValueFinde
     let mut role_pct = vec![None; candidates.len()];
     let mut ca_pct = vec![None; candidates.len()];
     let mut cost_pct = vec![None; candidates.len()];
-    for group in ["GK", "DC", "FB", "MID", "AM", "ST", "OTHER"] {
+    for group in POSITION_GROUPS.into_iter().chain(["OTHER"]) {
         let indices: Vec<usize> = groups
             .iter()
             .enumerate()
@@ -425,7 +486,10 @@ pub fn score_value_baseline(candidates: Vec<ValueFinderCandidate>) -> ValueFinde
 
     let mut rows = Vec::with_capacity(candidates.len());
     for (index, candidate) in candidates.into_iter().enumerate() {
-        let group = position_group(candidate.role_position.as_deref());
+        let group = position_group_for(
+            candidate.positions_text.as_deref(),
+            candidate.role_position.as_deref(),
+        );
         let (fee, fee_known) = fee_for(&candidate);
         let wage_known = candidate.wage.is_some();
         let Some(cost) = cost_for(fee, candidate.wage) else {
@@ -437,10 +501,10 @@ pub fn score_value_baseline(candidates: Vec<ValueFinderCandidate>) -> ValueFinde
         let role_pct = role_pct[index];
         let ca_pct = ca_pct[index];
         let quality_pct = match (role_pct, ca_pct) {
-            (Some(role), Some(ca)) => 0.6 * role + 0.4 * ca,
-            (Some(role), None) => role,
-            (None, Some(ca)) => ca,
-            (None, None) => 0.0,
+            (Some(role), Some(ca)) if use_ca => 0.6 * role + 0.4 * ca,
+            (Some(role), _) => role,
+            (None, Some(ca)) if use_ca => ca,
+            _ => 0.0,
         };
         let cost_pct = cost_pct[index];
         let surplus = cost_pct.map(|cost| quality_pct - cost);
@@ -493,10 +557,15 @@ pub fn score_value_baseline(candidates: Vec<ValueFinderCandidate>) -> ValueFinde
             loan_listed: candidate.loan_listed,
             injury_status: candidate.injury_status,
             recent_injury: candidate.recent_injury,
+            injury_recent: candidate.injury_recent,
         });
     }
 
-    ValueFinderBaseline { rows, leagues }
+    ValueFinderBaseline {
+        rows,
+        leagues,
+        mode: mode.to_owned(),
+    }
 }
 
 fn matches_value_request(
@@ -508,7 +577,7 @@ fn matches_value_request(
         return false;
     }
     if let Some(group) = position_filter
-        && row.position_group != group
+        && !position_filter_matches(group, &row.position_group)
     {
         return false;
     }
@@ -576,7 +645,7 @@ fn matches_value_request(
     if request.exclude_injured && row.injury_status == "injured" {
         return false;
     }
-    if request.exclude_injury_history && row.recent_injury.is_some() {
+    if request.exclude_injury_history && row.injury_recent {
         return false;
     }
     true
@@ -638,6 +707,7 @@ pub fn apply_value_request(
             filtered,
             cost_horizon_years: COST_HORIZON_YEARS,
             leagues: baseline.leagues.clone(),
+            mode: baseline.mode.clone(),
         },
     })
 }
@@ -649,7 +719,8 @@ pub fn score_value_finder(
     request: &ValueFinderRequest,
 ) -> Result<ValueFinderPage> {
     validate_value_request(request)?;
-    let baseline = score_value_baseline(candidates);
+    let mode = crate::stats_moneyball::normalized_mode(request.mode.as_deref())?;
+    let baseline = score_value_baseline(candidates, mode);
     apply_value_request(&baseline, request)
 }
 
@@ -672,6 +743,7 @@ mod tests {
             role_name: Some("Central Midfielder".to_owned()),
             role_score: Some(role),
             role_position: Some("MC".to_owned()),
+            positions_text: None,
             transfer_value: Some(fee),
             transfer_value_state: "ok".to_owned(),
             wage: Some(wage),
@@ -681,6 +753,7 @@ mod tests {
             loan_listed: false,
             injury_status: "fit".to_owned(),
             recent_injury: None,
+            injury_recent: false,
         }
     }
 
@@ -696,10 +769,39 @@ mod tests {
         assert_eq!(position_group(Some("GK")), "GK");
         assert_eq!(position_group(Some("DC")), "DC");
         assert_eq!(position_group(Some("WBR")), "FB");
-        assert_eq!(position_group(Some("DM")), "MID");
-        assert_eq!(position_group(Some("AML")), "AM");
+        assert_eq!(position_group(Some("DM")), "DM");
+        assert_eq!(position_group(Some("MC")), "MC");
+        assert_eq!(position_group(Some("ML")), "WM");
+        assert_eq!(position_group(Some("AML")), "WM");
+        assert_eq!(position_group(Some("AMC")), "AMC");
         assert_eq!(position_group(Some("STC")), "ST");
         assert_eq!(position_group(None), "OTHER");
+    }
+
+    #[test]
+    fn legacy_position_filters_cover_the_split_groups() {
+        assert!(position_filter_matches("MID", "DM"));
+        assert!(position_filter_matches("MID", "MC"));
+        assert!(position_filter_matches("MID", "WM"));
+        assert!(!position_filter_matches("MID", "AMC"));
+        assert!(position_filter_matches("AM", "WM"));
+        assert!(position_filter_matches("AM", "AMC"));
+        assert!(!position_filter_matches("AM", "MC"));
+        assert!(position_filter_matches("ST", "ST"));
+        assert!(!position_filter_matches("ST", "MC"));
+    }
+
+    #[test]
+    fn shared_group_prefers_natural_positions_over_the_role_position() {
+        // A player whose best role is central midfield but whose best natural
+        // position is wide should be compared with wide players in both models.
+        assert_eq!(position_group_for(Some("MR / MC"), Some("MC")), "WM");
+        assert_eq!(position_group_for(Some("AML / AMC"), Some("AMC")), "WM");
+        assert_eq!(position_group_for(Some("DL / WBL"), Some("DL")), "FB");
+        assert_eq!(position_group_for(Some("GK / DC"), Some("DC")), "GK");
+        assert_eq!(position_group_for(None, Some("STC")), "ST");
+        assert_eq!(position_group_for(Some("weird"), Some("DC")), "DC");
+        assert_eq!(position_group_for(Some("weird"), None), "OTHER");
     }
 
     #[test]
@@ -751,6 +853,7 @@ mod tests {
         injured.recent_injury = Some("2026-08-01".to_owned());
         let mut history = candidate(2, 16, 150, 1_000_000, 20_000);
         history.recent_injury = Some("2026-08-01".to_owned());
+        history.injury_recent = true;
         let fit = candidate(3, 16, 150, 1_000_000, 20_000);
 
         let mut query = request();
@@ -855,5 +958,36 @@ mod tests {
         query.position_group = Some("WING".to_owned());
         let error = score_value_finder(Vec::new(), &query).expect_err("reject");
         assert!(error.to_string().contains("unknown position group"));
+    }
+
+    #[test]
+    fn fair_play_drops_ca_from_the_value_finder_quality() {
+        let mut low = candidate(1, 16, 110, 1_000_000, 20_000);
+        low.positions_text = Some("MC".to_owned());
+        let mut high = candidate(2, 16, 170, 1_000_000, 20_000);
+        high.positions_text = Some("MC".to_owned());
+        let full = score_value_finder(
+            vec![low.clone(), high.clone()],
+            &ValueFinderRequest {
+                mode: Some("full".to_owned()),
+                ..request()
+            },
+        )
+        .expect("full");
+        let fair = score_value_finder(
+            vec![low, high],
+            &ValueFinderRequest {
+                mode: Some("fair_play".to_owned()),
+                ..request()
+            },
+        )
+        .expect("fair");
+        let full_low = full.rows.iter().find(|row| row.uid == 1).expect("row");
+        let full_high = full.rows.iter().find(|row| row.uid == 2).expect("row");
+        let fair_low = fair.rows.iter().find(|row| row.uid == 1).expect("row");
+        let fair_high = fair.rows.iter().find(|row| row.uid == 2).expect("row");
+        assert!(full_high.quality_pct > full_low.quality_pct);
+        assert!((fair_high.quality_pct - fair_low.quality_pct).abs() < 1e-9);
+        assert_eq!(fair.meta.mode, "fair_play");
     }
 }

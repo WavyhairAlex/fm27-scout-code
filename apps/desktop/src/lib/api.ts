@@ -31,6 +31,9 @@ import type {
   StaffPage,
   StaffQuery,
   StatsMoneyballPage,
+  SimilarStatsPlayer,
+  SquadNeeds,
+  SquadNeedsRequest,
   StatsMoneyballRequest,
   TraitOption,
   ValueFinderPage,
@@ -55,6 +58,8 @@ import {
   mockQueryStaff,
   mockStaffFilterOptions,
   mockSquadAnalysis,
+  mockSimilarStatsPlayers,
+  mockSquadNeeds,
   mockStatsMoneyball,
   mockValueFinder,
 } from "./mock";
@@ -338,6 +343,52 @@ export async function exportPlayers(
     return { path, format, rows: rows.length };
   }
   return timedInvoke<ExportReport>("export_players", { query, format, path });
+}
+
+export async function exportStats(
+  request: StatsMoneyballRequest,
+  format: "csv" | "json",
+  path: string,
+): Promise<ExportReport> {
+  if (!isTauri) {
+    const rows = mockStatsMoneyball({ ...request, page: 0, page_size: 500 }).rows;
+    const payload =
+      format === "json"
+        ? JSON.stringify(rows, null, 2)
+        : [
+            Object.keys(rows[0] ?? {}).join(","),
+            ...rows.map((row) =>
+              Object.values(row)
+                .map((value) => `"${String(value ?? "").replace(/"/g, '""')}"`)
+                .join(","),
+            ),
+          ].join("\n");
+    const blob = new Blob([payload], {
+      type: format === "json" ? "application/json" : "text/csv",
+    });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = path;
+    anchor.click();
+    URL.revokeObjectURL(url);
+    return { path, format, rows: rows.length };
+  }
+  return timedInvoke<ExportReport>("export_stats", { request, format, path });
+}
+
+export async function getSquadNeeds(request: SquadNeedsRequest): Promise<SquadNeeds> {
+  if (!isTauri) return mockSquadNeeds(request);
+  return timedInvoke<SquadNeeds>("squad_needs", { request });
+}
+
+export async function similarStatsPlayers(
+  request: StatsMoneyballRequest,
+  uid: number,
+  limit = 8,
+): Promise<SimilarStatsPlayer[]> {
+  if (!isTauri) return mockSimilarStatsPlayers(request, uid, limit);
+  return timedInvoke<SimilarStatsPlayer[]>("similar_stats_players", { request, uid, limit });
 }
 
 export async function exportStaff(

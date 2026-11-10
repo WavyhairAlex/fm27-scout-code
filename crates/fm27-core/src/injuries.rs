@@ -214,6 +214,30 @@ pub fn injury_until(injuries: &[Injury], clock: Option<NaiveDate>) -> Option<Str
         .map(|(_, text)| text)
 }
 
+/// How far back a history row still counts as a current risk. Career logs keep
+/// injuries for many seasons, so a filter without a window would exclude nearly
+/// every senior player.
+pub const HISTORY_MONTHS: i64 = 24;
+
+/// True when `date` is inside the rolling history window that ends at the save's
+/// game date. A missing or unparsable game date keeps the row flagged, because
+/// the alternative is silently hiding a known injury.
+pub fn recent_within_window(date: &str, game_date: Option<&str>, months: i64) -> bool {
+    let Some(game_date) = game_date else {
+        return true;
+    };
+    let (Ok(date), Ok(clock)) = (
+        NaiveDate::parse_from_str(date, "%Y-%m-%d"),
+        NaiveDate::parse_from_str(game_date, "%Y-%m-%d"),
+    ) else {
+        return true;
+    };
+    // Month windows are approximated with 31-day months; the difference only
+    // matters at the boundary and keeps this crate free of a calendar table.
+    let days = (clock - date).num_days();
+    days >= -31 && days <= months * 31
+}
+
 pub fn recent_injury_date(injuries: &[Injury]) -> Option<String> {
     injuries
         .iter()
@@ -302,6 +326,14 @@ mod tests {
         }));
         assert_eq!(injury_until(rows, clock).as_deref(), Some("2026-08-15"));
         assert_eq!(recent_injury_date(rows).as_deref(), Some("2026-06-01"));
+    }
+
+    #[test]
+    fn keeps_only_an_injury_inside_the_history_window() {
+        assert!(recent_within_window("2026-06-01", Some("2026-12-05"), 24));
+        assert!(!recent_within_window("2023-01-01", Some("2026-12-05"), 24));
+        assert!(recent_within_window("2026-06-01", None, 24));
+        assert!(recent_within_window("2026-06-01", Some("unknown"), 24));
     }
 
     #[test]

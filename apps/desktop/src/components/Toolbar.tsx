@@ -24,9 +24,9 @@ import { useSaves } from "@/lib/query";
 import { relativeTime, cn } from "@/lib/utils";
 import { formatNumber } from "@/lib/i18n";
 import { useI18n } from "@/lib/useI18n";
-import { useAppStore } from "@/store/app";
+import { useAppStore, type DataMode } from "@/store/app";
 import { useOpenSave } from "@/lib/openSave";
-import { Badge, Button, Input } from "./ui";
+import { Badge, Button, Input, Select } from "./ui";
 
 export function Toolbar() {
   const { t, locale } = useI18n();
@@ -43,6 +43,8 @@ export function Toolbar() {
   const patchStaffFilters = useAppStore((state) => state.patchStaffFilters);
   const hiddenEnabled = useAppStore((state) => state.hiddenEnabled);
   const setHiddenEnabled = useAppStore((state) => state.setHiddenEnabled);
+  const dataMode = useAppStore((state) => state.dataMode);
+  const setDataMode = useAppStore((state) => state.setDataMode);
   const compareUids = useAppStore((state) => state.compareUids);
   const setCompareOpen = useAppStore((state) => state.setCompareOpen);
   const setAnalysisOpen = useAppStore((state) => state.setAnalysisOpen);
@@ -289,27 +291,39 @@ export function Toolbar() {
             </span>
           </Button>
         )}
-        <Button
-          variant={hiddenEnabled ? "gold" : "ghost"}
-          size="sm"
-          className="h-8"
-          onClick={() => {
-            if (hiddenEnabled) {
-              setHiddenEnabled(false);
-              return;
-            }
-            pushToast({
-              title: t("toast.hiddenOn.title"),
-              description: t("toast.hiddenOn.description"),
-              tone: "default",
-            });
-            setHiddenEnabled(true);
-          }}
-          title={t("toolbar.hidden")}
+        <Select
+          value={dataMode}
+          onChange={(event) => setDataMode(event.target.value as DataMode)}
+          className="h-8 w-[118px] text-[10px]"
+          title={t("toolbar.modeHint")}
         >
-          {hiddenEnabled ? <Eye size={13} /> : <LockKeyhole size={13} />}
-          <span className="hidden xl:inline">{t("toolbar.hiddenShort")}</span>
-        </Button>
+          <option value="full">{t("toolbar.modeFull")}</option>
+          <option value="fair_play">{t("toolbar.modeFair")}</option>
+          <option value="moneyball">{t("toolbar.modeMoneyball")}</option>
+        </Select>
+        {dataMode === "full" && (
+          <Button
+            variant={hiddenEnabled ? "gold" : "ghost"}
+            size="sm"
+            className="h-8"
+            onClick={() => {
+              if (hiddenEnabled) {
+                setHiddenEnabled(false);
+                return;
+              }
+              pushToast({
+                title: t("toast.hiddenOn.title"),
+                description: t("toast.hiddenOn.description"),
+                tone: "default",
+              });
+              setHiddenEnabled(true);
+            }}
+            title={t("toolbar.hidden")}
+          >
+            {hiddenEnabled ? <Eye size={13} /> : <LockKeyhole size={13} />}
+            <span className="hidden xl:inline">{t("toolbar.hiddenShort")}</span>
+          </Button>
+        )}
         <Button
           variant={compareUids.length > 0 ? "gold" : "ghost"}
           size="sm"

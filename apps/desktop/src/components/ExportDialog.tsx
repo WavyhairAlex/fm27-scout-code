@@ -20,6 +20,7 @@ export function ExportDialog() {
   const filters = useAppStore((state) => state.filters);
   const sort = useAppStore((state) => state.sort);
   const hiddenEnabled = useAppStore((state) => state.hiddenEnabled);
+  const dataMode = useAppStore((state) => state.dataMode);
   const selectedUid = useAppStore((state) => state.selectedUid);
   const compareUids = useAppStore((state) => state.compareUids);
   const staffFilters = useAppStore((state) => state.staffFilters);
@@ -134,6 +135,11 @@ export function ExportDialog() {
       }
     >
       <div className="space-y-4 p-5">
+        {dataMode !== "full" && !exportingStaff && (
+          <div className="rounded-lg border border-[var(--gold-line)] bg-[var(--gold-soft)] px-3 py-2 text-[10px] text-[var(--gold)]">
+            {t("export.modeWarning")}
+          </div>
+        )}
         <div className="space-y-2">
           <div className="text-[11px] font-semibold uppercase tracking-wider text-[var(--muted)]">
             {t("export.scope")}

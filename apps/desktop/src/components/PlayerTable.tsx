@@ -51,6 +51,7 @@ export function PlayerTable() {
   const setPage = useAppStore((state) => state.setPage);
   const pageSize = useAppStore((state) => state.pageSize);
   const hiddenEnabled = useAppStore((state) => state.hiddenEnabled);
+  const dataMode = useAppStore((state) => state.dataMode);
   const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({
     height: false,
     foot: false,
@@ -346,7 +347,16 @@ export function PlayerTable() {
           ),
       },
     ];
-    return baseColumns.map((column) =>
+    const visibleColumns = baseColumns.filter((column) => {
+      if (dataMode === "full") return true;
+      const id = String(column.id ?? "");
+      if (id === "ca" || id === "pa" || id === "hidden") return false;
+      if (dataMode === "moneyball") {
+        return id !== "role" && !id.startsWith("attr_");
+      }
+      return true;
+    });
+    return visibleColumns.map((column) =>
       column.id && ["name", "club", "positions", "ca", "pa", "value", "wage", "contract", "height", "foot"].includes(column.id)
         ? { ...column, meta: { ...(column.meta ?? {}), sortable: true } }
         : column,
@@ -356,6 +366,7 @@ export function PlayerTable() {
     formatValue,
     formatWage,
     hiddenEnabled,
+    dataMode,
     locale,
     t,
     toggleCompare,

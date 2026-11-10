@@ -53,7 +53,11 @@
   with sortable headers, and facility ratings use the game's ten named tiers.
 - 2–4 player comparison.
 - CSV/JSON export.
-- Hidden-attribute toggle, off by default.
+- Scouting modes: Full shows CA/PA and attributes; Fair play hides CA/PA, growth
+  and hidden attributes; Moneyball also hides attributes and role scores and
+  prices players without CA/PA. Exports still contain CA/PA and show a warning
+  outside Full mode.
+- Hidden-attribute toggle, off by default (Full mode only).
 - Light and dark themes.
 - Analysis centre: age/CA distributions, club strength ranking, squad depth and
   a wonderkid radar (age + PA + CA gap).
@@ -70,12 +74,19 @@
   flags and explainable score components. It is not a stats-based model; unknown
   fees and wages are excluded by default. Contract-expiry, market, confidence and
   injury-history filters are available.
-- Stats moneyball (experimental): this season's minutes, xG/xA, shooting, passing
-  and tackling against the same three-year cost, with position-aware percentiles,
-  confidence, flags and per-metric drivers. The core model scores every outfield
-  player; goalkeepers are ranked separately, and the advanced model only scores
-  rows where FM recorded the advanced stat block. Contract, market, confidence
-  and injury-history filters are available.
+- Stats moneyball (experimental, v3): npxG/xA, shooting, passing, defensive and
+  possession percentiles in eight position groups (GK/DC/FB/DM/MC/WM/AMC/ST),
+  with overall / league-only / last-12-months windows. Each row carries a quality
+  percentile, an out-of-fold fair price and value gap, a separate bargain score,
+  an 80% confidence band, risk flags, per-metric drivers and same-group similar
+  players. The core model scores every player; goalkeepers are ranked separately
+  and the advanced model only scores rows with the advanced stat block. Contract,
+  market, confidence, injury and fee filters are available, and the current view
+  exports to CSV or JSON.
+- Squad needs: the analysis centre's Needs tab and the club inspector's squad tab
+  rank a club's weakest position groups by current stats quality and list same-tier,
+  fee-known upgrades with quality gain, fair price and value gap. They use 300+ minute
+  samples and exclude loanee stats.
 - Growth history: each parse records a snapshot keyed by save name + game date;
   the detail panel shows CA / PA / value history.
 - Linked filtering: club, nationality, gender and status counts update live with

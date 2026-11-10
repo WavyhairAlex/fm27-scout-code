@@ -17,6 +17,7 @@ export function CompareDialog() {
   const toggleCompare = useAppStore((state) => state.toggleCompare);
   const clearCompare = useAppStore((state) => state.clearCompare);
   const hiddenEnabled = useAppStore((state) => state.hiddenEnabled);
+  const dataMode = useAppStore((state) => state.dataMode);
   const displayMode = useAppStore((state) => state.displayMode);
   const saveId = useAppStore((state) => state.saveId);
   const [differencesOnly, setDifferencesOnly] = useState(false);
@@ -33,11 +34,12 @@ export function CompareDialog() {
   const players = results.map((result) => result.data).filter(Boolean) as Player[];
 
   const groups = useMemo(() => {
+    if (dataMode === "moneyball") return [];
     const selected = hiddenOnly
       ? ATTRIBUTE_GROUPS.hidden
       : [...ATTRIBUTE_GROUPS.technical, ...(hiddenEnabled ? ATTRIBUTE_GROUPS.hidden : [])];
     return selected;
-  }, [hiddenEnabled, hiddenOnly]);
+  }, [dataMode, hiddenEnabled, hiddenOnly]);
 
   const values = (player: Player, key: string) =>
     displayMode === "display" ? player.attributes[key] ?? 0 : player.raw_attributes[key] ?? 0;
@@ -119,14 +121,16 @@ export function CompareDialog() {
               <div className="mt-0.5 truncate text-[10px] text-[var(--muted)]">
                 {player.club_name ?? t("common.freeAgent")}
               </div>
-              <div className="mt-2 flex items-center gap-1">
-                <span className={cn("rounded border px-1.5 py-0.5 font-mono text-[10px] font-bold", caTone(player.ca))}>
-                  CA {player.ca}
-                </span>
-                <span className="rounded border border-[var(--line)] bg-[var(--surface)] px-1.5 py-0.5 font-mono text-[10px] font-bold text-[var(--muted)]">
-                  PA {player.pa ?? "?"}
-                </span>
-              </div>
+              {dataMode === "full" && (
+                <div className="mt-2 flex items-center gap-1">
+                  <span className={cn("rounded border px-1.5 py-0.5 font-mono text-[10px] font-bold", caTone(player.ca))}>
+                    CA {player.ca}
+                  </span>
+                  <span className="rounded border border-[var(--line)] bg-[var(--surface)] px-1.5 py-0.5 font-mono text-[10px] font-bold text-[var(--muted)]">
+                    PA {player.pa ?? "?"}
+                  </span>
+                </div>
+              )}
               <div className="mt-1.5 text-[9px] text-[var(--muted)]">
                 {t("common.yearsOld", { age: player.age ?? "?" })} ·{" "}
                 {player.natural_positions.join(" / ")} · {formatValue(player.transfer_value)}
@@ -134,6 +138,12 @@ export function CompareDialog() {
             </div>
           ))}
         </div>
+
+        {dataMode === "moneyball" && (
+          <div className="mt-4 rounded-lg border border-dashed border-[var(--line)] px-3 py-2 text-[10px] text-[var(--muted)]">
+            {t("compare.moneyballHidden")}
+          </div>
+        )}
 
         <div className="mt-4 space-y-4">
           {groups.map((group) => {

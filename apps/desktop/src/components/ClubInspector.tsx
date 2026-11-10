@@ -16,6 +16,7 @@ import { formatNumber } from "@/lib/i18n";
 import { useI18n } from "@/lib/useI18n";
 import { caTone, cn, formatDate, initials } from "@/lib/utils";
 import { useAppStore } from "@/store/app";
+import { SquadNeedsSection } from "./SquadNeeds";
 import { Badge, Button, EmptyState } from "./ui";
 import { EditClubDialog } from "./EditClubDialog";
 
@@ -274,6 +275,7 @@ type SquadSortField = "ca" | "pa";
 function SquadTab({ clubUid }: { clubUid: number }) {
   const { t, locale, formatMoney, formatValue, formatWage } = useI18n();
   const squad = useSquadAnalysis(clubUid);
+  const dataMode = useAppStore((state) => state.dataMode);
   const setSelectedUid = useAppStore((state) => state.setSelectedUid);
   const setViewMode = useAppStore((state) => state.setViewMode);
   const setInspectorOpen = useAppStore((state) => state.setInspectorOpen);
@@ -284,6 +286,12 @@ function SquadTab({ clubUid }: { clubUid: number }) {
 
   const players = useMemo(() => {
     if (!squad.data) return [];
+    if (dataMode !== "full") {
+      // Sorting by a hidden ability score would still leak the ranking.
+      return [...squad.data.players].sort(
+        (left, right) => (right.wage ?? 0) - (left.wage ?? 0),
+      );
+    }
     return [...squad.data.players].sort((left, right) => {
       const leftValue = sort.by === "ca" ? left.ca : left.pa;
       const rightValue = sort.by === "ca" ? right.ca : right.pa;
@@ -293,7 +301,7 @@ function SquadTab({ clubUid }: { clubUid: number }) {
       const delta = leftValue - rightValue;
       return sort.dir === "desc" ? -delta : delta;
     });
-  }, [squad.data, sort]);
+  }, [dataMode, squad.data, sort]);
 
   const toggleSort = (by: SquadSortField) => {
     setSort((current) =>
@@ -314,29 +322,45 @@ function SquadTab({ clubUid }: { clubUid: number }) {
     <div className="space-y-3">
       <div className="grid grid-cols-3 gap-1.5">
         <MiniStat label={t("clubs.table.players")} value={String(data.player_count)} />
-        <MiniStat label={t("clubs.table.avgCa")} value={data.average_ca.toFixed(1)} />
-        <MiniStat label={t("analysis.averagePa")} value={data.average_pa.toFixed(1)} />
+        {dataMode === "full" && (
+          <>
+            <MiniStat label={t("clubs.table.avgCa")} value={data.average_ca.toFixed(1)} />
+            <MiniStat label={t("analysis.averagePa")} value={data.average_pa.toFixed(1)} />
+          </>
+        )}
         <MiniStat label={t("clubs.table.value")} value={formatValue(data.total_value)} />
         <MiniStat label={t("clubs.inspector.payroll")} value={formatMoney(data.total_wage)} />
         <MiniStat label={t("analysis.averageAge")} value={data.average_age.toFixed(1)} />
       </div>
+      <SquadNeedsSection
+        clubUid={clubUid}
+        onPlayer={(uid) => {
+          setSelectedUid(uid);
+          setViewMode("players");
+          setInspectorOpen(true);
+        }}
+      />
       <div className="overflow-hidden rounded-xl border border-[var(--line)]">
         <table className="w-full text-left">
           <thead className="bg-[var(--surface-2)] text-[8px] uppercase tracking-wider text-[var(--muted)]">
             <tr>
               <th className="px-2 py-1.5">{t("table.player")}</th>
-              <SortHeader
-                label="CA"
-                active={sort.by === "ca"}
-                dir={sort.dir}
-                onClick={() => toggleSort("ca")}
-              />
-              <SortHeader
-                label="PA"
-                active={sort.by === "pa"}
-                dir={sort.dir}
-                onClick={() => toggleSort("pa")}
-              />
+              {dataMode === "full" && (
+                <>
+                  <SortHeader
+                    label="CA"
+                    active={sort.by === "ca"}
+                    dir={sort.dir}
+                    onClick={() => toggleSort("ca")}
+                  />
+                  <SortHeader
+                    label="PA"
+                    active={sort.by === "pa"}
+                    dir={sort.dir}
+                    onClick={() => toggleSort("pa")}
+                  />
+                </>
+              )}
               <th className="px-2 py-1.5 text-right">{t("analysis.table.wage")}</th>
             </tr>
           </thead>
@@ -366,20 +390,24 @@ function SquadTab({ clubUid }: { clubUid: number }) {
                     </div>
                   </div>
                 </td>
-                <td className="px-1 py-1.5 text-right">
-                  <span className={cn("rounded border px-1 font-mono text-[8px] font-bold", caTone(player.ca))}>
-                    {player.ca}
-                  </span>
-                </td>
-                <td className="px-1 py-1.5 text-right">
-                  {player.pa != null ? (
-                    <span className={cn("rounded border px-1 font-mono text-[8px] font-bold", caTone(player.pa))}>
-                      {player.pa}
-                    </span>
-                  ) : (
-                    <span className="font-mono text-[8px] text-[var(--muted)]">—</span>
-                  )}
-                </td>
+                {dataMode === "full" && (
+                  <>
+                    <td className="px-1 py-1.5 text-right">
+                      <span className={cn("rounded border px-1 font-mono text-[8px] font-bold", caTone(player.ca))}>
+                        {player.ca}
+                      </span>
+                    </td>
+                    <td className="px-1 py-1.5 text-right">
+                      {player.pa != null ? (
+                        <span className={cn("rounded border px-1 font-mono text-[8px] font-bold", caTone(player.pa))}>
+                          {player.pa}
+                        </span>
+                      ) : (
+                        <span className="font-mono text-[8px] text-[var(--muted)]">—</span>
+                      )}
+                    </td>
+                  </>
+                )}
                 <td className="px-2 py-1.5 text-right font-mono text-[var(--muted)]">
                   {player.wage != null ? formatWage(player.wage) : "—"}
                 </td>

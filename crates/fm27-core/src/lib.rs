@@ -26,6 +26,7 @@ pub mod nations;
 pub mod parse;
 pub mod persons;
 pub mod player_scan;
+pub mod price_model;
 pub mod reference;
 pub mod roles;
 pub mod season_stats;

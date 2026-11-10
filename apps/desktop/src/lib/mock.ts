@@ -30,6 +30,11 @@ import type {
   StatsDriver,
   StatsMoneyballPage,
   StatsMoneyballRequest,
+  SimilarStatsPlayer,
+  SquadNeed,
+  SquadNeeds,
+  SquadNeedsRequest,
+  SquadUpgrade,
   StatsMoneyballRow,
   Trait,
   TraitOption,
@@ -37,7 +42,7 @@ import type {
   ValueFinderRequest,
   ValueFinderRow,
 } from "./types";
-import { STAFF_ATTRIBUTE_KEYS, STAFF_ROLE_KEYS } from "./types";
+import { STAFF_ATTRIBUTE_KEYS, STAFF_ROLE_KEYS, UNKNOWN_GENDER_ID } from "./types";
 
 export const MOCK_SAVE_ID = 1;
 
@@ -122,6 +127,10 @@ function rng(seed: number) {
     state = (state * 1664525 + 1013904223) >>> 0;
     return state / 0xffffffff;
   };
+}
+
+function genderBucket(gender: number | null): number {
+  return gender === 0 || gender === 1 ? gender : UNKNOWN_GENDER_ID;
 }
 
 function emptyPositions(): Positions {
@@ -316,6 +325,31 @@ function buildPlayer(index: number): Player {
 
 export const MOCK_PLAYERS: Player[] = Array.from({ length: 320 }, (_, index) => buildPlayer(index));
 
+// One free agent exercises the unknown-gender path: players inherit gender
+// from their club, so a player without a club has no resolved gender.
+Object.assign(MOCK_PLAYERS[MOCK_PLAYERS.length - 1], {
+  gender: null,
+  club_uid: null,
+  club_name: null,
+  club_short_name: null,
+  club_nation_id: null,
+  club_nation_name: null,
+  club_fa_nation_id: null,
+  club_reputation: null,
+  club_last_league_position: null,
+  league_competition_id: null,
+  league_name: null,
+  team_id: null,
+  team_slot: null,
+  club_join_date: null,
+  on_loan: false,
+  loan_parent_club_uid: null,
+  loan_parent_club_name: null,
+  loan_start: null,
+  loan_end: null,
+  contract: null,
+});
+
 export const MOCK_SUMMARY: SaveSummary = {
   path: "/Users/demo/Library/Application Support/Sports Interactive/Football Manager 27/games/BB KING - Casciavit.fm",
   file_name: "BB KING - Casciavit.fm",
@@ -462,6 +496,12 @@ export function mockFilterOptions(): FilterOptions {
     genders: [
       { id: 0, name: "男子", count: MOCK_PLAYERS.filter((player) => player.gender === 0).length },
       { id: 1, name: "女子", count: MOCK_PLAYERS.filter((player) => player.gender === 1).length },
+      {
+        id: UNKNOWN_GENDER_ID,
+        name: "未知",
+        count: MOCK_PLAYERS.filter((player) => genderBucket(player.gender) === UNKNOWN_GENDER_ID)
+          .length,
+      },
     ],
     availability: [
       { id: 1, name: "伤病", count: 0 },
@@ -519,7 +559,8 @@ export function mockQuery(query: PlayerQuery): {
   if (query.uids?.length) rows = rows.filter((row) => query.uids!.includes(row.uid));
   if (query.club_uids?.length) rows = rows.filter((row) => query.club_uids!.includes(row.club_uid ?? -1));
   if (query.nation_ids?.length) rows = rows.filter((row) => query.nation_ids!.includes(row.nation_id ?? -1));
-  if (query.genders?.length) rows = rows.filter((row) => query.genders!.includes(row.gender ?? -1));
+  if (query.genders?.length)
+    rows = rows.filter((row) => query.genders!.includes(genderBucket(row.gender)));
   if (query.availability === "injured") rows = rows.filter((row) => row.injury_status === "injured");
   if (query.availability === "injury_history") rows = rows.filter((row) => row.recent_injury != null);
   if (query.availability === "suspended") rows = rows.filter((row) => row.suspension_count > 0);
@@ -837,13 +878,21 @@ export function mockStaffFilterOptions(): StaffFilterOptions {
   };
 }
 
+function mockPositionFilterMatches(filter: string, group: string): boolean {
+  if (filter === "MID") return group === "DM" || group === "MC" || group === "WM";
+  if (filter === "AM") return group === "WM" || group === "AMC";
+  return filter === group;
+}
+
 function mockPositionGroup(position: string | null): string {
   switch ((position ?? "").toUpperCase()) {
     case "GK": return "GK";
     case "DC": case "SW": return "DC";
     case "DL": case "DR": case "WBL": case "WBR": return "FB";
-    case "DM": case "MC": case "ML": case "MR": return "MID";
-    case "AMC": case "AML": case "AMR": return "AM";
+    case "DM": return "DM";
+    case "MC": return "MC";
+    case "ML": case "MR": case "AML": case "AMR": return "WM";
+    case "AMC": return "AMC";
     case "STC": case "SC": return "ST";
     default: return "OTHER";
   }
@@ -856,14 +905,18 @@ export function mockValueFinder(request: ValueFinderRequest): ValueFinderPage {
     const cost = (fee ?? 0) + (player.wage ?? 0) * 52 * 3;
     const rolePct = (player.best_role_score ?? 1) / 20;
     const caPct = player.ca / 200;
-    const qualityPct = 0.6 * rolePct + 0.4 * caPct;
+    const qualityPct =
+      (request.mode ?? "full") === "full" ? 0.6 * rolePct + 0.4 * caPct : rolePct;
     const costPct = cost > 0 ? Math.min(1, Math.log1p(cost / 1000) / 16) : 0;
     const score = 100 * (0.55 * qualityPct + 0.45 * (1 - costPct));
     return { player, fee, cost, qualityPct, costPct, score };
   });
   const filtered = withCost
     .filter(({ player }) => {
-      if (request.position_group && mockPositionGroup(player.best_role_position) !== request.position_group) return false;
+      const group = mockPositionGroup(
+        player.positions_text?.split(" / ")[0] ?? player.best_role_position,
+      );
+      if (request.position_group && !mockPositionFilterMatches(request.position_group, group)) return false;
       if (request.league && player.league_name !== request.league) return false;
       if (request.age_min != null && (player.age ?? 0) < request.age_min) return false;
       if (request.age_max != null && (player.age ?? 999) > request.age_max) return false;
@@ -944,6 +997,7 @@ export function mockValueFinder(request: ValueFinderRequest): ValueFinderPage {
     loan_listed: player.loan_listed,
     injury_status: player.injury_status,
     recent_injury: player.recent_injury,
+    injury_recent: player.recent_injury != null,
   }));
   return {
     total: filtered.length,
@@ -951,13 +1005,113 @@ export function mockValueFinder(request: ValueFinderRequest): ValueFinderPage {
     page_size: pageSize,
     rows,
     meta: {
-      model: "value-finder-v1-mock",
+      model: "value-finder-v3-mock",
+      mode: request.mode ?? "full",
       scored: filtered.length,
       filtered: filtered.length,
       cost_horizon_years: 3,
       leagues: Array.from(new Set(players.map((player) => player.league_name).filter((name): name is string => !!name))).sort(),
     },
   };
+}
+
+export function mockSquadNeeds(request: SquadNeedsRequest): SquadNeeds {
+  const minMinutes = request.min_minutes ?? 300;
+  const rows = mockStatsMoneyball({
+    save_id: request.save_id,
+    model: request.model ?? "core",
+    window: request.window ?? "overall",
+    min_minutes: minMinutes,
+    page: 0,
+    page_size: 500,
+  }).rows;
+  const groups = ["GK", "DC", "FB", "DM", "MC", "WM", "AMC", "ST"];
+  const needs = groups
+    .map((group) => {
+      const own = rows.filter(
+        (row) =>
+          row.position_group === group &&
+          row.club_uid === request.club_uid &&
+          row.score != null &&
+          row.minutes >= minMinutes,
+      );
+      if (own.length === 0) return null;
+      const best = own.reduce((left, right) =>
+        (right.score ?? 0) > (left.score ?? 0) ? right : left,
+      );
+      const upgrades = rows
+        .filter(
+          (row) =>
+            row.position_group === group &&
+            row.club_uid != null &&
+            row.club_uid !== request.club_uid &&
+            row.fee_known &&
+            row.minutes >= minMinutes &&
+            (row.score ?? 0) > (best.score ?? 0),
+        )
+        .sort(
+          (left, right) =>
+            (right.bargain_score ?? 0) - (left.bargain_score ?? 0) ||
+            (right.score ?? 0) - (left.score ?? 0),
+        )
+        .slice(0, 3)
+        .map<SquadUpgrade>((row) => ({
+          uid: row.uid,
+          name: row.name,
+          age: row.age,
+          club_name: row.club_name,
+          minutes: row.minutes,
+          quality: row.score,
+          quality_gain:
+            row.score != null && best.score != null ? row.score - best.score : null,
+          fee: row.fee,
+          fair_price: row.fair_price,
+          value_gap_pct: row.value_gap_pct,
+          bargain_score: row.bargain_score,
+        }));
+      return {
+        position_group: group,
+        best_quality: best.score,
+        best_uid: best.uid,
+        best_name: best.name,
+        upgrades,
+      };
+    })
+    .filter((need): need is NonNullable<typeof need> => need != null)
+    .sort((left, right) => (left.best_quality ?? 0) - (right.best_quality ?? 0));
+  return {
+    club_uid: request.club_uid,
+    club_name: rows.find((row) => row.club_uid === request.club_uid)?.club_name ?? null,
+    needs,
+  };
+}
+
+export function mockSimilarStatsPlayers(
+  request: StatsMoneyballRequest,
+  uid: number,
+  limit = 8,
+): SimilarStatsPlayer[] {
+  const page = mockStatsMoneyball({ ...request, page: 0, page_size: 500 });
+  const target = page.rows.find((row) => row.uid === uid);
+  if (!target) return [];
+  return page.rows
+    .filter((row) => row.uid !== uid && row.position_group === target.position_group)
+    .map((row) => ({
+      uid: row.uid,
+      name: row.name,
+      age: row.age,
+      club_name: row.club_name,
+      position_group: row.position_group,
+      minutes: row.minutes,
+      quality: row.production_tier,
+      fee: row.fee,
+      fair_price: row.fair_price,
+      value_gap_pct: row.value_gap_pct,
+      distance:
+        Math.abs((row.production_tier ?? 0) - (target.production_tier ?? 0)) / 100,
+    }))
+    .sort((left, right) => left.distance - right.distance)
+    .slice(0, Math.max(1, Math.min(limit, 50)));
 }
 
 export function mockStatsMoneyball(request: StatsMoneyballRequest): StatsMoneyballPage {
@@ -1007,8 +1161,20 @@ export function mockStatsMoneyball(request: StatsMoneyballRequest): StatsMoneyba
     const costPctTier = Math.min(98, Math.max(1, Math.log1p(cost / 1000) * 6));
     const costPctGlobal = Math.min(98, Math.max(1, costPctTier + (seed - 0.5) * 8));
     const surplus = productionTier - costPctTier;
-    const score = 0.55 * productionTier + 0.45 * (100 - costPctTier);
-    const confidence = (fee != null ? 0.25 : 0) + (player.wage != null ? 0.25 : 0) + (advancedAvailable ? 0.25 : 0) + 0.25;
+    const score = productionTier;
+    const band = 30 / Math.sqrt(minutes / 90);
+    const productionLow = Math.max(0, productionTier - band);
+    const productionHigh = Math.min(100, productionTier + band);
+    const scoreLow = productionLow;
+    const gapPct = fee != null && fee > 0 ? Math.round((seed - 0.42) * 36) : null;
+    // Free agents and unknown fees still get a market price, like the backend.
+    const fairPrice =
+      fee != null && fee > 0
+        ? Math.round((fee * (1 + (gapPct ?? 0) / 200)) / (1 - (gapPct ?? 0) / 200))
+        : Math.round(player.ca * 25_000 + seed * 500_000);
+    const gapPercentile = gapPct == null ? null : Math.min(100, Math.max(0, 50 + gapPct * 1.5));
+    const bargainScore = gapPercentile == null ? null : 0.55 * productionLow + 0.45 * gapPercentile;
+    const confidence = Math.min(1, Math.max(0, 1 - (2 * band) / 100));
     const flags: string[] = [];
     if (fee == null) flags.push("missing_fee");
     if (player.wage == null) flags.push("missing_wage");
@@ -1018,7 +1184,7 @@ export function mockStatsMoneyball(request: StatsMoneyballRequest): StatsMoneyba
     if (player.loan_listed) flags.push("loan_listed");
     if (confidence < 0.7) flags.push("low_confidence");
     const drivers: StatsDriver[] = [
-      { key: "xg90", label: "xG/90", percentile: Math.round(productionTier), contribution: 30 },
+      { key: "npxg90", label: "npxG/90", percentile: Math.round(productionTier), contribution: 30 },
       { key: "xa90", label: "xA/90", percentile: Math.round(productionTier - 4), contribution: 25 },
       { key: "pass_pct", label: "Pass completion %", percentile: Math.round(passCompletion), contribution: 15 },
     ];
@@ -1040,6 +1206,7 @@ export function mockStatsMoneyball(request: StatsMoneyballRequest): StatsMoneyba
       goals,
       assists,
       expected_goals: (xg90 * minutes) / 90,
+      non_penalty_expected_goals: (xg90 * minutes) / 90,
       expected_assists: (xa90 * minutes) / 90,
       shots,
       shots_on_target: shotsOnTarget,
@@ -1072,10 +1239,17 @@ export function mockStatsMoneyball(request: StatsMoneyballRequest): StatsMoneyba
       wage_known: player.wage != null,
       production_global: productionGlobal,
       production_tier: productionTier,
+      production_low: productionLow,
+      production_high: productionHigh,
       cost_pct_global: costPctGlobal,
       cost_pct_tier: costPctTier,
       surplus,
       score,
+      score_low: scoreLow,
+      fair_price: fairPrice,
+      value_gap_pct: gapPct,
+      bargain_score: bargainScore,
+      peer_count: 40 + (index % 20),
       confidence: Math.min(1, confidence),
       flags,
       drivers,
@@ -1083,6 +1257,8 @@ export function mockStatsMoneyball(request: StatsMoneyballRequest): StatsMoneyba
       loan_listed: player.loan_listed,
       injury_status: player.injury_status,
       recent_injury: player.recent_injury,
+      injury_recent: player.recent_injury != null,
+      stats_from_other_club: false,
     };
   });
   const filtered = rows.filter((row) => {
@@ -1090,7 +1266,7 @@ export function mockStatsMoneyball(request: StatsMoneyballRequest): StatsMoneyba
     if (row.position_group === "OTHER") return false;
     if (model === "advanced" && !row.advanced_available) return false;
     if (row.position_group === "GK" && !(request.include_goalkeepers || request.position_group === "GK")) return false;
-    if (request.position_group && row.position_group !== request.position_group) return false;
+    if (request.position_group && !mockPositionFilterMatches(request.position_group, row.position_group)) return false;
     if (request.league && row.league_name !== request.league) return false;
     if (request.age_min != null && (row.age ?? 0) < request.age_min) return false;
     if (request.age_max != null && (row.age ?? 999) > request.age_max) return false;
@@ -1107,6 +1283,8 @@ export function mockStatsMoneyball(request: StatsMoneyballRequest): StatsMoneyba
       if (!matches) return false;
     }
     if (request.min_confidence != null && row.confidence < request.min_confidence) return false;
+    if (request.exclude_injured && row.injury_status === "injured") return false;
+    if (request.exclude_injury_history && row.injury_recent) return false;
     return true;
   }).sort((left, right) => {
     const by = request.sort_by ?? "score";
@@ -1117,6 +1295,11 @@ export function mockStatsMoneyball(request: StatsMoneyballRequest): StatsMoneyba
         case "ca": return row.ca;
         case "minutes": return row.minutes;
         case "production": return row.production_tier;
+        case "production_low": return row.production_low;
+        case "score_low": return row.score_low;
+        case "bargain": return row.bargain_score;
+        case "value_gap": return row.value_gap_pct;
+        case "fair_price": return row.fair_price;
         case "cost": return row.cost;
         case "fee": return row.fee;
         case "wage": return row.wage;
@@ -1144,12 +1327,17 @@ export function mockStatsMoneyball(request: StatsMoneyballRequest): StatsMoneyba
     page_size: pageSize,
     rows: slice,
     meta: {
-      model: model === "advanced" ? "stats-advanced-v1-mock" : "stats-core-v1-mock",
+      model: model === "advanced" ? "stats-advanced-v3-mock" : "stats-core-v3-mock",
       scored: filtered.length,
       filtered: filtered.length,
       min_minutes: minMinutes,
+      score_floor_minutes: 300,
       cost_horizon_years: 3,
       leagues: Array.from(new Set(rows.map((row) => row.league_name).filter((name): name is string => !!name))).sort(),
+      window: request.window ?? "overall",
+      mode: request.mode ?? "full",
+      price_model: rows.some((row) => row.fair_price != null) ? "hedonic-ridge-v2-mock" : null,
+      priced: rows.filter((row) => row.fair_price != null).length,
     },
   };
 }

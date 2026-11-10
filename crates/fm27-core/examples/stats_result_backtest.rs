@@ -40,7 +40,7 @@ fn all_rows(path: &str) -> Vec<StatsMoneyballRow> {
         })
         .expect("materialize stats moneyball");
     store
-        .player_metrics_rows(save_id, "core", 900)
+        .player_metrics_rows(save_id, "core")
         .expect("materialized rows")
 }
 

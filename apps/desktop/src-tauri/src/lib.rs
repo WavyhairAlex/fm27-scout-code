@@ -360,6 +360,49 @@ async fn stats_moneyball(
 }
 
 #[tauri::command]
+async fn export_stats(
+    state: State<'_, AppState>,
+    request: fm27_core::stats_moneyball::StatsMoneyballRequest,
+    format: String,
+    path: String,
+) -> Result<fm27_core::export::ExportReport, String> {
+    run_store_command(state, move |store| {
+        let rows = store
+            .stats_moneyball_export(&request)
+            .map_err(error_string)?;
+        fm27_core::export::write_stats_export(std::path::Path::new(&path), &format, &rows)
+            .map_err(error_string)
+    })
+    .await
+}
+
+#[tauri::command]
+async fn similar_stats_players(
+    state: State<'_, AppState>,
+    request: fm27_core::stats_moneyball::StatsMoneyballRequest,
+    uid: u32,
+    limit: usize,
+) -> Result<Vec<fm27_core::stats_moneyball::SimilarStatsPlayer>, String> {
+    run_store_command(state, move |store| {
+        store
+            .similar_stats_players(&request, uid, limit)
+            .map_err(error_string)
+    })
+    .await
+}
+
+#[tauri::command]
+async fn squad_needs(
+    state: State<'_, AppState>,
+    request: fm27_core::stats_moneyball::SquadNeedsRequest,
+) -> Result<fm27_core::stats_moneyball::SquadNeeds, String> {
+    run_store_command(state, move |store| {
+        store.squad_needs(&request).map_err(error_string)
+    })
+    .await
+}
+
+#[tauri::command]
 async fn query_staff(state: State<'_, AppState>, query: StaffQuery) -> Result<StaffPage, String> {
     run_read_command(state, move |store| {
         store.query_staff(&query).map_err(error_string)
@@ -1091,6 +1134,9 @@ pub fn run() {
             query_players,
             value_finder,
             stats_moneyball,
+            export_stats,
+            similar_stats_players,
+            squad_needs,
             query_staff,
             staff_filter_options,
             query_clubs,

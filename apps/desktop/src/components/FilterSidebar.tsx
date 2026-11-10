@@ -10,7 +10,7 @@ import {
   X,
 } from "lucide-react";
 import { useFilterOptions } from "@/lib/query";
-import { ATTRIBUTE_FILTER_GROUPS, POSITION_LABELS } from "@/lib/types";
+import { ATTRIBUTE_FILTER_GROUPS, POSITION_LABELS, UNKNOWN_GENDER_ID } from "@/lib/types";
 import { attributeLabel, nationLabel } from "@/lib/labels";
 import { useI18n } from "@/lib/useI18n";
 import { cn } from "@/lib/utils";
@@ -38,6 +38,7 @@ export function FilterSidebar() {
   const updateAttribute = useAppStore((state) => state.updateAttribute);
   const removeAttribute = useAppStore((state) => state.removeAttribute);
   const hiddenEnabled = useAppStore((state) => state.hiddenEnabled);
+  const dataMode = useAppStore((state) => state.dataMode);
   const setHiddenEnabled = useAppStore((state) => state.setHiddenEnabled);
   const pushToast = useAppStore((state) => state.pushToast);
   const summary = useAppStore((state) => state.summary);
@@ -133,11 +134,17 @@ export function FilterSidebar() {
         patch: { caMin: 140, paMin: 160, ageMax: 23 },
       },
     ];
-    return options.map((option) => ({
-      ...option,
-      active: matchesFilters(filters, option.patch),
-    }));
-  }, [filters, summary?.game_date, t]);
+    return options
+      .filter(
+        (option) =>
+          dataMode === "full" ||
+          (option.id !== "wonderkid" && option.id !== "highPotential"),
+      )
+      .map((option) => ({
+        ...option,
+        active: matchesFilters(filters, option.patch),
+      }));
+  }, [dataMode, filters, summary?.game_date, t]);
 
   return (
     <aside className="flex h-full w-[252px] shrink-0 flex-col border-r border-[var(--line)] bg-[var(--surface)]/80">
@@ -288,9 +295,14 @@ export function FilterSidebar() {
         <Section title={t("filter.genderStatus")} icon={<SlidersHorizontal size={12} />}>
           <div className="grid grid-cols-2 gap-1">
             {[
-              { ids: [] as number[], label: t("filter.allGenders") },
-              { ids: [0], label: t("filter.men") },
-              { ids: [1], label: t("filter.women") },
+              { ids: [] as number[], label: t("filter.allGenders"), testId: "gender-all" },
+              { ids: [0], label: t("filter.men"), testId: "gender-men" },
+              { ids: [1], label: t("filter.women"), testId: "gender-women" },
+              {
+                ids: [UNKNOWN_GENDER_ID],
+                label: t("filter.unknownGender"),
+                testId: "gender-unknown",
+              },
             ].map((option) => {
               const active =
                 option.ids.length === 0
@@ -305,8 +317,9 @@ export function FilterSidebar() {
                       .reduce((sum, item) => sum + item.count, 0);
               return (
                 <button
-                  key={option.label}
+                  key={option.testId}
                   type="button"
+                  data-testid={option.testId}
                   onClick={() => patchFilters({ genders: option.ids })}
                   className={cn(
                     "flex items-center justify-between rounded-[6px] border px-2 py-1.5 text-[10px] transition-colors",
@@ -410,40 +423,44 @@ export function FilterSidebar() {
             placeholderMin="16"
             placeholderMax="45"
           />
-          <RangeInput
-            label="CA"
-            min={filters.caMin}
-            max={filters.caMax}
-            onMin={(caMin) => patchFilters({ caMin })}
-            onMax={(caMax) => patchFilters({ caMax })}
-            placeholderMin="0"
-            placeholderMax="200"
-          />
-          <RangeInput
-            label="PA"
-            min={filters.paMin}
-            max={filters.paMax}
-            onMin={(paMin) => patchFilters({ paMin })}
-            onMax={(paMax) => patchFilters({ paMax })}
-            placeholderMin="0"
-            placeholderMax="200"
-          />
-          <div className="flex items-center justify-between gap-2">
-            <Label>{t("filter.paCaGap")}</Label>
-            <Input
-              type="number"
-              min={0}
-              max={80}
-              value={filters.paCaGapMin ?? ""}
-              placeholder="0"
-              onChange={(event) =>
-                patchFilters({
-                  paCaGapMin: event.target.value === "" ? null : Number(event.target.value),
-                })
-              }
-              className="h-7 w-16 font-mono text-[10px]"
-            />
-          </div>
+          {dataMode === "full" && (
+            <>
+              <RangeInput
+                label="CA"
+                min={filters.caMin}
+                max={filters.caMax}
+                onMin={(caMin) => patchFilters({ caMin })}
+                onMax={(caMax) => patchFilters({ caMax })}
+                placeholderMin="0"
+                placeholderMax="200"
+              />
+              <RangeInput
+                label="PA"
+                min={filters.paMin}
+                max={filters.paMax}
+                onMin={(paMin) => patchFilters({ paMin })}
+                onMax={(paMax) => patchFilters({ paMax })}
+                placeholderMin="0"
+                placeholderMax="200"
+              />
+              <div className="flex items-center justify-between gap-2">
+                <Label>{t("filter.paCaGap")}</Label>
+                <Input
+                  type="number"
+                  min={0}
+                  max={80}
+                  value={filters.paCaGapMin ?? ""}
+                  placeholder="0"
+                  onChange={(event) =>
+                    patchFilters({
+                      paCaGapMin: event.target.value === "" ? null : Number(event.target.value),
+                    })
+                  }
+                  className="h-7 w-16 font-mono text-[10px]"
+                />
+              </div>
+            </>
+          )}
         </Section>
 
         <Section title={t("filter.positions")} icon={<CircleHelp size={12} />}>
@@ -488,6 +505,7 @@ export function FilterSidebar() {
           </div>
         </Section>
 
+        {dataMode !== "moneyball" && (
         <Section title={t("filter.attributeRules")} icon={<Plus size={12} />}>
           <Select
             value=""
@@ -559,6 +577,7 @@ export function FilterSidebar() {
             ))}
           </div>
         </Section>
+        )}
 
         <Section title={t("filter.contractValue")} icon={<ChevronDown size={12} />}>
           <RangeInput
@@ -608,6 +627,7 @@ export function FilterSidebar() {
         </Section>
       </div>
 
+      {dataMode === "full" && (
       <div className="border-t border-[var(--line)] px-3 py-3">
         <div className="flex items-start justify-between gap-2">
           <div>
@@ -642,6 +662,7 @@ export function FilterSidebar() {
           </div>
         )}
       </div>
+      )}
     </aside>
   );
 }

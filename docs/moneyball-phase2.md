@@ -1,6 +1,7 @@
 # Moneyball Phase 2 进度
 
 > 日期：2026-11-03  
+> 后续变更：评分已升级到 `stats-core-v2` / `stats-advanced-v2`（固定 300 分钟评分下限、npxG、经验贝叶斯收缩、不确定性区间），见 [`moneyball-phase4.md`](moneyball-phase4.md)。本文的 `min_minutes = 900` SQL 与 v1 权重仅作历史记录。  
 > 分支：`feature/moneyball`  
 > 状态：Phase 2 主体完成：容器、parser、schema、core/advanced 评分、Stats tab、持久化 `player_metrics`、位置视图、详情分解和多存档回测均已落地。剩余只有受数据限制的联赛强度、更长周期回测和发布收尾。
 

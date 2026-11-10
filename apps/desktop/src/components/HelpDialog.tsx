@@ -1,5 +1,6 @@
 import { Command, Database, Eye, Info, LockKeyhole, ShieldCheck, WifiOff } from "lucide-react";
-import { useAppInfo } from "@/lib/query";
+import { formatNumber } from "@/lib/i18n";
+import { useAppInfo, useSaves } from "@/lib/query";
 import { useI18n } from "@/lib/useI18n";
 import { useAppStore } from "@/store/app";
 import { Badge, Button, Modal } from "./ui";
@@ -7,8 +8,11 @@ import { Badge, Button, Modal } from "./ui";
 export function HelpDialog() {
   const open = useAppStore((state) => state.helpOpen);
   const setOpen = useAppStore((state) => state.setHelpOpen);
+  const saveId = useAppStore((state) => state.saveId);
   const { data: info } = useAppInfo(open);
-  const { t } = useI18n();
+  const { data: saves = [] } = useSaves();
+  const { t, locale } = useI18n();
+  const currentSave = saves.find((save) => save.id === saveId) ?? null;
   const shortcuts = [
     [t("shortcut.open"), t("help.shortcut.open")],
     [t("shortcut.search"), t("help.shortcut.search")],
@@ -93,9 +97,14 @@ export function HelpDialog() {
             {t("help.parserDescription")}
           </p>
           <div className="mt-2 flex flex-wrap gap-1.5">
-            <Badge tone="outline">
-              <Database size={9} /> {t("help.parserPlayers", { count: "46,273" })}
-            </Badge>
+            {currentSave && (
+              <Badge tone="outline">
+                <Database size={9} />{" "}
+                {t("help.savePlayers", {
+                  count: formatNumber(currentSave.players, locale),
+                })}
+              </Badge>
+            )}
             <Badge tone="outline">
               <LockKeyhole size={9} /> parser {info?.parser_version ?? __APP_VERSION__}
             </Badge>

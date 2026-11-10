@@ -8,18 +8,22 @@ import {
   ChevronLeft,
   ChevronRight,
   Coins,
+  Download,
   Loader2,
   RefreshCw,
   Shield,
   Sparkles,
+  Target,
   TrendingUp,
   Users,
 } from "lucide-react";
-import { queryPlayers } from "@/lib/api";
+import { exportStats, pickExportFile, queryPlayers } from "@/lib/api";
 import {
   useAnalysisOverview,
   useFilterOptions,
+  useSimilarStatsPlayers,
   useSquadAnalysis,
+  useSquadNeeds,
   useStatsMoneyball,
   useValueFinder,
 } from "@/lib/query";
@@ -37,21 +41,25 @@ import { formatNumber, type TranslationKey } from "@/lib/i18n";
 import { useI18n } from "@/lib/useI18n";
 import { caTone, cn, initials } from "@/lib/utils";
 import { useAppStore } from "@/store/app";
+import { SquadNeedsSection } from "./SquadNeeds";
 import { Badge, Button, Input, Modal, Select } from "./ui";
 import { MultiSelect } from "./MultiSelect";
 
-type AnalysisTab = "overview" | "squad" | "wonderkids" | "value" | "stats";
+type AnalysisTab = "overview" | "squad" | "needs" | "wonderkids" | "value" | "stats";
 
 export function AnalysisDialog() {
   const { t, locale } = useI18n();
   const open = useAppStore((state) => state.analysisOpen);
   const setOpen = useAppStore((state) => state.setAnalysisOpen);
   const saveId = useAppStore((state) => state.saveId);
+  const dataMode = useAppStore((state) => state.dataMode);
   const summary = useAppStore((state) => state.summary);
   const setSelectedUid = useAppStore((state) => state.setSelectedUid);
   const patchFilters = useAppStore((state) => state.patchFilters);
   const setInspectorOpen = useAppStore((state) => state.setInspectorOpen);
-  const [tab, setTab] = useState<AnalysisTab>("overview");
+  const [tab, setTab] = useState<AnalysisTab>(
+    dataMode === "full" ? "overview" : "stats",
+  );
   const [clubUid, setClubUid] = useState<number | null>(null);
   const clubChosen = useRef(false);
   const overview = useAnalysisOverview(open);
@@ -77,6 +85,17 @@ export function AnalysisDialog() {
     enabled: open && tab === "wonderkids" && saveId != null,
     staleTime: 30_000,
   });
+
+  useEffect(() => {
+    const allowed: AnalysisTab[] = [
+      ...(dataMode === "full" ? (["overview", "wonderkids"] as AnalysisTab[]) : []),
+      "squad",
+      "needs",
+      ...(dataMode !== "moneyball" ? (["value"] as AnalysisTab[]) : []),
+      "stats",
+    ];
+    if (!allowed.includes(tab)) setTab("stats");
+  }, [dataMode, tab]);
 
   useEffect(() => {
     if (clubChosen.current || clubUid != null) return;
@@ -149,10 +168,17 @@ export function AnalysisDialog() {
     >
       <div className="flex gap-1 border-b border-[var(--line)] px-4 pt-3">
         {[
-          ["overview", t("analysis.tab.overview"), <BarChart3 size={12} key="overview" />],
+          ...(dataMode === "full"
+            ? [
+                ["overview", t("analysis.tab.overview"), <BarChart3 size={12} key="overview" />],
+                ["wonderkids", t("analysis.tab.wonderkids"), <Sparkles size={12} key="wonderkids" />],
+              ]
+            : []),
           ["squad", t("analysis.tab.squad"), <Users size={12} key="squad" />],
-          ["wonderkids", t("analysis.tab.wonderkids"), <Sparkles size={12} key="wonderkids" />],
-          ["value", t("analysis.tab.value"), <Coins size={12} key="value" />],
+          ["needs", t("analysis.tab.needs"), <Target size={12} key="needs" />],
+          ...(dataMode !== "moneyball"
+            ? [["value", t("analysis.tab.value"), <Coins size={12} key="value" />]]
+            : []),
           ["stats", t("analysis.tab.stats"), <TrendingUp size={12} key="stats" />],
         ].map(([value, label, icon]) => (
           <button
@@ -203,7 +229,9 @@ export function AnalysisDialog() {
               </div>
               <span className="text-[10px] text-[var(--muted)]">
                 {clubName
-                  ? t("analysis.sortedByCa", { club: clubName })
+                  ? dataMode === "full"
+                    ? t("analysis.sortedByCa", { club: clubName })
+                    : t("analysis.squadListHint", { club: clubName })
                   : t("analysis.chooseClubHint")}
               </span>
             </div>
@@ -223,6 +251,37 @@ export function AnalysisDialog() {
             ) : (
               <EmptyHint text={t("analysis.noSquad")} />
             )}
+          </div>
+        )}
+
+        {tab === "needs" && (
+          <div className="space-y-4">
+            <div className="flex items-center gap-3">
+              <div className="w-[280px]">
+                <MultiSelect
+                  options={options.data?.clubs ?? []}
+                  selected={clubUid == null ? [] : [clubUid]}
+                  onChange={(ids) => chooseClub(ids[0] ?? null)}
+                  placeholder={t("analysis.chooseClub")}
+                  maxLabel={1}
+                  single
+                />
+              </div>
+              <span className="text-[10px] text-[var(--muted)]">
+                {clubName
+                  ? t("analysis.squadNeedsForClub", { club: clubName })
+                  : t("analysis.chooseClubHint")}
+              </span>
+            </div>
+            <SquadNeedsSection
+              clubUid={clubUid}
+              showEmpty
+              onPlayer={(uid) => {
+                setSelectedUid(uid);
+                setInspectorOpen(true);
+                setOpen(false);
+              }}
+            />
           </div>
         )}
 
@@ -408,6 +467,13 @@ function SquadPanel({
   onPlayer: (uid: number) => void;
 }) {
   const { t, locale, formatValue, formatWage } = useI18n();
+  const dataMode = useAppStore((state) => state.dataMode);
+  // The backend returns the squad by CA; do not leak that order when ability
+  // is hidden.
+  const players =
+    dataMode === "full"
+      ? data.players
+      : [...data.players].sort((left, right) => (right.wage ?? 0) - (left.wage ?? 0));
   return (
     <div className="space-y-3">
       <div className="grid grid-cols-3 gap-2 lg:grid-cols-6">
@@ -421,16 +487,20 @@ function SquadPanel({
           label={t("analysis.averageAge")}
           value={data.average_age.toFixed(1)}
         />
-        <Stat
-          icon={<TrendingUp size={13} />}
-          label={t("analysis.averageCa")}
-          value={data.average_ca.toFixed(1)}
-        />
-        <Stat
-          icon={<TrendingUp size={13} />}
-          label={t("analysis.averagePa")}
-          value={data.average_pa.toFixed(1)}
-        />
+        {dataMode === "full" && (
+          <>
+            <Stat
+              icon={<TrendingUp size={13} />}
+              label={t("analysis.averageCa")}
+              value={data.average_ca.toFixed(1)}
+            />
+            <Stat
+              icon={<TrendingUp size={13} />}
+              label={t("analysis.averagePa")}
+              value={data.average_pa.toFixed(1)}
+            />
+          </>
+        )}
         <Stat
           icon={<Coins size={13} />}
           label={t("analysis.totalWage")}
@@ -471,14 +541,18 @@ function SquadPanel({
                 <th className="px-3 py-1.5">{t("analysis.table.player")}</th>
                 <th className="px-2 py-1.5 text-right">{t("analysis.table.age")}</th>
                 <th className="px-2 py-1.5">{t("analysis.table.positions")}</th>
-                <th className="px-2 py-1.5 text-right">CA</th>
-                <th className="px-2 py-1.5 text-right">PA</th>
+                {dataMode === "full" && (
+                  <>
+                    <th className="px-2 py-1.5 text-right">CA</th>
+                    <th className="px-2 py-1.5 text-right">PA</th>
+                  </>
+                )}
                 <th className="px-2 py-1.5 text-right">{t("analysis.table.wage")}</th>
                 <th className="px-3 py-1.5 text-right">{t("analysis.table.contract")}</th>
               </tr>
             </thead>
             <tbody>
-              {data.players.map((player) => (
+              {players.map((player) => (
                 <tr
                   key={player.uid}
                   className="cursor-pointer border-t border-[var(--line)]/60 text-[10px] hover:bg-[var(--surface-2)]"
@@ -498,12 +572,16 @@ function SquadPanel({
                   <td className="px-2 py-1.5 font-mono text-[var(--accent-strong)]">
                     {player.positions_text ?? "—"}
                   </td>
-                  <td className="px-2 py-1.5 text-right">
-                    <span className={cn("inline-flex rounded border px-1.5 py-0.5 font-mono text-[9px] font-bold", caTone(player.ca))}>
-                      {player.ca}
-                    </span>
-                  </td>
-                  <td className="px-2 py-1.5 text-right font-mono text-[var(--muted)]">{player.pa ?? "?"}</td>
+                  {dataMode === "full" && (
+                    <>
+                      <td className="px-2 py-1.5 text-right">
+                        <span className={cn("inline-flex rounded border px-1.5 py-0.5 font-mono text-[9px] font-bold", caTone(player.ca))}>
+                          {player.ca}
+                        </span>
+                      </td>
+                      <td className="px-2 py-1.5 text-right font-mono text-[var(--muted)]">{player.pa ?? "?"}</td>
+                    </>
+                  )}
                   <td className="px-2 py-1.5 text-right font-mono text-[var(--muted)]">
                     {player.wage != null ? formatWage(player.wage) : "—"}
                   </td>
@@ -632,6 +710,7 @@ type StatsView = {
   id: string;
   name: string;
   model: "core" | "advanced";
+  window?: "overall" | "league" | "calendar";
   position: string;
   league: string;
   minCa: number;
@@ -673,7 +752,9 @@ function StatsMoneyballPanel({
   onPlayer: (uid: number) => void;
 }) {
   const { t, locale, formatValue } = useI18n();
+  const dataMode = useAppStore((state) => state.dataMode);
   const [model, setModel] = useState<"core" | "advanced">("core");
+  const [statsWindow, setStatsWindow] = useState<"overall" | "league" | "calendar">("overall");
   const [position, setPosition] = useState("");
   const [league, setLeague] = useState("");
   const [minCa, setMinCa] = useState(120);
@@ -687,16 +768,20 @@ function StatsMoneyballPanel({
   const [injuryFilter, setInjuryFilter] = useState<"all" | "fit" | "noHistory">("all");
   const [includeUnknownFee, setIncludeUnknownFee] = useState(false);
   const [page, setPage] = useState(0);
-  const [sortBy, setSortBy] = useState("score");
+  const [sortBy, setSortBy] = useState("bargain");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
   const [expandedUid, setExpandedUid] = useState<number | null>(null);
   const [savedViews, setSavedViews] = useState<StatsView[]>(loadStatsViews);
+  const [exportFormat, setExportFormat] = useState<"csv" | "json">("csv");
+  const [exporting, setExporting] = useState(false);
+  const pushToast = useAppStore((state) => state.pushToast);
 
   useEffect(() => {
     setPage(0);
   }, [
     saveId,
     model,
+    statsWindow,
     position,
     league,
     minCa,
@@ -720,10 +805,12 @@ function StatsMoneyballPanel({
         : {
             save_id: saveId,
             model,
+            window: statsWindow,
+            mode: dataMode,
             include_goalkeepers: position === "GK",
             position_group: position || null,
             league: league || null,
-            ca_min: minCa,
+            ca_min: dataMode === "full" ? minCa : null,
             age_max: maxAge,
             min_minutes: minMinutes,
             max_fee: maxFee,
@@ -742,6 +829,8 @@ function StatsMoneyballPanel({
     [
       saveId,
       model,
+      statsWindow,
+      dataMode,
       position,
       league,
       minCa,
@@ -759,6 +848,10 @@ function StatsMoneyballPanel({
       page,
     ],
   );
+  useEffect(() => {
+    if (dataMode !== "full" && sortBy === "ca") setSortBy("score");
+  }, [dataMode, sortBy]);
+
   const query = useStatsMoneyball(request);
   const data = query.data;
   const rows = data?.rows ?? [];
@@ -776,6 +869,7 @@ function StatsMoneyballPanel({
 
   const reset = () => {
     setModel("core");
+    setStatsWindow("overall");
     setPosition("");
     setLeague("");
     setMinCa(120);
@@ -788,13 +882,14 @@ function StatsMoneyballPanel({
     setMinConfidence(null);
     setInjuryFilter("all");
     setIncludeUnknownFee(false);
-    setSortBy("score");
+    setSortBy("bargain");
     setSortDir("desc");
     setPage(0);
   };
 
   const applyPreset = (preset: "win" | "resale" | "budget") => {
     setModel("core");
+    setStatsWindow("overall");
     setPosition("");
     setLeague("");
     setMinMinutes(900);
@@ -803,7 +898,7 @@ function StatsMoneyballPanel({
     setMinConfidence(null);
     setInjuryFilter("all");
     setIncludeUnknownFee(false);
-    setSortBy("score");
+    setSortBy("bargain");
     setSortDir("desc");
     setPage(0);
     if (preset === "win") {
@@ -824,6 +919,29 @@ function StatsMoneyballPanel({
     }
   };
 
+  const exportNow = async () => {
+    if (!request) return;
+    const defaultName = `fm27-stats-${saveId}-${new Date().toISOString().slice(0, 10)}.${exportFormat}`;
+    const path = await pickExportFile(defaultName, exportFormat);
+    if (!path) return;
+    setExporting(true);
+    try {
+      const report = await exportStats(request, exportFormat, path);
+      pushToast({
+        title: t("toast.exportDone"),
+        description: t("toast.exportDoneDescription", {
+          count: formatNumber(report.rows, locale),
+          path: report.path,
+        }),
+        tone: "success",
+      });
+    } catch (error) {
+      pushToast({ title: t("toast.exportFailed"), description: String(error), tone: "error" });
+    } finally {
+      setExporting(false);
+    }
+  };
+
   const saveStatsView = () => {
     const name = window.prompt(t("analysis.stats.saveViewPrompt"))?.trim();
     if (!name) return;
@@ -831,6 +949,7 @@ function StatsMoneyballPanel({
       id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
       name,
       model,
+      window: statsWindow,
       position,
       league,
       minCa,
@@ -853,6 +972,7 @@ function StatsMoneyballPanel({
     const view = savedViews.find((item) => item.id === id);
     if (!view) return;
     setModel(view.model);
+    setStatsWindow(view.window ?? "overall");
     setPosition(view.position);
     setLeague(view.league);
     setMinCa(view.minCa);
@@ -865,7 +985,7 @@ function StatsMoneyballPanel({
     setMinConfidence(view.minConfidence ?? null);
     setInjuryFilter(view.injuryFilter ?? "all");
     setIncludeUnknownFee(view.includeUnknownFee);
-    setSortBy("score");
+    setSortBy("bargain");
     setSortDir("desc");
     setPage(0);
     setExpandedUid(null);
@@ -882,7 +1002,7 @@ function StatsMoneyballPanel({
   const confidenceTone = (
     row: StatsMoneyballRow,
   ): "accent" | "default" | "danger" =>
-    row.confidence >= 0.9 ? "accent" : row.confidence >= 0.7 ? "default" : "danger";
+    row.confidence >= 0.85 ? "accent" : row.confidence >= 0.65 ? "default" : "danger";
 
   return (
     <div className="space-y-3">
@@ -896,6 +1016,19 @@ function StatsMoneyballPanel({
             >
               <option value="core">{t("analysis.stats.modelCore")}</option>
               <option value="advanced">{t("analysis.stats.modelAdvanced")}</option>
+            </Select>
+          </ValueFilter>
+          <ValueFilter label={t("analysis.stats.window")} className="w-[150px]">
+            <Select
+              value={statsWindow}
+              onChange={(event) =>
+                setStatsWindow(event.target.value as "overall" | "league" | "calendar")
+              }
+              className="h-7 text-[10px]"
+            >
+              <option value="overall">{t("analysis.stats.windowOverall")}</option>
+              <option value="league">{t("analysis.stats.windowLeague")}</option>
+              <option value="calendar">{t("analysis.stats.windowCalendar")}</option>
             </Select>
           </ValueFilter>
           <ValueFilter label={t("analysis.stats.league")} className="w-[190px]">
@@ -912,13 +1045,15 @@ function StatsMoneyballPanel({
               ))}
             </Select>
           </ValueFilter>
-          <NumberField
-            label={t("analysis.stats.minCa")}
-            value={minCa}
-            min={0}
-            max={200}
-            onChange={setMinCa}
-          />
+          {dataMode === "full" && (
+            <NumberField
+              label={t("analysis.stats.minCa")}
+              value={minCa}
+              min={0}
+              max={200}
+              onChange={setMinCa}
+            />
+          )}
           <NumberField
             label={t("analysis.stats.maxAge")}
             value={maxAge}
@@ -1004,9 +1139,9 @@ function StatsMoneyballPanel({
               className="h-7 text-[10px]"
             >
               <option value="">{t("analysis.stats.confidenceAny")}</option>
-              <option value="0.7">≥ 70%</option>
+              <option value="0.6">≥ 60%</option>
+              <option value="0.75">≥ 75%</option>
               <option value="0.85">≥ 85%</option>
-              <option value="0.9">≥ 90%</option>
             </Select>
           </ValueFilter>
           <label className="flex h-7 items-center gap-1.5 text-[10px] text-[var(--muted)]">
@@ -1039,6 +1174,19 @@ function StatsMoneyballPanel({
                 )}
               </Button>
             ))}
+            <Button
+              variant={sortBy === "score_low" ? "primary" : "secondary"}
+              size="sm"
+              className="h-7 px-2 text-[9px]"
+              title={t("analysis.stats.conservativeHint")}
+              onClick={() => {
+                setSortBy(sortBy === "score_low" ? "score" : "score_low");
+                setSortDir("desc");
+                setPage(0);
+              }}
+            >
+              {t("analysis.stats.conservative")}
+            </Button>
           </div>
           {savedViews.length > 0 && (
             <ValueFilter label={t("analysis.stats.savedViews")} className="w-[150px]">
@@ -1061,6 +1209,29 @@ function StatsMoneyballPanel({
           </Button>
           <Button variant="ghost" size="sm" className="h-7" onClick={reset}>
             {t("analysis.stats.reset")}
+          </Button>
+          <Select
+            value={exportFormat}
+            onChange={(event) => setExportFormat(event.target.value as "csv" | "json")}
+            className="h-7 w-[76px] text-[10px]"
+            title={t("analysis.stats.export")}
+          >
+            <option value="csv">CSV</option>
+            <option value="json">JSON</option>
+          </Select>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-7"
+            onClick={() => void exportNow()}
+            disabled={!request || exporting}
+            title={t("analysis.stats.export")}
+          >
+            {exporting ? (
+              <Loader2 size={11} className="animate-spin" />
+            ) : (
+              <Download size={11} />
+            )}
           </Button>
           <Button
             variant="ghost"
@@ -1106,6 +1277,7 @@ function StatsMoneyballPanel({
               : t("analysis.stats.loading")}
           </span>
           <span>{t("analysis.stats.scoreHint")}</span>
+          <span>{t("analysis.stats.priceHint")}</span>
           <span>{t("analysis.stats.leagueHint")}</span>
         </div>
       </div>
@@ -1136,13 +1308,15 @@ function StatsMoneyballPanel({
                     dir={sortDir}
                     onClick={changeSort}
                   />
-                  <ValueSortHeader
-                    label={t("analysis.stats.table.ca")}
-                    by="ca"
-                    active={sortBy}
-                    dir={sortDir}
-                    onClick={changeSort}
-                  />
+                  {dataMode === "full" && (
+                    <ValueSortHeader
+                      label={t("analysis.stats.table.ca")}
+                      by="ca"
+                      active={sortBy}
+                      dir={sortDir}
+                      onClick={changeSort}
+                    />
+                  )}
                   <ValueSortHeader
                     label={t("analysis.stats.table.minutes")}
                     by="minutes"
@@ -1165,8 +1339,15 @@ function StatsMoneyballPanel({
                     onClick={changeSort}
                   />
                   <ValueSortHeader
-                    label={t("analysis.stats.table.score")}
-                    by="score"
+                    label={t("analysis.stats.table.valueGap")}
+                    by="value_gap"
+                    active={sortBy}
+                    dir={sortDir}
+                    onClick={changeSort}
+                  />
+                  <ValueSortHeader
+                    label={t("analysis.stats.table.bargain")}
+                    by="bargain"
                     active={sortBy}
                     dir={sortDir}
                     onClick={changeSort}
@@ -1227,19 +1408,21 @@ function StatsMoneyballPanel({
                     <td className="px-2 py-1.5 text-right font-mono text-[var(--muted)]">
                       {row.age ?? "—"}
                     </td>
-                    <td className="px-2 py-1.5 text-right">
-                      <span
-                        className={cn(
-                          "inline-flex rounded border px-1.5 py-0.5 font-mono text-[9px] font-bold",
-                          caTone(row.ca),
-                        )}
-                      >
-                        {row.ca}
-                      </span>
-                      <span className="ml-1 font-mono text-[9px] text-[var(--muted)]">
-                        / {row.pa ?? "?"}
-                      </span>
-                    </td>
+                    {dataMode === "full" && (
+                      <td className="px-2 py-1.5 text-right">
+                        <span
+                          className={cn(
+                            "inline-flex rounded border px-1.5 py-0.5 font-mono text-[9px] font-bold",
+                            caTone(row.ca),
+                          )}
+                        >
+                          {row.ca}
+                        </span>
+                        <span className="ml-1 font-mono text-[9px] text-[var(--muted)]">
+                          / {row.pa ?? "?"}
+                        </span>
+                      </td>
+                    )}
                     <td className="px-2 py-1.5 text-right font-mono text-[var(--muted)]">
                       {formatNumber(row.minutes, locale)}
                     </td>
@@ -1254,27 +1437,38 @@ function StatsMoneyballPanel({
                     <td className="px-2 py-1.5 text-right font-mono text-[var(--muted)]">
                       {formatValue(row.cost)}
                     </td>
+                    <td className="px-2 py-1.5 text-right font-mono text-[9px]">
+                      {row.value_gap_pct == null ? (
+                        <span className="text-[var(--muted)]">—</span>
+                      ) : (
+                        <span
+                          className={
+                            row.value_gap_pct >= 0
+                              ? "text-[var(--success)]"
+                              : "text-[var(--danger)]"
+                          }
+                          title={t("analysis.stats.detail.valueGapHint")}
+                        >
+                          {row.value_gap_pct >= 0 ? "+" : ""}
+                          {Math.round(row.value_gap_pct)}%
+                        </span>
+                      )}
+                    </td>
                     <td className="px-2 py-1.5 text-right">
                       <span
                         className={cn(
                           "inline-flex rounded border px-1.5 py-0.5 font-mono text-[9px] font-bold",
-                          (row.score ?? 0) >= 75
+                          (row.bargain_score ?? 0) >= 75
                             ? "border-[var(--gold-line)] bg-[var(--gold-soft)] text-[var(--gold)]"
-                            : (row.score ?? 0) >= 60
+                            : (row.bargain_score ?? 0) >= 60
                               ? "border-[var(--success-line)] bg-[var(--success-soft)] text-[var(--success)]"
-                              : (row.score ?? 0) >= 45
+                              : (row.bargain_score ?? 0) >= 45
                                 ? "border-[var(--blue-line)] bg-[var(--blue-soft)] text-[var(--blue)]"
                                 : "border-[var(--line)] bg-[var(--surface-2)] text-[var(--muted)]",
                         )}
                       >
-                        {row.score != null ? Math.round(row.score) : "—"}
+                        {row.bargain_score != null ? Math.round(row.bargain_score) : "—"}
                       </span>
-                      {row.surplus != null && (
-                        <div className="mt-0.5 font-mono text-[8px] text-[var(--muted)]">
-                          {row.surplus >= 0 ? "+" : ""}
-                          {Math.round(row.surplus)}
-                        </div>
-                      )}
                     </td>
                     <td className="px-2 py-1.5 text-right">
                       <Badge tone={confidenceTone(row)} className="px-1.5 text-[8px]">
@@ -1304,8 +1498,12 @@ function StatsMoneyballPanel({
                   </tr>
                     {expandedUid === row.uid && (
                       <tr className="border-t border-[var(--line)]/60 bg-[var(--surface-2)]/60">
-                        <td colSpan={10} className="px-3 py-2">
-                          <StatsMoneyballDetail row={row} />
+                        <td colSpan={dataMode === "full" ? 11 : 10} className="px-3 py-2">
+                          <StatsMoneyballDetail
+                            row={row}
+                            request={request}
+                            onPlayer={onPlayer}
+                          />
                         </td>
                       </tr>
                     )}
@@ -1347,7 +1545,15 @@ function StatsMoneyballPanel({
   );
 }
 
-function StatsMoneyballDetail({ row }: { row: StatsMoneyballRow }) {
+function StatsMoneyballDetail({
+  row,
+  request,
+  onPlayer,
+}: {
+  row: StatsMoneyballRow;
+  request: StatsMoneyballRequest | null;
+  onPlayer: (uid: number) => void;
+}) {
   const { t, locale, formatValue, formatWage } = useI18n();
   const flagLabel = (flag: string) => {
     const statsKey = `analysis.stats.flag.${flag}` as TranslationKey;
@@ -1357,7 +1563,8 @@ function StatsMoneyballDetail({ row }: { row: StatsMoneyballRow }) {
       : statsText;
   };
   return (
-    <div className="grid gap-3 text-[10px] lg:grid-cols-3">
+    <div className="space-y-3 text-[10px]">
+      <div className="grid gap-3 lg:grid-cols-3">
       <div className="space-y-1">
         <div className="text-[9px] font-semibold uppercase tracking-wider text-[var(--muted)]">
           {t("analysis.stats.detail.title")}
@@ -1376,6 +1583,13 @@ function StatsMoneyballDetail({ row }: { row: StatsMoneyballRow }) {
           {t("analysis.stats.detail.production")}: {Math.round(row.production_tier ?? 0)} ·{" "}
           {t("analysis.stats.detail.costPercentile")}:{" "}
           {Math.round(row.cost_pct_tier ?? 0)}
+        </div>
+        <div className="font-mono text-[var(--muted)]">
+          {t("analysis.stats.detail.range")}:{" "}
+          {Math.round(row.production_low ?? 0)}–{Math.round(row.production_high ?? 0)}
+        </div>
+        <div className="text-[var(--muted)]">
+          {t("analysis.stats.detail.peers", { count: row.peer_count })}
         </div>
         <div className="flex flex-wrap gap-1 pt-1">
           {row.flags.map((flag) => (
@@ -1413,6 +1627,28 @@ function StatsMoneyballDetail({ row }: { row: StatsMoneyballRow }) {
         </div>
         <div className="mt-1 space-y-1 font-mono text-[var(--muted)]">
           <div className="flex justify-between gap-3">
+            <span>{t("analysis.stats.detail.fairPrice")}</span>
+            <span className="text-[var(--ink)]">
+              {row.fair_price == null ? "—" : formatValue(Math.round(row.fair_price))}
+            </span>
+          </div>
+          <div className="flex justify-between gap-3">
+            <span>{t("analysis.stats.detail.valueGap")}</span>
+            <span
+              className={
+                row.value_gap_pct == null
+                  ? "text-[var(--muted)]"
+                  : row.value_gap_pct >= 0
+                    ? "text-[var(--success)]"
+                    : "text-[var(--danger)]"
+              }
+            >
+              {row.value_gap_pct == null
+                ? "—"
+                : `${row.value_gap_pct >= 0 ? "+" : ""}${Math.round(row.value_gap_pct)}%`}
+            </span>
+          </div>
+          <div className="flex justify-between gap-3 border-t border-[var(--line)] pt-1">
             <span>{t("analysis.stats.detail.fee")}</span>
             <span className="text-[var(--ink)]">
               {row.fee == null ? t("analysis.value.unknownFee") : formatValue(row.fee)}
@@ -1428,15 +1664,80 @@ function StatsMoneyballDetail({ row }: { row: StatsMoneyballRow }) {
           </div>
         </div>
         <div className="mt-2 text-[9px] text-[var(--muted)]">
-          {t("analysis.stats.scoreHint")}
+          {t("analysis.stats.priceHint")}
         </div>
+        </div>
+      </div>
+      <SimilarStatsList row={row} request={request} onPlayer={onPlayer} />
+    </div>
+  );
+}
+
+function SimilarStatsList({
+  row,
+  request,
+  onPlayer,
+}: {
+  row: StatsMoneyballRow;
+  request: StatsMoneyballRequest | null;
+  onPlayer: (uid: number) => void;
+}) {
+  const { t } = useI18n();
+  const similar = useSimilarStatsPlayers(request, row.uid);
+  const hits = similar.data ?? [];
+  if (similar.isLoading) {
+    return (
+      <div className="flex items-center gap-1 text-[9px] text-[var(--muted)]">
+        <Loader2 size={10} className="animate-spin" />
+        {t("analysis.stats.detail.similarLoading")}
+      </div>
+    );
+  }
+  if (hits.length === 0) return null;
+  return (
+    <div className="border-t border-[var(--line)] pt-2">
+      <div className="text-[9px] font-semibold uppercase tracking-wider text-[var(--muted)]">
+        {t("analysis.stats.detail.similar")}
+      </div>
+      <div className="mt-1 grid gap-1 sm:grid-cols-2 lg:grid-cols-3">
+        {hits.map((hit) => (
+          <button
+            key={hit.uid}
+            type="button"
+            onClick={() => onPlayer(hit.uid)}
+            title={`${t("analysis.stats.detail.distance")} ${hit.distance.toFixed(1)}`}
+            className="flex items-center justify-between gap-2 rounded border border-[var(--line)] bg-[var(--surface)] px-2 py-1 text-left text-[9px] hover:border-[var(--accent-line)] hover:bg-[var(--accent-soft)]"
+          >
+            <span className="min-w-0 truncate text-[var(--ink)]">
+              {hit.name ?? t("common.unnamed")}
+              <span className="text-[var(--muted)]">
+                {" "}
+                · {hit.club_name ?? t("common.freeAgent")}
+              </span>
+            </span>
+            <span className="shrink-0 font-mono text-[9px] text-[var(--muted)]">
+              {hit.position_group} · {hit.age ?? "—"} · Q{Math.round(hit.quality ?? 0)}
+              {hit.value_gap_pct != null && (
+                <span
+                  className={
+                    hit.value_gap_pct >= 0 ? "text-[var(--success)]" : "text-[var(--danger)]"
+                  }
+                >
+                  {" "}
+                  {hit.value_gap_pct >= 0 ? "+" : ""}
+                  {Math.round(hit.value_gap_pct)}%
+                </span>
+              )}
+            </span>
+          </button>
+        ))}
       </div>
     </div>
   );
 }
 
 const VALUE_PAGE_SIZE = 40;
-const VALUE_POSITIONS = ["GK", "DC", "FB", "MID", "AM", "ST"] as const;
+const VALUE_POSITIONS = ["GK", "DC", "FB", "DM", "MC", "WM", "AMC", "ST"] as const;
 
 function optionalNumber(value: string): number | null {
   if (!value.trim()) return null;
@@ -1452,6 +1753,7 @@ function ValueFinderPanel({
   onPlayer: (uid: number) => void;
 }) {
   const { t, locale, formatValue, formatWage } = useI18n();
+  const dataMode = useAppStore((state) => state.dataMode);
   const [position, setPosition] = useState("");
   const [league, setLeague] = useState("");
   const [minCa, setMinCa] = useState(120);
@@ -1494,10 +1796,11 @@ function ValueFinderPanel({
         ? null
         : {
             save_id: saveId,
+            mode: dataMode,
             position_group: position || null,
             league: league || null,
             age_max: maxAge,
-            ca_min: minCa,
+            ca_min: dataMode === "full" ? minCa : null,
             role_min: minRole,
             max_fee: maxFee,
             max_wage: maxWage,
@@ -1514,6 +1817,7 @@ function ValueFinderPanel({
           },
     [
       saveId,
+      dataMode,
       position,
       league,
       minCa,
@@ -1607,13 +1911,15 @@ function ValueFinderPanel({
               ))}
             </Select>
           </ValueFilter>
-          <NumberField
-            label={t("analysis.value.minCa")}
-            value={minCa}
-            min={0}
-            max={200}
-            onChange={setMinCa}
-          />
+          {dataMode === "full" && (
+            <NumberField
+              label={t("analysis.value.minCa")}
+              value={minCa}
+              min={0}
+              max={200}
+              onChange={setMinCa}
+            />
+          )}
           <NumberField
             label={t("analysis.value.minRole")}
             value={minRole}
@@ -1766,13 +2072,15 @@ function ValueFinderPanel({
                     dir={sortDir}
                     onClick={changeSort}
                   />
-                  <ValueSortHeader
-                    label={t("analysis.value.table.ca")}
-                    by="ca"
-                    active={sortBy}
-                    dir={sortDir}
-                    onClick={changeSort}
-                  />
+                  {dataMode === "full" && (
+                    <ValueSortHeader
+                      label={t("analysis.value.table.ca")}
+                      by="ca"
+                      active={sortBy}
+                      dir={sortDir}
+                      onClick={changeSort}
+                    />
+                  )}
                   <ValueSortHeader
                     label={t("analysis.value.table.role")}
                     by="role"
@@ -1846,19 +2154,21 @@ function ValueFinderPanel({
                     <td className="px-2 py-1.5 text-right font-mono text-[var(--muted)]">
                       {row.age ?? "—"}
                     </td>
-                    <td className="px-2 py-1.5 text-right">
-                      <span
-                        className={cn(
-                          "inline-flex rounded border px-1.5 py-0.5 font-mono text-[9px] font-bold",
-                          caTone(row.ca),
-                        )}
-                      >
-                        {row.ca}
-                      </span>
-                      <span className="ml-1 font-mono text-[9px] text-[var(--muted)]">
-                        / {row.pa ?? "?"}
-                      </span>
-                    </td>
+                    {dataMode === "full" && (
+                      <td className="px-2 py-1.5 text-right">
+                        <span
+                          className={cn(
+                            "inline-flex rounded border px-1.5 py-0.5 font-mono text-[9px] font-bold",
+                            caTone(row.ca),
+                          )}
+                        >
+                          {row.ca}
+                        </span>
+                        <span className="ml-1 font-mono text-[9px] text-[var(--muted)]">
+                          / {row.pa ?? "?"}
+                        </span>
+                      </td>
+                    )}
                     <td className="px-2 py-1.5 text-right font-mono text-[var(--muted)]">
                       {row.role_score != null ? `${row.role_score}/20` : "—"}
                     </td>

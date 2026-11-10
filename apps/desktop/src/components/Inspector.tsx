@@ -56,6 +56,7 @@ export function Inspector() {
   const selectedUid = useAppStore((state) => state.selectedUid);
   const setSelectedUid = useAppStore((state) => state.setSelectedUid);
   const hiddenEnabled = useAppStore((state) => state.hiddenEnabled);
+  const dataMode = useAppStore((state) => state.dataMode);
   const setEditOpen = useAppStore((state) => state.setEditOpen);
   const pendingEdits = useAppStore((state) => state.pendingEdits);
   const setViewMode = useAppStore((state) => state.setViewMode);
@@ -69,14 +70,23 @@ export function Inspector() {
   const { data: player, isLoading } = usePlayerDetail(selectedUid);
   const { data: roleScores } = usePlayerRoles(selectedUid);
   const { data: growth } = useGrowthHistory(selectedUid);
-  const [tab, setTab] = useState<Tab>("attributes");
+  const [tab, setTab] = useState<Tab>(
+    dataMode === "moneyball" ? "positions" : "attributes",
+  );
   const [nameCopied, setNameCopied] = useState(false);
   const tabBarRef = useRef<HTMLDivElement>(null);
   const [tabBarWidth, setTabBarWidth] = useState(0);
 
   useEffect(() => {
-    if (!hiddenEnabled && tab === "hidden") setTab("attributes");
-  }, [hiddenEnabled, tab]);
+    const allowed: Tab[] = [
+      ...(dataMode !== "moneyball" ? (["attributes", "roles"] as Tab[]) : []),
+      "positions",
+      ...(dataMode === "full" ? (["growth"] as Tab[]) : []),
+      ...(dataMode === "full" && hiddenEnabled ? (["hidden"] as Tab[]) : []),
+      "contract",
+    ];
+    if (!allowed.includes(tab)) setTab("positions");
+  }, [dataMode, hiddenEnabled, tab]);
 
   useLayoutEffect(() => {
     const element = tabBarRef.current;
@@ -93,7 +103,7 @@ export function Inspector() {
         padding,
     );
     setTabBarWidth((current) => (current === width ? current : width));
-  }, [hiddenEnabled, locale, selectedUid, isLoading]);
+  }, [dataMode, hiddenEnabled, locale, selectedUid, isLoading]);
 
   useEffect(() => {
     if (!nameCopied) return;
@@ -142,10 +152,16 @@ export function Inspector() {
     ? [["hidden", t("inspector.tab.hidden")]]
     : [];
   const tabs: Array<[Tab, string]> = [
-    ["attributes", t("inspector.tab.attributes")],
-    ["roles", t("inspector.tab.roles")],
+    ...(dataMode !== "moneyball"
+      ? ([
+          ["attributes", t("inspector.tab.attributes")],
+          ["roles", t("inspector.tab.roles")],
+        ] as Array<[Tab, string]>)
+      : []),
     ["positions", t("inspector.tab.positions")],
-    ["growth", t("inspector.tab.growth")],
+    ...(dataMode === "full"
+      ? ([["growth", t("inspector.tab.growth")]] as Array<[Tab, string]>)
+      : []),
     ...hiddenTab,
     ["contract", t("inspector.tab.contract")],
   ];
@@ -173,15 +189,17 @@ export function Inspector() {
           {t("inspector.profile")}
         </div>
         <div className="flex items-center gap-1">
-          <Button
-            variant="ghost"
-            size="sm"
-            className="h-6 px-1.5 text-[10px]"
-            onClick={() => setEditOpen(true)}
-          >
-            <Pencil size={11} />
-            {t("inspector.edit")}
-          </Button>
+          {dataMode === "full" && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-6 px-1.5 text-[10px]"
+              onClick={() => setEditOpen(true)}
+            >
+              <Pencil size={11} />
+              {t("inspector.edit")}
+            </Button>
+          )}
           <Button
             variant={compareUids.includes(player.uid) ? "gold" : "ghost"}
             size="sm"
@@ -273,18 +291,20 @@ export function Inspector() {
                   )}
                 </div>
                 <div className="flex shrink-0 flex-col items-end gap-1">
-                  <div className="flex gap-1">
-                    <span className={cn("flex h-8 min-w-10 flex-col items-center justify-center rounded-lg border px-1.5", caTone(player.ca))}>
-                      <span className="text-[8px] font-bold uppercase opacity-60">CA</span>
-                      <span className="font-mono text-[12px] font-bold leading-none">{player.ca}</span>
-                    </span>
-                    <span className="flex h-8 min-w-10 flex-col items-center justify-center rounded-lg border border-[var(--line)] bg-[var(--surface-2)] px-1.5 text-[var(--muted)]">
-                      <span className="text-[8px] font-bold uppercase opacity-60">PA</span>
-                      <span className="font-mono text-[12px] font-bold leading-none">
-                        {player.pa ?? (player.pa_range_code != null ? "?" : "—")}
+                  {dataMode === "full" && (
+                    <div className="flex gap-1">
+                      <span className={cn("flex h-8 min-w-10 flex-col items-center justify-center rounded-lg border px-1.5", caTone(player.ca))}>
+                        <span className="text-[8px] font-bold uppercase opacity-60">CA</span>
+                        <span className="font-mono text-[12px] font-bold leading-none">{player.ca}</span>
                       </span>
-                    </span>
-                  </div>
+                      <span className="flex h-8 min-w-10 flex-col items-center justify-center rounded-lg border border-[var(--line)] bg-[var(--surface-2)] px-1.5 text-[var(--muted)]">
+                        <span className="text-[8px] font-bold uppercase opacity-60">PA</span>
+                        <span className="font-mono text-[12px] font-bold leading-none">
+                          {player.pa ?? (player.pa_range_code != null ? "?" : "—")}
+                        </span>
+                      </span>
+                    </div>
+                  )}
                   {player.generated && (
                     <Badge tone="gold" className="px-1.5 py-0 text-[9px]">
                       {t("inspector.generatedBadge")}

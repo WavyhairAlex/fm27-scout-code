@@ -455,6 +455,7 @@ export interface StaffFilterOptions {
 
 export interface ValueFinderRequest {
   save_id: number;
+  mode?: "full" | "fair_play" | "moneyball" | null;
   position_group?: string | null;
   league?: string | null;
   age_min?: number | null;
@@ -513,10 +514,12 @@ export interface ValueFinderRow {
   loan_listed: boolean;
   injury_status: "injured" | "fit";
   recent_injury: string | null;
+  injury_recent: boolean;
 }
 
 export interface ValueFinderMeta {
   model: string;
+  mode: string;
   scored: number;
   filtered: number;
   cost_horizon_years: number;
@@ -534,6 +537,8 @@ export interface ValueFinderPage {
 export interface StatsMoneyballRequest {
   save_id: number;
   model?: "core" | "advanced" | null;
+  window?: "overall" | "league" | "calendar" | null;
+  mode?: "full" | "fair_play" | "moneyball" | null;
   include_goalkeepers?: boolean;
   position_group?: string | null;
   league?: string | null;
@@ -581,6 +586,7 @@ export interface StatsMoneyballRow {
   goals: number;
   assists: number;
   expected_goals: number;
+  non_penalty_expected_goals: number;
   expected_assists: number;
   shots: number;
   shots_on_target: number;
@@ -613,10 +619,17 @@ export interface StatsMoneyballRow {
   wage_known: boolean;
   production_global: number | null;
   production_tier: number | null;
+  production_low: number | null;
+  production_high: number | null;
   cost_pct_global: number | null;
   cost_pct_tier: number | null;
   surplus: number | null;
   score: number | null;
+  score_low: number | null;
+  fair_price: number | null;
+  value_gap_pct: number | null;
+  bargain_score: number | null;
+  peer_count: number;
   confidence: number;
   flags: string[];
   drivers: StatsDriver[];
@@ -624,6 +637,58 @@ export interface StatsMoneyballRow {
   loan_listed: boolean;
   injury_status: "injured" | "fit";
   recent_injury: string | null;
+  injury_recent: boolean;
+  stats_from_other_club: boolean;
+}
+
+export interface SimilarStatsPlayer {
+  uid: number;
+  name: string | null;
+  age: number | null;
+  club_name: string | null;
+  position_group: string;
+  minutes: number;
+  quality: number | null;
+  fee: number | null;
+  fair_price: number | null;
+  value_gap_pct: number | null;
+  distance: number;
+}
+
+export interface SquadNeedsRequest {
+  save_id: number;
+  club_uid: number;
+  model?: "core" | "advanced" | null;
+  window?: "overall" | "league" | "calendar" | null;
+  min_minutes?: number | null;
+}
+
+export interface SquadUpgrade {
+  uid: number;
+  name: string | null;
+  age: number | null;
+  club_name: string | null;
+  minutes: number;
+  quality: number | null;
+  quality_gain: number | null;
+  fee: number | null;
+  fair_price: number | null;
+  value_gap_pct: number | null;
+  bargain_score: number | null;
+}
+
+export interface SquadNeed {
+  position_group: string;
+  best_quality: number | null;
+  best_uid: number | null;
+  best_name: string | null;
+  upgrades: SquadUpgrade[];
+}
+
+export interface SquadNeeds {
+  club_uid: number;
+  club_name: string | null;
+  needs: SquadNeed[];
 }
 
 export interface StatsMoneyballMeta {
@@ -631,8 +696,13 @@ export interface StatsMoneyballMeta {
   scored: number;
   filtered: number;
   min_minutes: number;
+  score_floor_minutes: number;
   cost_horizon_years: number;
   leagues: string[];
+  window: string;
+  mode: string;
+  price_model: string | null;
+  priced: number;
 }
 
 export interface StatsMoneyballPage {
@@ -907,6 +977,9 @@ export interface ParseReport {
   elapsed_ms: number;
   warnings: string[];
 }
+
+/** Matches `store::UNKNOWN_GENDER_ID`; used for players without a club gender. */
+export const UNKNOWN_GENDER_ID = 255;
 
 export interface FilterOption {
   id: number;
