@@ -66,6 +66,17 @@
   stats-based Moneyball model. It uses role/CA quality and transfer value plus
   wages; `transfer_value` is not an actual transfer fee, players with unknown
   fees or wages are excluded by default, and league strength is not adjusted.
+- Transfer scouting is an estimator. Fit uses the editor's role weights and
+  position familiarity, not FM's own role ratings. Signing probability and the
+  fee/wage estimates are hand-tuned from transfer value, contract status, club
+  reputation, personality, budget and wage room; they are not calibrated against
+  completed transfers. Release clauses use the FM27 clause kinds
+  (`0, 1, 2, 16, 17, 18, 27, 31, 55, 56`); a clause of zero is ignored because
+  its behaviour is unverified. Relegation and promotion conditions are not
+  modelled, so those clauses are treated as live caps. The squad view works from
+  every player whose `club_uid` is the managed club, not a separately parsed
+  senior-team list, so reserve and youth players can appear. Tactics are not
+  read; the role filter is manual.
 - Stats moneyball is also experimental. FM27 zeroes the advanced-stat block
   (key passes, progressive passes, interceptions, headers, clearances, blocks,
   sprints, saves, xGP) for about 37% of players; those zeroes are stored as

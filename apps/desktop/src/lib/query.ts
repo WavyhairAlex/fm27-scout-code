@@ -9,6 +9,8 @@ import {
   getGrowthHistory,
   getPlayer,
   getPlayerRoles,
+  getScoutAdvice,
+  getScoutOverview,
   getStaffFilterOptions,
   getSquadAnalysis,
   listSaves,
@@ -23,6 +25,7 @@ import {
 import type {
   ClubQuery,
   PlayerQuery,
+  ScoutRequest,
   SortRule,
   StaffQuery,
   StatsMoneyballRequest,
@@ -408,6 +411,26 @@ export function useSquadAnalysis(clubUid: number | null) {
     queryFn: () => getSquadAnalysis(saveId!, clubUid!),
     enabled: saveId != null && clubUid != null,
     staleTime: 60_000,
+  });
+}
+
+export function useScoutOverview(clubUid: number | null) {
+  const saveId = useAppStore((state) => state.saveId);
+  return useQuery({
+    queryKey: ["scout-overview", saveId, clubUid],
+    queryFn: () => getScoutOverview(saveId!, clubUid!),
+    enabled: saveId != null && clubUid != null,
+    staleTime: 60_000,
+  });
+}
+
+export function useScoutAdvice(request: ScoutRequest | null) {
+  return useQuery({
+    queryKey: ["scout-advice", request],
+    queryFn: () => getScoutAdvice(request!),
+    enabled: request != null,
+    placeholderData: keepPreviousData,
+    staleTime: 30_000,
   });
 }
 

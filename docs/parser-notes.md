@@ -233,6 +233,14 @@ tail. Contract type is read from the head at clause base -35 (gate 5).
 Loans use the tail-shaped block before a no-terms chain record: marker `FFFFFFFF` at
 +24 and an end date at +28.
 
+Clause kinds `0, 1, 2, 16, 17, 18, 27, 31, 55` and `56` are minimum-fee release
+obligations (and their relegation, promotion and competition variants, including the
+active forms). Their value is the fee and their `parameter` counts days from the
+contract start until the clause expires; a condition past 7,305 days is treated as a
+mark that never expires. Scouting caps the estimated fee at the lowest clause that
+still holds. Clause kind `0` with a value of zero is ignored because the game's
+behaviour is unverified.
+
 The in-effect contract tail also carries transfer status. At +39 the flags byte uses
 bit 0 for listed for transfer and bit 1 for listed for loan; other bits (for example
 `0x40`) appear on many players and are unrelated to the listing result. The status

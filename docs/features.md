@@ -90,6 +90,14 @@
   rank a club's weakest position groups by current stats quality and list same-tier,
   fee-known upgrades with quality gain, fair price and value gap. They use 300+ minute
   samples and exclude loanee stats.
+- Transfer scouting (Full mode): the Scouting tab works from the managed club and
+  separates role fit from signing probability. Advice is relative to the club's own
+  squad (first team, rotation, future), uses an optional role filter, and explains
+  every probability with named reasons. Fee and wage estimates account for contract
+  length, listing, squad status, release clauses, the transfer budget and wage room.
+  The same tab shows a line-by-line squad depth chart and the players a scout would
+  sell, loan out or release. Unknown values stay unknown and are never treated as
+  zero.
 - Growth history: each parse records a snapshot keyed by save name + game date;
   the detail panel shows CA / PA / value history.
 - Linked filtering: club, nationality, gender and status counts update live with

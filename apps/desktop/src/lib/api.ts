@@ -26,6 +26,9 @@ import type {
   PlayerQuery,
   RoleScore,
   SaveRecord,
+  ScoutOverview,
+  ScoutRequest,
+  Scouted,
   SnapshotPoint,
   SquadAnalysis,
   StaffFilterOptions,
@@ -58,6 +61,8 @@ import {
   mockQuery,
   mockQueryClubs,
   mockQueryStaff,
+  mockScoutAdvice,
+  mockScoutOverview,
   mockStaffFilterOptions,
   mockSquadAnalysis,
   mockSimilarStatsPlayers,
@@ -553,4 +558,19 @@ export async function getSquadAnalysis(
 ): Promise<SquadAnalysis> {
   if (!isTauri) return mockSquadAnalysis(clubUid);
   return timedInvoke<SquadAnalysis>("squad_analysis", { saveId, clubUid });
+}
+
+export async function getScoutOverview(
+  saveId: number,
+  clubUid: number,
+): Promise<ScoutOverview> {
+  if (!isTauri) return mockScoutOverview(clubUid);
+  return timedInvoke<ScoutOverview>("scout_overview", { saveId, clubUid });
+}
+
+export async function getScoutAdvice(
+  request: ScoutRequest,
+): Promise<Scouted> {
+  if (!isTauri) return mockScoutAdvice(request);
+  return timedInvoke<Scouted>("scout_advice", { request });
 }

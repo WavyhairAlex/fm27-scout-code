@@ -817,6 +817,31 @@ async fn squad_analysis(
 }
 
 #[tauri::command]
+async fn scout_overview(
+    state: State<'_, AppState>,
+    save_id: i64,
+    club_uid: u32,
+) -> Result<fm27_core::scouting::ScoutOverview, String> {
+    run_read_command(state, move |store| {
+        store
+            .scout_overview(save_id, club_uid)
+            .map_err(error_string)
+    })
+    .await
+}
+
+#[tauri::command]
+async fn scout_advice(
+    state: State<'_, AppState>,
+    request: fm27_core::scouting::ScoutRequest,
+) -> Result<fm27_core::scouting::Scouted, String> {
+    run_read_command(state, move |store| {
+        store.scout_advice(&request).map_err(error_string)
+    })
+    .await
+}
+
+#[tauri::command]
 async fn list_competitions(
     state: State<'_, AppState>,
     save_id: i64,
@@ -1167,6 +1192,8 @@ pub fn run() {
             managed_club,
             analysis_overview,
             squad_analysis,
+            scout_overview,
+            scout_advice,
             list_competitions,
             get_filter_options,
             delete_save,

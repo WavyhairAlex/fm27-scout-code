@@ -30,6 +30,7 @@ pub mod player_scan;
 pub mod price_model;
 pub mod reference;
 pub mod roles;
+pub mod scouting;
 pub mod season_stats;
 pub mod stadiums;
 pub mod staff;

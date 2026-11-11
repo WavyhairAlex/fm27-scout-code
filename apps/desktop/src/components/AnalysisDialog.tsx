@@ -6,6 +6,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Coins,
+  Compass,
   Download,
   Loader2,
   RefreshCw,
@@ -38,11 +39,12 @@ import { formatNumber, type TranslationKey } from "@/lib/i18n";
 import { useI18n } from "@/lib/useI18n";
 import { caTone, cn, initials } from "@/lib/utils";
 import { useAppStore } from "@/store/app";
+import { ScoutPanel } from "./ScoutPanel";
 import { SquadNeedsSection } from "./SquadNeeds";
 import { Badge, Button, Input, Modal, Select } from "./ui";
 import { MultiSelect } from "./MultiSelect";
 
-type AnalysisTab = "overview" | "squad" | "needs" | "value" | "stats";
+type AnalysisTab = "overview" | "squad" | "needs" | "scout" | "value" | "stats";
 
 export function AnalysisDialog() {
   const { t, locale } = useI18n();
@@ -66,7 +68,7 @@ export function AnalysisDialog() {
 
   useEffect(() => {
     const allowed: AnalysisTab[] = [
-      ...(dataMode === "full" ? (["overview"] as AnalysisTab[]) : []),
+      ...(dataMode === "full" ? (["overview", "scout"] as AnalysisTab[]) : []),
       "squad",
       "needs",
       ...(dataMode !== "moneyball" ? (["value"] as AnalysisTab[]) : []),
@@ -148,6 +150,9 @@ export function AnalysisDialog() {
             : []),
           ["squad", t("analysis.tab.squad"), <Users size={12} key="squad" />],
           ["needs", t("analysis.tab.needs"), <Target size={12} key="needs" />],
+          ...(dataMode === "full"
+            ? [["scout", t("analysis.tab.scout"), <Compass size={12} key="scout" />]]
+            : []),
           ...(dataMode !== "moneyball"
             ? [["value", t("analysis.tab.value"), <Coins size={12} key="value" />]]
             : []),
@@ -257,6 +262,20 @@ export function AnalysisDialog() {
               }}
             />
           </div>
+        )}
+
+        {tab === "scout" && clubUid != null && (
+          <ScoutPanel
+            clubUid={clubUid}
+            onPlayer={(uid) => {
+              setSelectedUid(uid);
+              setInspectorOpen(true);
+              setOpen(false);
+            }}
+          />
+        )}
+        {tab === "scout" && clubUid == null && (
+          <EmptyHint text={t("analysis.chooseFirst")} />
         )}
 
         {tab === "value" && (

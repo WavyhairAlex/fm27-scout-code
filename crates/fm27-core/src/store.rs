@@ -14,11 +14,16 @@ use crate::layout::{
     ATTRIBUTE_KEYS, HIDDEN_ATTRIBUTE_KEYS, PERSONALITY_KEYS, POSITION_KEYS, STAFF_ATTRIBUTE_KEYS,
 };
 use crate::model::{
-    Attributes, Club, ClubDetail, ClubLink, Competition, Contract, FinanceMonth,
+    Attributes, Clause, Club, ClubDetail, ClubLink, Competition, Contract, FinanceMonth,
     GENERATED_UNIQUE_ID_MINIMUM, ManagedClub, ParseReport, Personality, Player, Positions,
-    SaveSummary, Stadium, Staff, StaffAttributes, Trait, attribute_index, is_generated_unique_id,
+    SaveSummary, Stadium, Staff, StaffAttributes, Trait, TransferValueState, attribute_index,
+    is_generated_unique_id,
 };
 use crate::parse::ParsedSave;
+use crate::scouting::{
+    LOWEST_POSITION_RATING, ScoutCandidate, ScoutContext, ScoutOverview, ScoutRequest, Scouted,
+    is_scout_position,
+};
 
 const SCHEMA: &str = include_str!("../../../shared/schema.sql");
 
@@ -71,10 +76,144 @@ const STAFF_ROWS_SELECT: &str = "SELECT s.uid, s.unique_id, s.name, s.age, s.clu
 
 const MAX_EXPORT_ROWS: usize = 500_000;
 
+const SCOUT_CANDIDATE_SELECT: &str = "SELECT p.uid, p.name, p.age, p.club_uid, p.club_name,
+            c.club_uid, c.club_name, p.gender, p.ca, p.pa,
+            p.positions_json, p.attributes_json, p.personality_json,
+            p.transfer_value, p.transfer_value_state, p.transfer_listed,
+            c.wage, c.start_date, c.end_date, c.squad_status, c.on_loan,
+            c.loan_parent_club_uid, c.loan_parent_club_name, c.clauses_json,
+            cl.reputation,
+            COALESCE(json_extract(p.data_json, '$.reputation.current'), 0)
+     FROM players p
+     LEFT JOIN contracts c ON c.save_id = p.save_id AND c.player_uid = p.uid
+     LEFT JOIN clubs cl ON cl.save_id = p.save_id AND cl.uid = p.club_uid";
+
 /// Reserved gender id for players whose gender cannot be resolved. Players
 /// inherit gender from their club's team list, so free agents are stored with
 /// `gender = NULL`; the filter UI groups those players under "unknown".
 pub const UNKNOWN_GENDER_ID: u8 = 255;
+
+struct ScoutRow {
+    uid: u32,
+    name: Option<String>,
+    age: Option<i32>,
+    club_uid: Option<u32>,
+    club_name: Option<String>,
+    contract_club_uid: Option<u32>,
+    contract_club_name: Option<String>,
+    gender: Option<u8>,
+    ca: u16,
+    pa: Option<i16>,
+    positions_json: String,
+    attributes_json: String,
+    personality_json: Option<String>,
+    transfer_value: Option<u32>,
+    transfer_value_state: Option<String>,
+    transfer_listed: bool,
+    wage: Option<u32>,
+    start_date: Option<String>,
+    end_date: Option<String>,
+    squad_status: Option<u8>,
+    on_loan: Option<bool>,
+    loan_parent_club_uid: Option<u32>,
+    loan_parent_club_name: Option<String>,
+    clauses_json: Option<String>,
+    club_reputation: Option<i64>,
+    reputation: Option<i64>,
+}
+
+impl ScoutRow {
+    fn read(row: &Row<'_>) -> rusqlite::Result<Self> {
+        Ok(Self {
+            uid: row.get(0)?,
+            name: row.get(1)?,
+            age: row.get(2)?,
+            club_uid: row.get(3)?,
+            club_name: row.get(4)?,
+            contract_club_uid: row.get(5)?,
+            contract_club_name: row.get(6)?,
+            gender: row.get(7)?,
+            ca: row.get(8)?,
+            pa: row.get(9)?,
+            positions_json: row.get(10)?,
+            attributes_json: row.get(11)?,
+            personality_json: row.get(12)?,
+            transfer_value: row.get(13)?,
+            transfer_value_state: row.get(14)?,
+            transfer_listed: row.get(15)?,
+            wage: row.get(16)?,
+            start_date: row.get(17)?,
+            end_date: row.get(18)?,
+            squad_status: row.get(19)?,
+            on_loan: row.get(20)?,
+            loan_parent_club_uid: row.get(21)?,
+            loan_parent_club_name: row.get(22)?,
+            clauses_json: row.get(23)?,
+            club_reputation: row.get(24)?,
+            reputation: row.get(25)?,
+        })
+    }
+
+    fn into_candidate(self) -> Result<ScoutCandidate> {
+        let attributes = serde_json::from_str::<Attributes>(&self.attributes_json)?;
+        let positions = serde_json::from_str::<Positions>(&self.positions_json)?;
+        let personality = self
+            .personality_json
+            .as_deref()
+            .map(serde_json::from_str::<Personality>)
+            .transpose()?;
+        let clauses = self
+            .clauses_json
+            .as_deref()
+            .map(serde_json::from_str::<Vec<Clause>>)
+            .transpose()?
+            .unwrap_or_default();
+        let transfer_value_state = self
+            .transfer_value_state
+            .as_deref()
+            .and_then(|text| serde_json::from_str::<TransferValueState>(text).ok())
+            .unwrap_or(TransferValueState::Ok);
+        let reputation = self
+            .reputation
+            .filter(|value| *value > 0)
+            .map(|value| value.clamp(0, i64::from(u16::MAX)) as u16);
+        Ok(ScoutCandidate {
+            uid: self.uid,
+            name: self.name,
+            age: self.age,
+            club_uid: self.club_uid,
+            club_name: self.club_name,
+            contract_club_uid: self.contract_club_uid,
+            contract_club_name: self.contract_club_name,
+            gender: self.gender,
+            ca: self.ca,
+            pa: self.pa,
+            attributes,
+            positions,
+            personality,
+            transfer_value: self.transfer_value,
+            transfer_value_state,
+            transfer_listed: self.transfer_listed,
+            wage: self.wage,
+            contract_start: self.start_date.as_deref().and_then(parse_scout_date),
+            contract_end: self.end_date.as_deref().and_then(parse_scout_date),
+            squad_status: self.squad_status,
+            clauses,
+            on_loan: self.on_loan.unwrap_or(false),
+            loan_parent_club_uid: self.loan_parent_club_uid,
+            loan_parent_club_name: self.loan_parent_club_name,
+            reputation,
+            club_reputation: self
+                .club_reputation
+                .filter(|value| *value > 0)
+                .map(|value| value.clamp(0, i64::from(u16::MAX)) as u16),
+        })
+    }
+}
+
+fn parse_scout_date(text: &str) -> Option<NaiveDate> {
+    NaiveDate::parse_from_str(text, "%Y-%m-%d").ok()
+}
 
 pub struct Store {
     conn: Connection,
@@ -1932,6 +2071,111 @@ impl Store {
             // rarely have 900 minutes on every player.
             request.min_minutes.unwrap_or(300),
         ))
+    }
+
+    /// The managed club's senior squad line by line, its money and the players
+    /// a scout would let go.
+    pub fn scout_overview(&self, save_id: i64, club_uid: u32) -> Result<ScoutOverview> {
+        let context = self.scout_context(save_id, club_uid)?;
+        let squad = self.scout_candidates(save_id, Some(club_uid), None)?;
+        Ok(crate::scouting::overview(&context, &squad))
+    }
+
+    /// Players the scout recommends for the position and purpose in `request`.
+    pub fn scout_advice(&self, request: &ScoutRequest) -> Result<Scouted> {
+        let position = request.position.trim().to_owned();
+        if !is_scout_position(&position) {
+            return Err(Error::parse(format!("unknown position {position:?}")));
+        }
+        let context = self.scout_context(request.save_id, request.club_uid)?;
+        let own =
+            self.scout_candidates(request.save_id, Some(request.club_uid), Some(&position))?;
+        let candidates = self.scout_candidates(request.save_id, None, Some(&position))?;
+        crate::scouting::advise(request, &context, &own, &candidates)
+    }
+
+    fn scout_context(&self, save_id: i64, club_uid: u32) -> Result<ScoutContext> {
+        let club = self
+            .conn
+            .query_row(
+                "SELECT name, gender, reputation, transfer_budget_remaining, wage_budget_weekly
+                 FROM clubs WHERE save_id = ?1 AND uid = ?2",
+                params![save_id, club_uid],
+                |row| {
+                    Ok((
+                        row.get::<_, String>(0)?,
+                        row.get::<_, Option<i64>>(1)?,
+                        row.get::<_, Option<i64>>(2)?,
+                        row.get::<_, Option<i64>>(3)?,
+                        row.get::<_, Option<i64>>(4)?,
+                    ))
+                },
+            )
+            .optional()?
+            .ok_or_else(|| Error::parse(format!("unknown club {club_uid}")))?;
+        let finance = self
+            .conn
+            .query_row(
+                "SELECT transfer_budget_remaining, wage_budget_weekly
+                 FROM club_finances
+                 WHERE save_id = ?1 AND club_uid = ?2
+                 ORDER BY month DESC LIMIT 1",
+                params![save_id, club_uid],
+                |row| Ok((row.get::<_, Option<i64>>(0)?, row.get::<_, Option<i64>>(1)?)),
+            )
+            .optional()?;
+        let wage_bill: Option<i64> = self.conn.query_row(
+            "SELECT SUM(wage) FROM contracts WHERE save_id = ?1 AND club_uid = ?2",
+            params![save_id, club_uid],
+            |row| row.get(0),
+        )?;
+        let game_date = self
+            .save_game_date(save_id)?
+            .as_deref()
+            .and_then(parse_scout_date);
+        Ok(ScoutContext {
+            club_uid,
+            club_name: club.0,
+            club_gender: club
+                .1
+                .map(|gender| gender.clamp(0, i64::from(u8::MAX)) as u8),
+            club_reputation: club
+                .2
+                .filter(|value| *value > 0)
+                .map(|value| value.clamp(0, i64::from(u16::MAX)) as u16),
+            transfer_budget: club.3.or(finance.and_then(|value| value.0)),
+            wage_budget: club.4.or(finance.and_then(|value| value.1)),
+            wage_bill,
+            game_date,
+        })
+    }
+
+    fn scout_candidates(
+        &self,
+        save_id: i64,
+        club_uid: Option<u32>,
+        position: Option<&str>,
+    ) -> Result<Vec<ScoutCandidate>> {
+        let mut sql = format!("{SCOUT_CANDIDATE_SELECT} WHERE p.save_id = ?1");
+        if club_uid.is_some() {
+            sql.push_str(" AND p.club_uid = ?2");
+        }
+        if let Some(position) = position {
+            sql.push_str(&format!(
+                " AND json_extract(p.positions_json, '$.{position}') >= {LOWEST_POSITION_RATING}"
+            ));
+        }
+        let mut values = vec![Value::Integer(save_id)];
+        if let Some(uid) = club_uid {
+            values.push(Value::Integer(i64::from(uid)));
+        }
+        let mut statement = self.conn.prepare(&sql)?;
+        let rows = statement.query_map(params_from_iter(values.iter()), ScoutRow::read)?;
+        let mut out = Vec::new();
+        for row in rows {
+            out.push(row?.into_candidate()?);
+        }
+        Ok(out)
     }
 
     /// Style-similar players inside the target's position group. Reuses the

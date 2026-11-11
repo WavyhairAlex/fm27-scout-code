@@ -11,6 +11,8 @@ import {
   mockQuery,
   mockQueryClubs,
   mockQueryStaff,
+  mockScoutAdvice,
+  mockScoutOverview,
   mockSquadAnalysis,
   mockStaffFilterOptions,
   mockStatsMoneyball,
@@ -178,6 +180,36 @@ describe("mock player query", () => {
     expect(scoped.total_clubs).toBe(overview.total_clubs);
     expect(scoped.top_clubs.some((club) => club.club_uid === managed.club_uid)).toBe(true);
   });
+
+describe("mock scouting", () => {
+  it("builds squad depth and recommendations for the managed club", () => {
+    const managed = mockManagedClub();
+    const overview = mockScoutOverview(managed.club_uid);
+    expect(overview.lines).toHaveLength(10);
+    expect(overview.positions.length).toBeGreaterThan(0);
+    expect(overview.roles.length).toBeGreaterThan(0);
+    expect(overview.squad_size).toBeGreaterThan(0);
+
+    const position =
+      overview.lines.find((line) => line.status === "missing" || line.status === "thin")
+        ?.positions[0] ?? "stc";
+    const advice = mockScoutAdvice({
+      save_id: MOCK_SAVE_ID,
+      club_uid: managed.club_uid,
+      position,
+      purpose: "any",
+      how_many: 10,
+    });
+    expect(advice.suggestions.length).toBeLessThanOrEqual(10);
+    for (const suggestion of advice.suggestions) {
+      expect(suggestion.fit).toBeGreaterThanOrEqual(0);
+      expect(suggestion.fit).toBeLessThanOrEqual(100);
+      expect(suggestion.probability).toBeGreaterThanOrEqual(0);
+      expect(suggestion.probability).toBeLessThanOrEqual(100);
+      expect(suggestion.player.club_uid).not.toBe(managed.club_uid);
+    }
+  });
+});
 
 describe("mock club query", () => {
   it("searches clubs by name", () => {
