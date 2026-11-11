@@ -1,6 +1,6 @@
 //! Real-save regression test for the season-statistics frame.
 //!
-//! Set `FM27_TEST_SAVE` to a 27.0.0+2486695 career save and run:
+//! Set `FM27_TEST_SAVE` to a verified-build career save and run:
 //!
 //! ```text
 //! FM27_TEST_SAVE="/path/to/save.fm" cargo test --release -- --ignored season_stats

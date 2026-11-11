@@ -63,7 +63,7 @@ Stale snapshots are removed on the next launch.
 - The contract record is authoritative. When the summary links another club, the
   parser keeps the contract club and records a warning. With no contract record,
   exactly one summary link supplies the club; multiple links leave it unknown.
-- The reader runs only on the two verified builds; an unverified build records a
+- The reader runs only on the verified builds; an unverified build records a
   warning and leaves the managed club unknown rather than applying these offsets.
 
 ## Name pools

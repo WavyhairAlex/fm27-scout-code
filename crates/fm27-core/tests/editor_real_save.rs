@@ -1,7 +1,7 @@
 //! Real-save editor regression test.
 //!
 //! Fixtures are intentionally not committed. Set `FM27_TEST_SAVE` to a
-//! 27.0.0+2486695 career save and run:
+//! verified-build career save and run:
 //!
 //! ```text
 //! FM27_TEST_SAVE="/path/to/save.fm" cargo test --release -- --ignored

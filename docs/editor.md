@@ -9,11 +9,21 @@ refuse to overwrite the source file.
 
 ## Supported saves
 
-- FM27 builds `27.0.0+2486695` and `27.0.0+2493426`
+- FM27 builds `27.0.0+2486695`, `27.0.0+2493426` and `27.0.1+2494687`
 - `game_db` schema 4000
 
-Both builds share the same save layout. The editor refuses other builds and
+All three builds share the same save layout. The editor refuses other builds and
 schemas instead of guessing field offsets.
+
+Build support is keyed on the exact number after `+`, not on the game version:
+`27.0.1` is the game version string, while `2494687` identifies the build that
+wrote the save. A patch release can change record layout, so the game version
+alone does not prove that fixed offsets are safe. To support a new build, compare
+a save of the same career and game date written by the previous build against one
+written by the new build, run the ignored `editor_real_save` and
+`club_real_save` tests against it, then add its exact build string to
+`EDITABLE_BUILDS` and bump `PARSER_VERSION`. Reading accepts any `27.` build in
+degraded mode; editing is limited to the verified list.
 
 ## Desktop UI
 

@@ -254,7 +254,7 @@ const en = {
     "Choose or drop a Football Manager 27 save. Opening and parsing are read-only; the optional editor writes a new save file and never modifies the source. No data is uploaded.",
   "onboarding.choose": "Choose save…",
   "onboarding.openLast": "Open last save",
-  "onboarding.autoDetect": "Auto-detects 27.0.0+",
+  "onboarding.autoDetect": "Auto-detects 27.0+",
   "onboarding.hiddenByDefault": "Hidden attributes off by default",
   "onboarding.fullyOffline": "Fully offline",
   "onboarding.recentSaves": "Recent saves",
@@ -738,7 +738,7 @@ const en = {
   "help.shortcuts": "Keyboard shortcuts",
   "help.parserTitle": "Parser notes",
   "help.parserDescription":
-    "The current parser is verified against FM27 builds 27.0.0+2486695 and 27.0.0+2493426, game_db schema 4000. Unknown builds are read in degraded mode and reported; missing fields are never guessed.",
+    "The current parser is verified against FM27 builds 27.0.0+2486695, 27.0.0+2493426 and 27.0.1+2494687, game_db schema 4000. Unknown builds are read in degraded mode and reported; missing fields are never guessed.",
   "help.savePlayers": "{count} players in this save",
   "help.legal":
     "Unofficial tool, not affiliated with Sports Interactive / SEGA. Parsing logic references the MIT-licensed fmsave project; Tauri, React, TanStack and other components follow their respective licences. If the game is saving, wait for it to finish and open the save again.",
@@ -1236,7 +1236,7 @@ const zhCN: Record<TranslationKey, string> = {
     "选择或拖入 Football Manager 27 存档。打开和解析为只读；可选的编辑器只写入新存档，不会修改源文件，也不会上传任何数据。",
   "onboarding.choose": "选择存档…",
   "onboarding.openLast": "打开上次存档",
-  "onboarding.autoDetect": "自动识别 27.0.0+",
+  "onboarding.autoDetect": "自动识别 27.0+",
   "onboarding.hiddenByDefault": "默认隐藏隐藏属性",
   "onboarding.fullyOffline": "完全离线",
   "onboarding.recentSaves": "最近存档",
@@ -1711,7 +1711,7 @@ const zhCN: Record<TranslationKey, string> = {
   "help.shortcuts": "快捷键",
   "help.parserTitle": "解析说明",
   "help.parserDescription":
-    "当前解析器针对 FM27 build 27.0.0+2486695 和 27.0.0+2493426 验证，game_db schema 4000。未知 build 会降级读取并在报告中提示，不会猜测缺失字段。",
+    "当前解析器针对 FM27 build 27.0.0+2486695、27.0.0+2493426 和 27.0.1+2494687 验证，game_db schema 4000。未知 build 会降级读取并在报告中提示，不会猜测缺失字段。",
   "help.savePlayers": "本存档 {count} 名球员",
   "help.legal":
     "非官方工具，与 Sports Interactive / SEGA 无关。解析逻辑参考 MIT 许可的 fmsave 项目；Tauri、React、TanStack 等组件遵循各自许可证。如果游戏正在保存，请等待保存完成后重新打开存档。",

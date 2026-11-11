@@ -1,7 +1,7 @@
 # FM27 layout quick reference
 
-Builds `27.0.0+2486695` and `27.0.0+2493426`, `game_db` schema 4000. Both builds
-share the layout below. Offsets are decimal bytes unless noted.
+Builds `27.0.0+2486695`, `27.0.0+2493426` and `27.0.1+2494687`, `game_db` schema
+4000. All three builds share the layout below. Offsets are decimal bytes unless noted.
 
 ## Save container
 
@@ -247,7 +247,7 @@ Rust implementation: `crates/fm27-core/src/season_stats.rs`; container region su
 ## Staff objects
 
 Staff objects use the person-header shape with kind byte `1` at header +12. Verified on
-`27.0.0+2486695` and `27.0.0+2493426`:
+`27.0.0+2486695`, `27.0.0+2493426` and `27.0.1+2494687`:
 
 ```text
 header             pindex u32

@@ -168,3 +168,24 @@ ability block; role vectors require a unique signature and at least one score of
 
 The ignored `staff_real_save.rs` test covers the directory count, attribute and role
 coverage, the club-job invariant, SQLite insertion, role filtering and staff facet counts.
+
+## Build compatibility
+
+Build `27.0.1+2494687` was verified against the previous build by parsing the same
+career at the same in-game date (2027-12-03) from a save written by `27.0.0+2493426`
+and one written by `27.0.1+2494687`:
+
+- 52,858 players, 26,127 clubs, 27,082 stadiums, 2,014 monthly finance rows and
+  12,432 staff rows matched by identity and count.
+- Every static field matched, including names, attributes, positions, personality,
+  traits, contract structure, club reputation, facilities and stadium data.
+- The only differences were mutable in-game values (transfer value, condition,
+  match sharpness and six contract-clause amounts), which is consistent with the
+  game recalculating values after the patch rather than a layout shift.
+- `editor_real_save` (CA/PA, attributes, personality, traits, wage and contract
+  end) and the club-edit real-save test passed against the new build, with the
+  editor re-parsing and field-verifying each output.
+
+The managed club resolves to the same club and manager on the new build. Reading
+other `27.` builds remains degraded; editing accepts only the exact verified
+build strings.
