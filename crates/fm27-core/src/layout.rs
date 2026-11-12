@@ -5,10 +5,10 @@ use chrono::{Datelike, NaiveDate};
 
 pub const GAME: &str = "FM27";
 /// Latest FM27 build whose save layout has been verified.
-pub const BUILD: &str = "27.0.1+2494687";
+pub const BUILD: &str = "27.0.1+2503222";
 /// Builds that share the verified FM27 save layout. Editing is limited to these
 /// exact builds so a layout change fails closed instead of guessing offsets.
-pub const EDITABLE_BUILDS: &[&str] = &["27.0.0+2486695", "27.0.0+2493426", BUILD];
+pub const EDITABLE_BUILDS: &[&str] = &["27.0.0+2486695", "27.0.0+2493426", "27.0.1+2494687", BUILD];
 pub const GAME_DB_SCHEMA: u32 = 4000;
 
 pub fn is_editable_build(build: &str) -> bool {
@@ -27,13 +27,15 @@ pub fn editable_builds() -> String {
 /// before the closing person header accepted descending Unique IDs, before
 /// staff objects were decoded into their own cached table, before players
 /// carried resolved names for their other nationalities, before the managed
-/// club was read from the first human manager, and before build 27.0.1+2494687
-/// was verified and the managed club was read for it.
+/// club was read from the first human manager, before build 27.0.1+2494687
+/// was verified and the managed club was read for it, and before build
+/// 27.0.1+2503222 was verified against 27.0.1+2494687 and the managed club was
+/// read for it.
 pub const PARSER_VERSION: &str = concat!(
-    "1.1.6",
+    "1.1.7",
     "+nation-names+listing+listing-flags+injury-windows+club-finance+stadiums",
     "+club-facilities+youth-level-edt+competition-names+club-leagues+season-stats+unique-ids",
-    "+staff+second-nations+managed-club+build-2494687"
+    "+staff+second-nations+managed-club+build-2494687+build-2503222"
 );
 pub const EARLIEST_YEAR: i32 = 1901;
 pub const LATEST_YEAR: i32 = 2200;
@@ -798,12 +800,14 @@ mod tests {
         assert!(is_editable_build("27.0.0+2486695"));
         assert!(is_editable_build("27.0.0+2493426"));
         assert!(is_editable_build("27.0.1+2494687"));
+        assert!(is_editable_build("27.0.1+2503222"));
         assert!(!is_editable_build("27.0.0+9999999"));
         assert!(!is_editable_build("27.0.1+2493426"));
         assert!(!is_editable_build("27.0.1+2494688"));
+        assert!(!is_editable_build("27.0.1+2503223"));
         assert_eq!(
             editable_builds(),
-            "27.0.0+2486695, 27.0.0+2493426, 27.0.1+2494687"
+            "27.0.0+2486695, 27.0.0+2493426, 27.0.1+2494687, 27.0.1+2503222"
         );
     }
 

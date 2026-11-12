@@ -19,9 +19,10 @@
 
 ## Known limitations
 
-- Builds `27.0.0+2486695`, `27.0.0+2493426` and `27.0.1+2494687` have been fully
-  verified; other FM27 builds are read in degraded mode with a warning, and
-  missing fields are never guessed. Editing is limited to the verified builds.
+- Builds `27.0.0+2486695`, `27.0.0+2493426`, `27.0.1+2494687` and
+  `27.0.1+2503222` have been fully verified; other FM27 builds are read in
+  degraded mode with a warning, and missing fields are never guessed. Editing is
+  limited to the verified builds.
 - Club leagues are resolved from the competition entries in a full club record. The
   current resolver covers the top divisions of England, Italy, Spain, Germany,
   France, the Netherlands and Portugal; lower divisions and other nations stay

@@ -189,3 +189,22 @@ and one written by `27.0.1+2494687`:
 The managed club resolves to the same club and manager on the new build. Reading
 other `27.` builds remains degraded; editing accepts only the exact verified
 build strings.
+
+Build `27.0.1+2503222` was verified the same way against `27.0.1+2494687` by
+parsing the same career at the same in-game date (2028-03-03), one save written
+by each build:
+
+- 52,147 players, 26,127 clubs, 27,088 stadiums, 2,374 monthly finance rows,
+  12,256 staff rows, 2,005 competitions and 168,338 season-stat rows matched by
+  identity and count.
+- Every static field matched, including names, attributes, positions,
+  personality, traits, contract structure, club reputation, facilities, stadium
+  data, staff profile attributes and role ratings.
+- The only differences were mutable in-game values: 18,030 transfer values, 70
+  transfer-value states, 59 condition values, 37 match-sharpness values and 13
+  contract-clause amounts.
+- `editor_real_save` (CA/PA, attributes, personality, traits, wage and contract
+  end) and the club-edit real-save test passed against the new build, with the
+  editor re-parsing and field-verifying each output.
+- The managed club resolves to A.C. Milan with manager `AP King` on the new
+  build.
