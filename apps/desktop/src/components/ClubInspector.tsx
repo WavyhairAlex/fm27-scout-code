@@ -14,7 +14,7 @@ import { useClubDetail, useSquadAnalysis } from "@/lib/query";
 import { facilityRatingLabel, nationLabel } from "@/lib/labels";
 import { formatNumber } from "@/lib/i18n";
 import { useI18n } from "@/lib/useI18n";
-import { caTone, cn, formatDate, initials } from "@/lib/utils";
+import { caLabelClass, cn, formatDate, initials, paTone } from "@/lib/utils";
 import { useAppStore } from "@/store/app";
 import { SquadNeedsSection } from "./SquadNeeds";
 import { Badge, Button, EmptyState } from "./ui";
@@ -393,13 +393,13 @@ function SquadTab({ clubUid }: { clubUid: number }) {
                 {dataMode === "full" && (
                   <>
                     <td className="px-1 py-1.5 text-right">
-                      <span className={cn("rounded border px-1 font-mono text-[8px] font-bold", caTone(player.ca))}>
+                      <span className={cn("rounded border px-1 font-mono text-[8px] font-bold", caLabelClass)}>
                         {player.ca}
                       </span>
                     </td>
                     <td className="px-1 py-1.5 text-right">
                       {player.pa != null ? (
-                        <span className={cn("rounded border px-1 font-mono text-[8px] font-bold", caTone(player.pa))}>
+                        <span className={cn("rounded border px-1 font-mono text-[8px] font-bold", paTone(player.pa))}>
                           {player.pa}
                         </span>
                       ) : (

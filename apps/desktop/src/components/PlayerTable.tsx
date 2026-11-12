@@ -23,7 +23,7 @@ import { type PlayerRow } from "@/lib/types";
 import { attributeLabel, nationLabel, roleName } from "@/lib/labels";
 import { formatNumber } from "@/lib/i18n";
 import { useI18n } from "@/lib/useI18n";
-import { caTone, cn, initials } from "@/lib/utils";
+import { caLabelClass, cn, initials, paTone } from "@/lib/utils";
 import { useAppStore } from "@/store/app";
 import { Button, EmptyState } from "./ui";
 
@@ -240,7 +240,7 @@ export function PlayerTable() {
           <span
             className={cn(
               "inline-flex h-5 min-w-8 items-center justify-center rounded border px-1.5 font-mono text-[10px] font-bold",
-              caTone(row.original.ca),
+              caLabelClass,
             )}
           >
             {row.original.ca}
@@ -253,7 +253,12 @@ export function PlayerTable() {
         header: "PA",
         size: 42,
         cell: ({ row }) => (
-          <span className="font-mono text-[11px] font-semibold text-[var(--muted)]">
+          <span
+            className={cn(
+              "inline-flex h-5 min-w-8 items-center justify-center rounded border px-1.5 font-mono text-[10px] font-bold",
+              paTone(row.original.pa),
+            )}
+          >
             {row.original.pa != null ? row.original.pa : row.original.pa_range_code != null ? "?" : "—"}
           </span>
         ),

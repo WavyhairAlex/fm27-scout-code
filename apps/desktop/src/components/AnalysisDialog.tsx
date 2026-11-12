@@ -37,7 +37,7 @@ import type {
 import { bandLabel, roleName } from "@/lib/labels";
 import { formatNumber, type TranslationKey } from "@/lib/i18n";
 import { useI18n } from "@/lib/useI18n";
-import { caTone, cn, initials } from "@/lib/utils";
+import { caLabelClass, cn, initials, paTone } from "@/lib/utils";
 import { useAppStore } from "@/store/app";
 import { ScoutPanel } from "./ScoutPanel";
 import { SquadNeedsSection } from "./SquadNeeds";
@@ -583,11 +583,15 @@ function SquadPanel({
                   {dataMode === "full" && (
                     <>
                       <td className="px-2 py-1.5 text-right">
-                        <span className={cn("inline-flex rounded border px-1.5 py-0.5 font-mono text-[9px] font-bold", caTone(player.ca))}>
+                        <span className={cn("inline-flex rounded border px-1.5 py-0.5 font-mono text-[9px] font-bold", caLabelClass)}>
                           {player.ca}
                         </span>
                       </td>
-                      <td className="px-2 py-1.5 text-right font-mono text-[var(--muted)]">{player.pa ?? "?"}</td>
+                      <td className="px-2 py-1.5 text-right">
+                        <span className={cn("inline-flex rounded border px-1.5 py-0.5 font-mono text-[9px] font-bold", paTone(player.pa))}>
+                          {player.pa ?? "?"}
+                        </span>
+                      </td>
                     </>
                   )}
                   <td className="px-2 py-1.5 text-right font-mono text-[var(--muted)]">
@@ -1310,16 +1314,24 @@ function StatsMoneyballPanel({
                     </td>
                     {dataMode === "full" && (
                       <td className="px-2 py-1.5 text-right">
-                        <span
-                          className={cn(
-                            "inline-flex rounded border px-1.5 py-0.5 font-mono text-[9px] font-bold",
-                            caTone(row.ca),
-                          )}
-                        >
-                          {row.ca}
-                        </span>
-                        <span className="ml-1 font-mono text-[9px] text-[var(--muted)]">
-                          / {row.pa ?? "?"}
+                        <span className="inline-flex items-center gap-1">
+                          <span
+                            className={cn(
+                              "inline-flex rounded border px-1.5 py-0.5 font-mono text-[9px] font-bold",
+                              caLabelClass,
+                            )}
+                          >
+                            {row.ca}
+                          </span>
+                          <span className="font-mono text-[9px] text-[var(--muted)]">/</span>
+                          <span
+                            className={cn(
+                              "inline-flex rounded border px-1.5 py-0.5 font-mono text-[9px] font-bold",
+                              paTone(row.pa),
+                            )}
+                          >
+                            {row.pa ?? "?"}
+                          </span>
                         </span>
                       </td>
                     )}
@@ -2056,16 +2068,24 @@ function ValueFinderPanel({
                     </td>
                     {dataMode === "full" && (
                       <td className="px-2 py-1.5 text-right">
-                        <span
-                          className={cn(
-                            "inline-flex rounded border px-1.5 py-0.5 font-mono text-[9px] font-bold",
-                            caTone(row.ca),
-                          )}
-                        >
-                          {row.ca}
-                        </span>
-                        <span className="ml-1 font-mono text-[9px] text-[var(--muted)]">
-                          / {row.pa ?? "?"}
+                        <span className="inline-flex items-center gap-1">
+                          <span
+                            className={cn(
+                              "inline-flex rounded border px-1.5 py-0.5 font-mono text-[9px] font-bold",
+                              caLabelClass,
+                            )}
+                          >
+                            {row.ca}
+                          </span>
+                          <span className="font-mono text-[9px] text-[var(--muted)]">/</span>
+                          <span
+                            className={cn(
+                              "inline-flex rounded border px-1.5 py-0.5 font-mono text-[9px] font-bold",
+                              paTone(row.pa),
+                            )}
+                          >
+                            {row.pa ?? "?"}
+                          </span>
                         </span>
                       </td>
                     )}

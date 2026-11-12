@@ -12,7 +12,7 @@ import { useClubPage } from "@/lib/query";
 import { facilityRatingLabel, nationLabel } from "@/lib/labels";
 import { formatNumber } from "@/lib/i18n";
 import { useI18n } from "@/lib/useI18n";
-import { caTone, cn, initials } from "@/lib/utils";
+import { caLabelClass, cn, initials } from "@/lib/utils";
 import { useAppStore } from "@/store/app";
 import { Button, EmptyState } from "./ui";
 
@@ -186,9 +186,7 @@ export function ClubTable() {
                       <span
                         className={cn(
                           "inline-flex rounded border px-1.5 py-0.5 font-mono text-[9px] font-bold",
-                          club.average_ca != null
-                            ? caTone(Math.round(club.average_ca))
-                            : "border-[var(--line)] text-[var(--muted)]",
+                          caLabelClass,
                         )}
                       >
                         {club.average_ca != null ? club.average_ca.toFixed(1) : "—"}

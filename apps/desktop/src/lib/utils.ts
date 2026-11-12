@@ -78,11 +78,17 @@ export function initials(name: string | null | undefined): string {
   return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
 }
 
-export function caTone(ca: number): string {
-  if (ca >= 170) return "text-[var(--gold)] bg-[var(--gold-soft)] border-[var(--gold-line)]";
-  if (ca >= 140) return "text-[var(--success)] bg-[var(--success-soft)] border-[var(--success-line)]";
-  if (ca >= 110) return "text-[var(--blue)] bg-[var(--blue-soft)] border-[var(--blue-line)]";
-  return "text-[var(--muted)] bg-[var(--surface-2)] border-[var(--line)]";
+/** Neutral chip styling shared by all CA labels. */
+export const caLabelClass = "text-[var(--muted)] bg-[var(--surface-2)] border-[var(--line)]";
+
+/** Badge tone for a player's PA label, using the scouting potential bands. */
+export function paTone(pa: number | null | undefined): string {
+  if (pa == null) return "text-[var(--muted)] bg-[var(--surface-2)] border-[var(--line)]";
+  if (pa >= 180) return "text-[var(--pa-ink)] bg-[var(--pa-180)] border-[var(--pa-line)]";
+  if (pa >= 170) return "text-[var(--pa-ink)] bg-[var(--pa-170)] border-[var(--pa-line)]";
+  if (pa >= 160) return "text-[var(--pa-ink)] bg-[var(--pa-160)] border-[var(--pa-line)]";
+  if (pa >= 150) return "text-[var(--pa-ink)] bg-[var(--pa-150)] border-[var(--pa-line)]";
+  return "text-[var(--pa-ink)] bg-[var(--pa-low)] border-[var(--pa-line)]";
 }
 
 /** Convert a stored raw attribute (1-100) to the game's displayed 1-20 value. */

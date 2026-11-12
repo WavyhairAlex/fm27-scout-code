@@ -40,10 +40,11 @@ import {
 import { useI18n } from "@/lib/useI18n";
 import {
   attributeTone,
-  caTone,
+  caLabelClass,
   cn,
   formatDate,
   initials,
+  paTone,
 } from "@/lib/utils";
 import { useAppStore } from "@/store/app";
 import { AttributeRadar } from "./AttributeRadar";
@@ -293,11 +294,11 @@ export function Inspector() {
                 <div className="flex shrink-0 flex-col items-end gap-1">
                   {dataMode === "full" && (
                     <div className="flex gap-1">
-                      <span className={cn("flex h-8 min-w-10 flex-col items-center justify-center rounded-lg border px-1.5", caTone(player.ca))}>
+                      <span className={cn("flex h-8 min-w-10 flex-col items-center justify-center rounded-lg border px-1.5", caLabelClass)}>
                         <span className="text-[8px] font-bold uppercase opacity-60">CA</span>
                         <span className="font-mono text-[12px] font-bold leading-none">{player.ca}</span>
                       </span>
-                      <span className="flex h-8 min-w-10 flex-col items-center justify-center rounded-lg border border-[var(--line)] bg-[var(--surface-2)] px-1.5 text-[var(--muted)]">
+                      <span className={cn("flex h-8 min-w-10 flex-col items-center justify-center rounded-lg border px-1.5", paTone(player.pa))}>
                         <span className="text-[8px] font-bold uppercase opacity-60">PA</span>
                         <span className="font-mono text-[12px] font-bold leading-none">
                           {player.pa ?? (player.pa_range_code != null ? "?" : "—")}

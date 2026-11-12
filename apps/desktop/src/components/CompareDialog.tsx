@@ -5,7 +5,7 @@ import { getPlayer } from "@/lib/api";
 import { ATTRIBUTE_GROUPS, type Player } from "@/lib/types";
 import { attributeLabel } from "@/lib/labels";
 import { useI18n } from "@/lib/useI18n";
-import { caTone, cn } from "@/lib/utils";
+import { caLabelClass, cn, paTone } from "@/lib/utils";
 import { useAppStore } from "@/store/app";
 import { Badge, Button, Modal } from "./ui";
 
@@ -123,10 +123,10 @@ export function CompareDialog() {
               </div>
               {dataMode === "full" && (
                 <div className="mt-2 flex items-center gap-1">
-                  <span className={cn("rounded border px-1.5 py-0.5 font-mono text-[10px] font-bold", caTone(player.ca))}>
+                  <span className={cn("rounded border px-1.5 py-0.5 font-mono text-[10px] font-bold", caLabelClass)}>
                     CA {player.ca}
                   </span>
-                  <span className="rounded border border-[var(--line)] bg-[var(--surface)] px-1.5 py-0.5 font-mono text-[10px] font-bold text-[var(--muted)]">
+                  <span className={cn("rounded border px-1.5 py-0.5 font-mono text-[10px] font-bold", paTone(player.pa))}>
                     PA {player.pa ?? "?"}
                   </span>
                 </div>

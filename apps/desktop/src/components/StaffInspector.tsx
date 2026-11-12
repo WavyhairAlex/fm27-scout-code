@@ -14,7 +14,7 @@ import {
   staffRoleLabel,
 } from "@/lib/labels";
 import { useI18n } from "@/lib/useI18n";
-import { caTone, cn, initials } from "@/lib/utils";
+import { caLabelClass, cn, initials } from "@/lib/utils";
 import { useAppStore } from "@/store/app";
 import { Badge, EmptyState } from "./ui";
 
@@ -100,7 +100,7 @@ export function StaffInspector() {
               <span
                 className={cn(
                   "inline-flex h-5 min-w-9 items-center justify-center rounded border px-1.5 font-mono text-[10px] font-bold",
-                  caTone(staff.ca ?? 0),
+                  caLabelClass,
                 )}
                 title="CA"
               >

@@ -17,7 +17,7 @@ import {
   type ScoutSuggestion,
 } from "@/lib/types";
 import { useAppStore } from "@/store/app";
-import { cn, formatDate } from "@/lib/utils";
+import { caLabelClass, cn, formatDate, paTone } from "@/lib/utils";
 import { Button, Input, Select } from "./ui";
 
 type ScoutView = "advice" | "depth" | "departures";
@@ -674,8 +674,14 @@ function OwnSquad({
               >
                 {fitting.player.name ?? t("common.unnamedPlayer")}
               </button>
-              <span className="font-mono text-[var(--muted)]">
-                {fitting.player.ca}/{fitting.player.pa ?? "—"}
+              <span className="inline-flex items-center gap-1 font-mono">
+                <span className={cn("rounded border px-1 py-0.5 text-[9px] font-bold", caLabelClass)}>
+                  {fitting.player.ca}
+                </span>
+                <span className="text-[9px] text-[var(--muted)]">/</span>
+                <span className={cn("rounded border px-1 py-0.5 text-[9px] font-bold", paTone(fitting.player.pa))}>
+                  {fitting.player.pa ?? "—"}
+                </span>
               </span>
               <FitBar fit={fitting.fit} title={fittingTitle(fitting, locale)} />
               <span className="w-20 truncate text-[9px] text-[var(--muted)]">
@@ -744,8 +750,10 @@ function SuggestionRow({
         {suggestion.player.age ?? "—"}
       </td>
       <td className="px-2 py-1.5 text-right font-mono text-[var(--ink)]">{suggestion.player.ca}</td>
-      <td className="px-2 py-1.5 text-right font-mono text-[var(--muted)]">
-        {suggestion.player.pa ?? "—"}
+      <td className="px-2 py-1.5 text-right">
+        <span className={cn("inline-flex rounded border px-1 py-0.5 font-mono text-[9px] font-bold", paTone(suggestion.player.pa))}>
+          {suggestion.player.pa ?? "—"}
+        </span>
       </td>
       <td className="px-2 py-1.5">
         <FitBar fit={suggestion.fit} title={fittingTitle(suggestion, locale)} />
@@ -1026,8 +1034,10 @@ function DepartureTable({
                     {departure.player.age ?? "—"}
                   </td>
                   <td className="px-2 py-1.5 text-right font-mono">{departure.player.ca}</td>
-                  <td className="px-2 py-1.5 text-right font-mono text-[var(--muted)]">
-                    {departure.player.pa ?? "—"}
+                  <td className="px-2 py-1.5 text-right">
+                    <span className={cn("inline-flex rounded border px-1 py-0.5 font-mono text-[9px] font-bold", paTone(departure.player.pa))}>
+                      {departure.player.pa ?? "—"}
+                    </span>
                   </td>
                   <td className="px-2 py-1.5 text-right font-mono">
                     {departure.not_for_sale
