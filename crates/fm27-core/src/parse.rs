@@ -331,9 +331,8 @@ pub fn parse_save_with_progress(
         }
 
         let mut positions = Positions::default();
-        for index in 0..PlayerLayout::RATINGS_COUNT {
-            positions.values[index] =
-                read_u8(&game_db, offset + PlayerLayout::RATINGS_OFFSET + index).unwrap_or(1);
+        for (index, value) in positions.values.iter_mut().enumerate() {
+            *value = read_u8(&game_db, offset + PlayerLayout::RATINGS_OFFSET + index).unwrap_or(1);
         }
         let (natural_positions, accomplished_positions) = derive_positions(&positions.values);
 
