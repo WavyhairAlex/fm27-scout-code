@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import {
   Database,
+  Eye,
   FolderOpen,
   HardDrive,
   LockKeyhole,
@@ -118,8 +119,8 @@ export function Onboarding() {
               {t("onboarding.autoDetect")}
             </span>
             <span className="inline-flex items-center gap-1">
-              <LockKeyhole size={11} />
-              {t("onboarding.hiddenByDefault")}
+              <Eye size={11} />
+              {t("onboarding.hiddenAlwaysOn")}
             </span>
             <span className="inline-flex items-center gap-1">
               <WifiOff size={11} />

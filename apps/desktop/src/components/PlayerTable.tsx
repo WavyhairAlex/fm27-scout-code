@@ -50,7 +50,6 @@ export function PlayerTable() {
   const currentPage = useAppStore((state) => state.page);
   const setPage = useAppStore((state) => state.setPage);
   const pageSize = useAppStore((state) => state.pageSize);
-  const hiddenEnabled = useAppStore((state) => state.hiddenEnabled);
   const dataMode = useAppStore((state) => state.dataMode);
   const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({
     height: false,
@@ -343,7 +342,7 @@ export function PlayerTable() {
         header: t("table.hidden"),
         size: 52,
         cell: ({ row }) =>
-          hiddenEnabled && row.original.personality ? (
+          row.original.personality ? (
             <span className="font-mono text-[10px] font-semibold text-[var(--gold)]">
               {t("table.professionalismShort")} {row.original.personality.professionalism}
             </span>
@@ -355,9 +354,9 @@ export function PlayerTable() {
     const visibleColumns = baseColumns.filter((column) => {
       if (dataMode === "full") return true;
       const id = String(column.id ?? "");
-      if (id === "ca" || id === "pa" || id === "hidden") return false;
+      if (id === "ca" || id === "pa") return false;
       if (dataMode === "moneyball") {
-        return id !== "role" && !id.startsWith("attr_");
+        return id !== "hidden" && id !== "role" && !id.startsWith("attr_");
       }
       return true;
     });
@@ -370,7 +369,6 @@ export function PlayerTable() {
     compareUids,
     formatValue,
     formatWage,
-    hiddenEnabled,
     dataMode,
     locale,
     t,

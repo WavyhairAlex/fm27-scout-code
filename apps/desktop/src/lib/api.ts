@@ -142,13 +142,9 @@ export async function queryStatsMoneyball(
   return timedInvoke<StatsMoneyballPage>("stats_moneyball", { request });
 }
 
-export async function getPlayer(
-  saveId: number,
-  uid: number,
-  includeHidden = false,
-): Promise<Player | null> {
+export async function getPlayer(saveId: number, uid: number): Promise<Player | null> {
   if (!isTauri) return MOCK_PLAYERS.find((player) => player.uid === uid) ?? null;
-  return timedInvoke<Player | null>("get_player", { saveId, uid, includeHidden });
+  return timedInvoke<Player | null>("get_player", { saveId, uid, includeHidden: true });
 }
 
 export async function queryClubs(query: ClubQuery): Promise<ClubPage> {

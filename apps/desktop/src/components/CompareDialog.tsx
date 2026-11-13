@@ -16,7 +16,6 @@ export function CompareDialog() {
   const compareUids = useAppStore((state) => state.compareUids);
   const toggleCompare = useAppStore((state) => state.toggleCompare);
   const clearCompare = useAppStore((state) => state.clearCompare);
-  const hiddenEnabled = useAppStore((state) => state.hiddenEnabled);
   const dataMode = useAppStore((state) => state.dataMode);
   const displayMode = useAppStore((state) => state.displayMode);
   const saveId = useAppStore((state) => state.saveId);
@@ -25,8 +24,8 @@ export function CompareDialog() {
 
   const results = useQueries({
     queries: compareUids.map((uid) => ({
-      queryKey: ["player", saveId, uid, hiddenEnabled],
-      queryFn: () => getPlayer(saveId!, uid, hiddenEnabled),
+      queryKey: ["player", saveId, uid],
+      queryFn: () => getPlayer(saveId!, uid),
       enabled: open && saveId != null,
       staleTime: 60_000,
     })),
@@ -37,9 +36,9 @@ export function CompareDialog() {
     if (dataMode === "moneyball") return [];
     const selected = hiddenOnly
       ? ATTRIBUTE_GROUPS.hidden
-      : [...ATTRIBUTE_GROUPS.technical, ...(hiddenEnabled ? ATTRIBUTE_GROUPS.hidden : [])];
+      : [...ATTRIBUTE_GROUPS.technical, ...ATTRIBUTE_GROUPS.hidden];
     return selected;
-  }, [dataMode, hiddenEnabled, hiddenOnly]);
+  }, [dataMode, hiddenOnly]);
 
   const values = (player: Player, key: string) =>
     displayMode === "display" ? player.attributes[key] ?? 0 : player.raw_attributes[key] ?? 0;
@@ -79,7 +78,7 @@ export function CompareDialog() {
             />
             {t("compare.differencesOnly")}
           </label>
-          {hiddenEnabled && (
+          {dataMode !== "moneyball" && (
             <label className="flex cursor-pointer items-center gap-1.5 text-[11px] text-[var(--muted)]">
               <input
                 type="checkbox"

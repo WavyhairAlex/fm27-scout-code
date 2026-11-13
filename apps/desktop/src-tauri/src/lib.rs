@@ -950,7 +950,6 @@ struct MenuLabels {
     settings: &'static str,
     sidebar: &'static str,
     inspector: &'static str,
-    hidden: &'static str,
     compare: &'static str,
     analysis: &'static str,
     undo: &'static str,
@@ -977,7 +976,6 @@ fn menu_labels(locale: &str) -> MenuLabels {
             settings: "设置…",
             sidebar: "显示/隐藏筛选栏",
             inspector: "显示/隐藏球员档案",
-            hidden: "开关隐藏属性",
             compare: "球员对比",
             analysis: "分析中心",
             undo: "撤销",
@@ -1002,7 +1000,6 @@ fn menu_labels(locale: &str) -> MenuLabels {
             settings: "Settings…",
             sidebar: "Show/Hide Filters",
             inspector: "Show/Hide Player Profile",
-            hidden: "Toggle Hidden Attributes",
             compare: "Compare Players",
             analysis: "Analysis Centre",
             undo: "Undo",
@@ -1050,13 +1047,6 @@ fn build_menu<R: tauri::Runtime>(
         labels.inspector,
         true,
         Some("CmdOrCtrl+Shift+I"),
-    )?;
-    let hidden = MenuItem::with_id(
-        handle,
-        "hidden",
-        labels.hidden,
-        true,
-        Some("CmdOrCtrl+Shift+H"),
     )?;
     let compare = MenuItem::with_id(
         handle,
@@ -1109,7 +1099,7 @@ fn build_menu<R: tauri::Runtime>(
         handle,
         labels.view_menu,
         true,
-        &[&sidebar, &inspector, &sep5, &hidden, &compare, &analysis],
+        &[&sidebar, &inspector, &sep5, &compare, &analysis],
     )?;
     let help_menu = Submenu::with_items(handle, labels.help_menu, true, &[&helper])?;
     Menu::with_items(

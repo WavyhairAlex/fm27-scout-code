@@ -60,7 +60,7 @@ See [docs/development.md](docs/development.md) for the workspace layout, CLI, bu
 - The source save is never modified. Editing writes a new file, refuses to overwrite existing output, and re-parses the result.
 - No game memory reading, process injection, shell plugin or arbitrary filesystem access.
 - No network requests except an optional update check; no save or player data leaves the machine.
-- Hidden attributes are off by default.
+- Hidden attributes are always shown with a single-player-only warning.
 
 See [docs/limitations.md](docs/limitations.md) for details.
 

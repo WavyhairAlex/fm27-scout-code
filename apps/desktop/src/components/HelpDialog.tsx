@@ -69,7 +69,6 @@ export function HelpDialog() {
           </p>
           <div className="mt-2 flex gap-1.5">
             <Badge tone="danger">{t("help.soloOnly")}</Badge>
-            <Badge tone="outline">{t("help.offByDefault")}</Badge>
           </div>
         </section>
 

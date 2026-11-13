@@ -1342,8 +1342,6 @@ export const CA_EXEMPT_ATTRIBUTE_KEYS: ReadonlySet<string> = new Set([
   "flair",
   "aggression",
 ]);
-export const HIDDEN_FILTER_KEYS = [...HIDDEN_ATTRIBUTE_KEYS, ...PERSONALITY_KEYS];
-export const HIDDEN_FILTERS: ReadonlySet<string> = new Set(HIDDEN_FILTER_KEYS);
 
 function filterGroupLabelKey(key: AttributeGroupKey): TranslationKey {
   return `attribute.group.${key}`;

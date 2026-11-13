@@ -54,10 +54,8 @@ export default function App() {
   const theme = useAppStore((state) => state.theme);
   const setSidebarOpen = useAppStore((state) => state.setSidebarOpen);
   const setInspectorOpen = useAppStore((state) => state.setInspectorOpen);
-  const setHiddenEnabled = useAppStore((state) => state.setHiddenEnabled);
-  const pushToast = useAppStore((state) => state.pushToast);
   const { chooseAndOpen, openPath } = useOpenSave();
-  const { t, locale } = useI18n();
+  const { locale } = useI18n();
   const queryClient = useQueryClient();
 
   useEffect(() => {
@@ -203,18 +201,6 @@ export default function App() {
         case "inspector":
           setInspectorOpen(!useAppStore.getState().inspectorOpen);
           break;
-        case "hidden": {
-          const next = !useAppStore.getState().hiddenEnabled;
-          setHiddenEnabled(next);
-          if (next) {
-            pushToast({
-              title: t("toast.hiddenOn.title"),
-              description: t("toast.hiddenOn.description"),
-              tone: "default",
-            });
-          }
-          break;
-        }
         case "compare":
           if (useAppStore.getState().compareUids.length >= 2) setCompareOpen(true);
           break;
@@ -231,13 +217,10 @@ export default function App() {
     return () => unlisten?.();
   }, [
     chooseAndOpen,
-    pushToast,
-    t,
     setAnalysisOpen,
     setCompareOpen,
     setExportOpen,
     setHelpOpen,
-    setHiddenEnabled,
     setInspectorOpen,
     setSettingsOpen,
     setSidebarOpen,

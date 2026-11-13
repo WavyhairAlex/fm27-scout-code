@@ -6,12 +6,10 @@ import {
   ClipboardList,
   Database,
   Download,
-  Eye,
   FilePlus2,
   FolderOpen,
   GitCompareArrows,
   HelpCircle,
-  LockKeyhole,
   PanelLeftClose,
   PanelLeftOpen,
   Search,
@@ -41,8 +39,6 @@ export function Toolbar() {
   const patchClubFilters = useAppStore((state) => state.patchClubFilters);
   const staffFilters = useAppStore((state) => state.staffFilters);
   const patchStaffFilters = useAppStore((state) => state.patchStaffFilters);
-  const hiddenEnabled = useAppStore((state) => state.hiddenEnabled);
-  const setHiddenEnabled = useAppStore((state) => state.setHiddenEnabled);
   const dataMode = useAppStore((state) => state.dataMode);
   const setDataMode = useAppStore((state) => state.setDataMode);
   const compareUids = useAppStore((state) => state.compareUids);
@@ -53,7 +49,6 @@ export function Toolbar() {
   const pendingEdits = useAppStore((state) => state.pendingEdits);
   const setSettingsOpen = useAppStore((state) => state.setSettingsOpen);
   const setHelpOpen = useAppStore((state) => state.setHelpOpen);
-  const pushToast = useAppStore((state) => state.pushToast);
   const { chooseAndOpen, openPath } = useOpenSave();
   const { data: saves = [] } = useSaves();
   const [saveMenuOpen, setSaveMenuOpen] = useState(false);
@@ -301,29 +296,6 @@ export function Toolbar() {
           <option value="fair_play">{t("toolbar.modeFair")}</option>
           <option value="moneyball">{t("toolbar.modeMoneyball")}</option>
         </Select>
-        {dataMode === "full" && (
-          <Button
-            variant={hiddenEnabled ? "gold" : "ghost"}
-            size="sm"
-            className="h-8"
-            onClick={() => {
-              if (hiddenEnabled) {
-                setHiddenEnabled(false);
-                return;
-              }
-              pushToast({
-                title: t("toast.hiddenOn.title"),
-                description: t("toast.hiddenOn.description"),
-                tone: "default",
-              });
-              setHiddenEnabled(true);
-            }}
-            title={t("toolbar.hidden")}
-          >
-            {hiddenEnabled ? <Eye size={13} /> : <LockKeyhole size={13} />}
-            <span className="hidden xl:inline">{t("toolbar.hiddenShort")}</span>
-          </Button>
-        )}
         <Button
           variant={compareUids.length > 0 ? "gold" : "ghost"}
           size="sm"

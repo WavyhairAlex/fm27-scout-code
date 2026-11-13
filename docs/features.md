@@ -54,11 +54,12 @@
   with sortable headers, and facility ratings use the game's ten named tiers.
 - 2–4 player comparison.
 - CSV/JSON export.
-- Scouting modes: Full shows CA/PA and attributes; Fair play hides CA/PA, growth
-  and hidden attributes; Moneyball also hides attributes and role scores and
-  prices players without CA/PA. Exports still contain CA/PA and show a warning
-  outside Full mode.
-- Hidden-attribute toggle, off by default (Full mode only).
+- Scouting modes: Full shows CA/PA and attributes; Fair play hides CA/PA and
+  growth; Moneyball also hides attributes, hidden attributes, personality and
+  role scores and prices players without CA/PA. Exports still contain CA/PA and
+  show a warning outside Full mode.
+- Hidden attributes and personality are always included in the attribute views
+  (table, filters, profile and comparison); no separate toggle is required.
 - Light and dark themes.
 - Analysis centre: the save's managed club is detected from the `humans` section
   and checked against the save summary. Overview, squad depth and needs follow

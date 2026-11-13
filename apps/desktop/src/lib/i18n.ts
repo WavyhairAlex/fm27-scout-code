@@ -65,8 +65,6 @@ const en = {
   "toolbar.open": "Open",
   "toolbar.searchPlaceholder": "Search players, clubs…",
   "toolbar.clearSearch": "Clear search",
-  "toolbar.hidden": "Hidden attributes",
-  "toolbar.hiddenShort": "Hidden",
   "toolbar.modeFull": "Full",
   "toolbar.modeFair": "Fair play",
   "toolbar.modeMoneyball": "Moneyball",
@@ -255,7 +253,7 @@ const en = {
   "onboarding.choose": "Choose save…",
   "onboarding.openLast": "Open last save",
   "onboarding.autoDetect": "Auto-detects 27.0+",
-  "onboarding.hiddenByDefault": "Hidden attributes off by default",
+  "onboarding.hiddenAlwaysOn": "Hidden attributes always shown",
   "onboarding.fullyOffline": "Fully offline",
   "onboarding.recentSaves": "Recent saves",
   "onboarding.cachedHint": "Cached — opens without re-parsing",
@@ -312,10 +310,6 @@ const en = {
   "filter.wage": "Wage (save units)",
   "filter.expiresBefore": "Expires before",
   "filter.expiresAfter": "Expires after",
-  "filter.hiddenAttributes": "Hidden attributes",
-  "filter.hiddenWarning": "Single-player analysis only; online leagues may consider this cheating",
-  "filter.hiddenEnabled": "Hidden attribute filters enabled",
-  "filter.soloOnly": "Solo only",
 
   // Player table
   "table.player": "Player",
@@ -412,15 +406,9 @@ const en = {
   "inspector.tab.roles": "Roles",
   "inspector.tab.positions": "Positions",
   "inspector.tab.growth": "Growth",
-  "inspector.tab.hidden": "Hidden",
   "inspector.tab.contract": "Contract",
   "inspector.radar": "Ability radar",
   "inspector.radarAria": "Ability radar chart",
-  "inspector.hiddenOff": "Hidden attributes are off",
-  "inspector.hiddenOffDescription":
-    "Enable them to view personality, consistency, important matches, injury proneness and other hidden information. Single-player use only.",
-  "inspector.enableHidden": "Enable hidden attributes",
-  "inspector.hiddenAttributes": "Hidden attributes",
   "inspector.personality": "Personality",
   "inspector.hiddenWarning":
     "These values normally only appear in in-game coach reports or the editor. Use them for single-player analysis only, not in online leagues.",
@@ -732,9 +720,8 @@ const en = {
   "help.privacy.4": "No SI / SEGA databases, images, or logos are bundled.",
   "help.hiddenTitle": "About hidden attributes",
   "help.hiddenDescription":
-    "Hidden attributes are off by default. When enabled they show consistency, important matches, injury proneness, dirtiness, versatility and personality values. This information may be considered cheating in online leagues or competitive platforms, so use it for single-player analysis only.",
+    "Hidden attributes are always shown: consistency, important matches, injury proneness, dirtiness, versatility and personality values appear with the normal attributes. This information may be considered cheating in online leagues or competitive platforms, so use it for single-player analysis only.",
   "help.soloOnly": "Solo only",
-  "help.offByDefault": "Off by default",
   "help.shortcuts": "Keyboard shortcuts",
   "help.parserTitle": "Parser notes",
   "help.parserDescription":
@@ -773,11 +760,6 @@ const en = {
   "settings.displayMode": "Value display",
   "settings.displayValues": "Display values 1–20",
   "settings.rawValues": "Raw values 1–100",
-  "settings.hiddenAttributes": "Hidden attributes",
-  "settings.showHidden": "Show hidden attributes & personality",
-  "settings.hiddenDescription":
-    "Off by default. When enabled, shows consistency, important matches, injury proneness, dirtiness, versatility and personality values such as professionalism and ambition. Single-player use only.",
-  "settings.hiddenLabel": "Hidden attributes",
   "settings.localCache": "Local cache",
   "settings.noSaves": "No cached saves yet",
   "settings.saveMeta": "{players} players · {date} · parsed {relative}",
@@ -833,9 +815,6 @@ const en = {
 
   // Toasts
   "toast.close": "Dismiss notification",
-  "toast.hiddenOn.title": "Hidden attributes enabled",
-  "toast.hiddenOn.description":
-    "Single-player use only. Online leagues may consider this cheating.",
   "toast.compareLimit.title": "Up to 4 players can be compared",
   "toast.compareLimit.description": "Remove a selected player before adding another.",
   "toast.openFailed": "Could not open save",
@@ -1168,8 +1147,6 @@ const zhCN: Record<TranslationKey, string> = {
   "toolbar.open": "打开",
   "toolbar.searchPlaceholder": "搜索球员、俱乐部…",
   "toolbar.clearSearch": "清除搜索",
-  "toolbar.hidden": "隐藏属性",
-  "toolbar.hiddenShort": "隐藏",
   "toolbar.modeFull": "完整",
   "toolbar.modeFair": "公平模式",
   "toolbar.modeMoneyball": "数据模式",
@@ -1357,7 +1334,7 @@ const zhCN: Record<TranslationKey, string> = {
   "onboarding.choose": "选择存档…",
   "onboarding.openLast": "打开上次存档",
   "onboarding.autoDetect": "自动识别 27.0+",
-  "onboarding.hiddenByDefault": "默认隐藏隐藏属性",
+  "onboarding.hiddenAlwaysOn": "始终显示隐藏属性",
   "onboarding.fullyOffline": "完全离线",
   "onboarding.recentSaves": "最近存档",
   "onboarding.cachedHint": "已缓存，打开无需重新解析",
@@ -1413,10 +1390,6 @@ const zhCN: Record<TranslationKey, string> = {
   "filter.wage": "周薪（存档单位）",
   "filter.expiresBefore": "到期早于",
   "filter.expiresAfter": "到期晚于",
-  "filter.hiddenAttributes": "隐藏属性",
-  "filter.hiddenWarning": "仅限单机分析，线上联赛可能视为作弊",
-  "filter.hiddenEnabled": "隐藏属性筛选已启用",
-  "filter.soloOnly": "仅单机",
 
   "table.player": "球员",
   "table.club": "俱乐部",
@@ -1510,15 +1483,9 @@ const zhCN: Record<TranslationKey, string> = {
   "inspector.tab.roles": "角色",
   "inspector.tab.positions": "位置",
   "inspector.tab.growth": "成长",
-  "inspector.tab.hidden": "隐藏",
   "inspector.tab.contract": "合同",
   "inspector.radar": "能力雷达",
   "inspector.radarAria": "能力雷达图",
-  "inspector.hiddenOff": "隐藏属性已关闭",
-  "inspector.hiddenOffDescription":
-    "开启后可查看性格、稳定、大赛、受伤倾向等隐藏信息。仅限单机使用。",
-  "inspector.enableHidden": "开启隐藏属性",
-  "inspector.hiddenAttributes": "隐藏属性",
   "inspector.personality": "性格",
   "inspector.hiddenWarning":
     "这些数值通常只在游戏内教练报告或编辑器中出现。请仅用于单机分析，不要用于线上联赛。",
@@ -1825,9 +1792,8 @@ const zhCN: Record<TranslationKey, string> = {
   "help.privacy.4": "不内置 SI / SEGA 的数据库、图片或 Logo。",
   "help.hiddenTitle": "隐藏属性说明",
   "help.hiddenDescription":
-    "隐藏属性默认关闭。开启后显示稳定、大赛、受伤倾向、肮脏、多面性与性格数值。这些信息在线上联赛、对战平台可能被视为作弊，请仅用于单机分析。",
+    "隐藏属性始终显示：稳定、大赛、受伤倾向、肮脏、多面性与性格数值会和普通属性一起展示。这些信息在线上联赛、对战平台可能被视为作弊，请仅用于单机分析。",
   "help.soloOnly": "仅单机",
-  "help.offByDefault": "默认关闭",
   "help.shortcuts": "快捷键",
   "help.parserTitle": "解析说明",
   "help.parserDescription":
@@ -1864,11 +1830,6 @@ const zhCN: Record<TranslationKey, string> = {
   "settings.displayMode": "数值显示",
   "settings.displayValues": "显示值 1–20",
   "settings.rawValues": "原始值 1–100",
-  "settings.hiddenAttributes": "隐藏属性",
-  "settings.showHidden": "显示隐藏属性与性格",
-  "settings.hiddenDescription":
-    "默认关闭。开启后显示稳定、大赛、受伤倾向、肮脏、多面性以及职业、雄心等性格数值。仅限单机使用。",
-  "settings.hiddenLabel": "隐藏属性",
   "settings.localCache": "本地缓存",
   "settings.noSaves": "还没有缓存存档",
   "settings.saveMeta": "{players} 名球员 · {date} · 解析于 {relative}",
@@ -1921,8 +1882,6 @@ const zhCN: Record<TranslationKey, string> = {
     "解析只读取存档副本，不写入游戏目录。首次解析约 1–3 秒，之后会直接使用本地缓存；编辑只会写入你选择的新文件。",
 
   "toast.close": "关闭提示",
-  "toast.hiddenOn.title": "隐藏属性已开启",
-  "toast.hiddenOn.description": "仅限单机使用，线上联赛可能被视为作弊。",
   "toast.compareLimit.title": "最多对比 4 名球员",
   "toast.compareLimit.description": "先移除一名已选球员，再加入新的球员。",
   "toast.openFailed": "无法打开存档",

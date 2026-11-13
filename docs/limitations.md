@@ -11,8 +11,8 @@
 - Apart from a user-triggered update check, makes no network requests; the
   updater only contacts the configured GitHub Releases endpoint and downloads a
   signed package, and no save or player data is uploaded.
-- Hidden attributes are off by default; enabling them shows a single-player-only
-  warning.
+- Hidden attributes are always shown in attribute views and carry a
+  single-player-only warning.
 - Databases, logs and snapshots are written only to
   `~/Library/Application Support/com.fm27scout.desktop/`; snapshots are deleted
   after parsing.
