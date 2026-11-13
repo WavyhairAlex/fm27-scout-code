@@ -163,6 +163,17 @@ describe("mock player query", () => {
     const squad = mockSquadAnalysis(clubUid!);
     expect(squad.player_count).toBeGreaterThan(0);
     expect(squad.players[0].club_uid).toBe(clubUid);
+    expect(new Set(squad.players.map((row) => row.team_slot)).size).toBeGreaterThan(1);
+    const slots = new Set(
+      squad.players
+        .map((row) => row.team_slot)
+        .filter((slot): slot is number => slot != null),
+    );
+    expect(squad.teams).toHaveLength(slots.size);
+    expect(squad.teams.find((team) => team.slot === 0)?.label.kind).toBe("firstTeam");
+    expect(squad.teams.find((team) => team.label.kind === "youth")?.competition_name).toContain(
+      "U20",
+    );
 
     const managed = mockManagedClub();
     expect(managed.club_uid).toBe(clubUid);

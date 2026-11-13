@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import {
   BarChart3,
   CalendarClock,
@@ -179,6 +179,22 @@ export function AnalysisDialog() {
   );
 }
 
+type SquadPlayer = SquadAnalysis["players"][number];
+
+type SquadGroup = {
+  slot: number | null;
+  /** Display order: 1 for the first team, then 2, 3 … for the other squads. */
+  number: number | null;
+  players: SquadPlayer[];
+  minAge: number | null;
+  maxAge: number | null;
+};
+
+type SquadTab = {
+  key: string;
+  group: SquadGroup;
+};
+
 function SquadPanel({
   data,
   onPlayer,
@@ -190,6 +206,9 @@ function SquadPanel({
   const dataMode = useAppStore((state) => state.dataMode);
   const [sortBy, setSortBy] = useState<"ca" | "pa">("ca");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
+  // Open on the first team; All remains the first tab for the full list.
+  const [squadTab, setSquadTab] = useState("slot-0");
+  const tableScroll = useRef<HTMLDivElement>(null);
   const changeSort = (by: string) => {
     if (by !== "ca" && by !== "pa") return;
     if (sortBy === by) {
@@ -214,6 +233,125 @@ function SquadPanel({
       return (left.pa - right.pa) * direction;
     });
   }, [data.players, dataMode, sortBy, sortDir]);
+  // The save stores teams in the club's own list order; slot 0 is the first
+  // team, and later slots are its reserve, youth and affiliate sides. Players
+  // without a resolved team stay in one trailing group.
+  const groups = useMemo<SquadGroup[]>(() => {
+    const bySlot = new Map<number | null, SquadGroup>();
+    for (const player of players) {
+      const slot = player.team_slot ?? null;
+      let group = bySlot.get(slot);
+      if (!group) {
+        group = { slot, number: null, players: [], minAge: null, maxAge: null };
+        bySlot.set(slot, group);
+      }
+      group.players.push(player);
+      if (player.age != null) {
+        group.minAge =
+          group.minAge == null ? player.age : Math.min(group.minAge, player.age);
+        group.maxAge =
+          group.maxAge == null ? player.age : Math.max(group.maxAge, player.age);
+      }
+    }
+    const ordered = [...bySlot.values()].sort((left, right) => {
+      if (left.slot == null) return 1;
+      if (right.slot == null) return -1;
+      return left.slot - right.slot;
+    });
+    let squadNumber = 1;
+    for (const group of ordered) {
+      if (group.slot === 0) {
+        group.number = 1;
+      } else if (group.slot != null) {
+        squadNumber += 1;
+        group.number = squadNumber;
+      }
+    }
+    return ordered;
+  }, [players]);
+  const tabs = useMemo<SquadTab[]>(() => {
+    const ages = players
+      .map((player) => player.age)
+      .filter((age): age is number => age != null);
+    const allGroup: SquadGroup = {
+      slot: null,
+      number: null,
+      players,
+      minAge: ages.length > 0 ? Math.min(...ages) : null,
+      maxAge: ages.length > 0 ? Math.max(...ages) : null,
+    };
+    return [
+      { key: "all", group: allGroup },
+      ...groups.map((group) => ({
+        key: group.slot == null ? "unassigned" : `slot-${group.slot}`,
+        group,
+      })),
+    ];
+  }, [groups, players]);
+  const activeTab = tabs.find((tab) => tab.key === squadTab) ?? tabs[0];
+  useEffect(() => {
+    if (!tabs.some((tab) => tab.key === squadTab)) setSquadTab("all");
+  }, [squadTab, tabs]);
+  useEffect(() => {
+    if (tableScroll.current) tableScroll.current.scrollTop = 0;
+  }, [squadTab]);
+  const teamBySlot = useMemo(
+    () =>
+      new Map(
+        (data.teams ?? [])
+          .filter((team) => team.slot != null)
+          .map((team) => [team.slot as number, team] as const),
+      ),
+    [data.teams],
+  );
+  const groupLabel = (group: SquadGroup) => {
+    if (group.slot == null) return t("analysis.squadGroup.unassigned");
+    if (group.slot === 0) return t("analysis.squadGroup.firstTeam");
+    const team = teamBySlot.get(group.slot);
+    if (team?.label.kind === "youth") {
+      return team.label.age == null
+        ? t("analysis.squadGroup.youth")
+        : `U${team.label.age}`;
+    }
+    if (team?.label.kind === "reserves") return t("analysis.squadGroup.reserves");
+    return t("analysis.squadGroup.numbered", { n: group.number ?? 2 });
+  };
+  const groupSummary = (group: SquadGroup) => {
+    if (group.minAge == null || group.maxAge == null) {
+      return t("analysis.squadGroup.playerCount", { count: group.players.length });
+    }
+    if (group.minAge === group.maxAge) {
+      return t("analysis.squadGroup.singleAge", {
+        count: group.players.length,
+        age: group.minAge,
+      });
+    }
+    return t("analysis.squadGroup.ageRange", {
+      count: group.players.length,
+      min: group.minAge,
+      max: group.maxAge,
+    });
+  };
+  const groupTitle = (group: SquadGroup) => {
+    const parts = [groupSummary(group)];
+    const team = group.slot == null ? undefined : teamBySlot.get(group.slot);
+    if (team) {
+      if (team.competition_name != null) {
+        parts.push(
+          t("analysis.squadGroup.competitionFixtures", {
+            name: team.competition_name,
+            count: team.fixture_count,
+          }),
+        );
+      } else if (team.competition_id != null && team.fixture_count > 0) {
+        parts.push(t("analysis.squadGroup.unnamedCompetition"));
+      } else if (group.slot !== 0) {
+        parts.push(t("analysis.squadGroup.noCompetitiveFixtures"));
+      }
+      if (team.inferred) parts.push(t("analysis.squadGroup.inferredFromAge"));
+    }
+    return parts.join(" · ");
+  };
   return (
     <div className="space-y-3">
       <div className="grid grid-cols-3 gap-2 lg:grid-cols-6">
@@ -268,13 +406,51 @@ function SquadPanel({
       </div>
 
       <div className="overflow-hidden rounded-xl border border-[var(--line)]">
-        <div className="flex items-center justify-between border-b border-[var(--line)] bg-[var(--surface-2)] px-3 py-2">
-          <SectionTitle>{t("analysis.clubSquad", { club: data.club_name })}</SectionTitle>
-          <span className="text-[9px] text-[var(--muted)]">
-            {t("analysis.loaneesCount", { count: data.loanees })}
-          </span>
+        <div className="border-b border-[var(--line)] bg-[var(--surface-2)] px-3 py-2">
+          <div className="flex items-center justify-between">
+            <SectionTitle>{t("analysis.clubSquad", { club: data.club_name })}</SectionTitle>
+            <span className="text-[9px] text-[var(--muted)]">
+              {t("analysis.loaneesCount", { count: data.loanees })}
+            </span>
+          </div>
+          <div className="mt-2 flex flex-wrap items-center gap-1">
+            {tabs.map((tab) => {
+              const active = tab.key === activeTab.key;
+              return (
+                <button
+                  key={tab.key}
+                  type="button"
+                  data-testid="squad-tab"
+                  aria-pressed={active}
+                  title={groupTitle(tab.group)}
+                  onClick={() => setSquadTab(tab.key)}
+                  className={cn(
+                    "focus-ring inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-medium transition-colors",
+                    active
+                      ? "border-[var(--accent-line)] bg-[var(--accent-soft)] text-[var(--accent-strong)]"
+                      : "border-[var(--line)] bg-[var(--surface)] text-[var(--muted)] hover:text-[var(--ink)]",
+                  )}
+                >
+                  {tab.key === "all"
+                    ? t("analysis.squadGroup.all")
+                    : groupLabel(tab.group)}
+                  <span
+                    className={cn(
+                      "rounded-full px-1 font-mono text-[8px]",
+                      active ? "bg-[var(--accent)]/15" : "bg-[var(--surface-3)]",
+                    )}
+                  >
+                    {tab.group.players.length}
+                  </span>
+                </button>
+              );
+            })}
+            <span className="ml-auto font-mono text-[9px] text-[var(--muted)]">
+              {groupSummary(activeTab.group)}
+            </span>
+          </div>
         </div>
-        <div className="thin-scroll max-h-[340px] overflow-auto">
+        <div ref={tableScroll} className="thin-scroll max-h-[420px] overflow-auto">
           <table className="w-full text-left">
             <thead className="sticky top-0 z-10 bg-[var(--surface-2)] text-[9px] uppercase tracking-wider text-[var(--muted)]">
               <tr>
@@ -304,9 +480,11 @@ function SquadPanel({
               </tr>
             </thead>
             <tbody>
-              {players.map((player) => (
+              {activeTab.group.players.map((player) => (
                 <tr
                   key={player.uid}
+                  data-testid="squad-row"
+                  data-squad-slot={player.team_slot ?? "none"}
                   className="cursor-pointer border-t border-[var(--line)]/60 text-[10px] hover:bg-[var(--surface-2)]"
                   onClick={() => onPlayer(player.uid)}
                 >

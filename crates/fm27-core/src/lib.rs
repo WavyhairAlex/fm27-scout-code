@@ -14,6 +14,7 @@ pub mod error;
 pub mod export;
 pub mod facilities;
 pub mod finances;
+pub mod fixtures;
 pub mod injuries;
 pub mod layout;
 mod layout_tests;

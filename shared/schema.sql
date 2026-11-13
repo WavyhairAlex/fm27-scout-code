@@ -39,6 +39,8 @@ CREATE TABLE IF NOT EXISTS players (
   gender          INTEGER,
   club_uid        INTEGER,
   club_name       TEXT,
+  team_id         INTEGER,
+  team_slot       INTEGER,
   league_competition_id INTEGER,
   league_name     TEXT,
   ca              INTEGER,
@@ -441,6 +443,17 @@ CREATE TABLE IF NOT EXISTS competitions (
 
 CREATE INDEX IF NOT EXISTS competitions_database_id
   ON competitions(save_id, database_id);
+
+-- Which competitions each club team played in during the save's current season.
+-- Derived from the fixture calendar; used to name reserve and youth squads.
+CREATE TABLE IF NOT EXISTS team_competitions (
+  save_id         INTEGER NOT NULL,
+  team_id         INTEGER NOT NULL,
+  competition_id  INTEGER NOT NULL,
+  fixtures        INTEGER NOT NULL,
+  PRIMARY KEY (save_id, team_id, competition_id),
+  FOREIGN KEY (save_id) REFERENCES saves(id) ON DELETE CASCADE
+);
 
 -- Career-wide growth history. `career_key` is the save name, so opening the same career at a
 -- later game date adds a point instead of creating an unrelated timeline.

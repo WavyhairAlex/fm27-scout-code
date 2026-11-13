@@ -286,6 +286,10 @@ export interface PlayerRow {
   age: number | null;
   club_uid: number | null;
   club_name: string | null;
+  /** Registered club team, when the save resolves one. */
+  team_id: number | null;
+  /** Position of that team in the club's stored list; 0 is the first team. */
+  team_slot: number | null;
   league_competition_id: number | null;
   league_name: string | null;
   nation_id: number | null;
@@ -1016,6 +1020,21 @@ export interface DistributionBand {
   count: number;
 }
 
+export interface SquadTeamLabel {
+  kind: "firstTeam" | "youth" | "reserves" | "unknown";
+  age: number | null;
+}
+
+export interface SquadTeam {
+  team_id: number;
+  slot: number | null;
+  competition_id: number | null;
+  competition_name: string | null;
+  fixture_count: number;
+  label: SquadTeamLabel;
+  inferred: boolean;
+}
+
 export interface SquadAnalysis {
   club_uid: number;
   club_name: string;
@@ -1030,6 +1049,7 @@ export interface SquadAnalysis {
   age_bands: DistributionBand[];
   contract_years: DistributionBand[];
   players: PlayerRow[];
+  teams: SquadTeam[];
 }
 
 export type ScoutPurpose = "firstTeam" | "rotation" | "future" | "any";

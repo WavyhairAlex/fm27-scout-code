@@ -29,6 +29,10 @@
 - Competitions: 1,724 competitions and 3,459 stage rows from the save's stage
   table; 1,586 carry an editor database id, which links to the optional user name
   CSV.
+- Team competitions: the fixture calendar in the unlisted span is scanned and
+  joined through stages to competitions for the save's current season. The
+  result labels reserve and youth squads in the Analysis centre; no scores,
+  venues or match summaries are decoded.
 - Contracts: 44,341 records with wages, start/end dates, loans and clauses.
 - SQLite cache and server-side pagination; the CLI and desktop app share
   `fm27-core`.
@@ -63,7 +67,13 @@
 - Light and dark themes.
 - Analysis centre: the save's managed club is detected from the `humans` section
   and checked against the save summary. The Overview tab opens on that club's
-  squad: size, age, CA/PA, wages, value, position depth and contract expiry.
+  squad: size, age, CA/PA, wages, value, position depth and contract expiry. The
+  player list has an All tab plus one tab per registered team, with the first
+  team first. Other sides are named from the competition they played in during
+  the current season (for example U20 or U18); a named senior competition reads
+  as Reserves, and an unnamed competition or a side with no competitive fixtures
+  falls back to its squad age profile (Youth or Reserves, marked inferred) or
+  the existing Squad N label.
 - Quick filters: wonderkids, expiring contracts, high potential, injured /
   injury history / suspended / on loan / free agent / available.
 - Player origin: system-generated newgens are marked in the table and profile and

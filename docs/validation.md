@@ -98,6 +98,22 @@ suspensions, injury history, SQLite query/filter behavior, facet counts, multi-c
 growth snapshots, squad depth, wonderkid filtering, full 46,273-row export,
 CSV and JSON export.
 
+`labels_managed_squad_teams_from_the_fixture_calendar` additionally checks the
+fixture calendar join. On two verified local saves the managed club resolved as:
+
+```text
+AP King - Milan.fm (27.0.1+2503222, 2028-03-31)
+  slot 0  Italian Serie A                 First team
+  slot 1  no competitive fixture          Reserves (inferred)
+  slot 2  Italian U20 Primavera 1         U20
+  slot 3  Italian U18 Division 1 Group A   U18
+
+BB KING - Parma Calcio.fm (27.0.0+2486695, 2026-12-11)
+  slot 0  Italian Serie A                 First team
+  slot 1  Italian U20 Primavera 1         U20
+  slot 2  Italian U18 Division 1 Group A   U18
+```
+
 ## Club finance, stadium and edit validation
 
 The club pass was checked against the experimental FM27 fmsave reader on

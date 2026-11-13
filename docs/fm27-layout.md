@@ -245,6 +245,33 @@ passes, interceptions, headers, clearances, blocks, sprints, possession, saves, 
 Rust implementation: `crates/fm27-core/src/season_stats.rs`; container region support:
 `crates/fm27-core/src/container.rs`.
 
+## Fixture calendar
+
+The career's fixture calendar is another unlisted run in
+`unlisted_after_non_pl_hist_ls`, separate from the season-statistics frame. FM27
+uses the FM26 layout with a two-byte shorter record:
+
+```text
+record bytes       66
+marker             -12  1F
+stage id           -11  u32
+home team id        +0  u32
+sentinel            +4  FF
+sentinel           +11  FF
+away team id        +7  u32
+kick-off date      +13  two u16 words
+kick-off year      +15  u16 (high word of the date)
+season start year  +22  u16
+```
+
+The locator origin is the home team id, so the marker and stage id are before
+it. The kick-off year must be within -7/+8 years of the save clock. Team ids are
+below 3,000,000. The calendar is the largest run of accepted records in a
+frame, with runs split by gaps over 1 MiB; the scan reads 16 KiB frame heads,
+then decompresses only the dense frame and a physically adjacent continuation
+when it holds at least 10% of the main run. The season filter uses the 1 July
+boundary. Rust implementation: `crates/fm27-core/src/fixtures.rs`.
+
 ## Staff objects
 
 Staff objects use the person-header shape with kind byte `1` at header +12. Verified on

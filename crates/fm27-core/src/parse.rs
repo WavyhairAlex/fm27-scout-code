@@ -48,6 +48,7 @@ pub struct ParsedSave {
     pub clubs: Vec<Club>,
     pub season_stats: Vec<SeasonStatRow>,
     pub competitions: Vec<Competition>,
+    pub team_competitions: Vec<crate::fixtures::TeamCompetition>,
     pub club_finances: Vec<FinanceMonth>,
     pub stadiums: Vec<Stadium>,
     pub report: ParseReport,
@@ -572,6 +573,29 @@ pub fn parse_save_with_progress(
     };
 
     progress(ParseProgress {
+        stage: "fixtures".to_owned(),
+        current: 0,
+        total: 0,
+        message: "正在解析赛程与梯队".to_owned(),
+    });
+    let team_competitions = match crate::fixtures::read_team_competitions(
+        &save,
+        &competitions.competitions,
+        reference_date,
+    ) {
+        Ok(rows) => {
+            if rows.is_empty() {
+                warnings.push("fixture calendar produced no team competitions".to_owned());
+            }
+            rows
+        }
+        Err(error) => {
+            warnings.push(format!("fixture calendar unavailable: {error}"));
+            Vec::new()
+        }
+    };
+
+    progress(ParseProgress {
         stage: "done".to_owned(),
         current: players.len(),
         total: players.len(),
@@ -653,6 +677,7 @@ pub fn parse_save_with_progress(
         clubs: clubs.clubs,
         season_stats,
         competitions: competitions.competitions,
+        team_competitions,
         club_finances: finance_data.months,
         stadiums,
         report,

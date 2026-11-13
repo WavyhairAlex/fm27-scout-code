@@ -31,6 +31,7 @@ import type {
   SnapshotPoint,
   SaveSummary,
   SquadAnalysis,
+  SquadTeam,
   Stadium,
   StaffFilterOptions,
   StaffAttributes,
@@ -228,7 +229,9 @@ function buildPlayer(index: number): Player {
     league_competition_id: 22,
     league_name: "Italian Serie A",
     team_id: 800 + index,
-    team_slot: 0,
+    // Three mock squads so the Overview grouping has something to show:
+    // first team, then two youth sides by age.
+    team_slot: age >= 22 ? 0 : age >= 19 ? 1 : 2,
     club_join_date: "2025-07-14",
     natural_positions: pos2 ? [pos1, pos2] : [pos1],
     accomplished_positions: [],
@@ -407,6 +410,8 @@ export function mockPlayerRow(player: Player): PlayerRow {
     age: player.age,
     club_uid: player.club_uid,
     club_name: player.club_name,
+    team_id: player.team_id,
+    team_slot: player.team_slot,
     league_competition_id: player.league_competition_id,
     league_name: player.league_name,
     nation_id: player.nation_id,
@@ -1651,6 +1656,43 @@ export function mockSquadAnalysis(clubUid: number): SquadAnalysis {
     if ([row.positions.dm, row.positions.ml, row.positions.mc, row.positions.mr].some((rating) => rating >= 15)) positionGroups[2].count += 1;
     if ([row.positions.stc, row.positions.aml, row.positions.amc, row.positions.amr].some((rating) => rating >= 15)) positionGroups[3].count += 1;
   }
+  const teamInfo: Record<number, Pick<SquadTeam, "competition_id" | "competition_name" | "fixture_count" | "label">> = {
+    0: {
+      competition_id: 22,
+      competition_name: "Italian Serie A",
+      fixture_count: 38,
+      label: { kind: "firstTeam", age: null },
+    },
+    1: {
+      competition_id: 3560,
+      competition_name: "Italian U20 Primavera 1",
+      fixture_count: 38,
+      label: { kind: "youth", age: 20 },
+    },
+    2: {
+      competition_id: 3572,
+      competition_name: "Italian U18 Division 1 Group A",
+      fixture_count: 26,
+      label: { kind: "youth", age: 18 },
+    },
+  };
+  const teams = [...new Set(rows.map((row) => row.team_slot).filter((slot): slot is number => slot != null))]
+    .sort((left, right) => left - right)
+    .map((slot): SquadTeam => {
+      const info = teamInfo[slot];
+      if (info) {
+        return { team_id: 800 + slot, slot, inferred: false, ...info };
+      }
+      return {
+        team_id: 800 + slot,
+        slot,
+        competition_id: null,
+        competition_name: null,
+        fixture_count: 0,
+        label: { kind: "unknown", age: null },
+        inferred: true,
+      };
+    });
   return {
     club_uid: clubUid,
     club_name: players[0]?.club_name ?? `Club ${clubUid}`,
@@ -1667,6 +1709,7 @@ export function mockSquadAnalysis(clubUid: number): SquadAnalysis {
       .sort(([a], [b]) => a.localeCompare(b))
       .map(([label, count]) => ({ label, count })),
     players: rows.sort((a, b) => b.ca - a.ca),
+    teams,
   };
 }
 

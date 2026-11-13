@@ -63,7 +63,7 @@ const PLAYER_ROWS_SELECT: &str =
             p.nation_name, p.gender, p.best_role_id, p.best_role_name,
             p.best_role_score, p.best_role_position, p.injury_status, p.injury_until,
             p.recent_injury, p.suspension_count, p.transfer_listed, p.loan_listed,
-            p.unique_id
+            p.unique_id, p.team_id, p.team_slot
      FROM players p
      LEFT JOIN contracts c ON c.save_id = p.save_id AND c.player_uid = p.uid";
 
@@ -295,6 +295,10 @@ pub struct PlayerRow {
     pub age: Option<i32>,
     pub club_uid: Option<u32>,
     pub club_name: Option<String>,
+    /// The club team a player is registered with, when the save resolves it.
+    pub team_id: Option<u32>,
+    /// Position of that team in the club's stored team list; `0` is the first team.
+    pub team_slot: Option<u8>,
     pub league_competition_id: Option<u32>,
     pub league_name: Option<String>,
     pub nation_id: Option<u16>,
@@ -533,6 +537,58 @@ pub struct SquadAnalysis {
     pub age_bands: Vec<DistributionBand>,
     pub contract_years: Vec<DistributionBand>,
     pub players: Vec<PlayerRow>,
+    /// One entry per registered team that has squad players. The label comes
+    /// from the team's current-season competition, or from its age profile when
+    /// the competition is unnamed or has no fixtures.
+    pub teams: Vec<SquadTeam>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct SquadTeam {
+    pub team_id: u32,
+    pub slot: Option<u8>,
+    pub competition_id: Option<u32>,
+    pub competition_name: Option<String>,
+    pub fixture_count: u64,
+    pub label: SquadTeamLabel,
+    /// True when the label is inferred from the squad's age rather than read
+    /// from a named competition.
+    pub inferred: bool,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct SquadTeamLabel {
+    /// `firstTeam`, `youth`, `reserves` or `unknown`.
+    pub kind: &'static str,
+    /// Present for a specific youth age such as 20 in `U20`.
+    pub age: Option<u8>,
+}
+
+impl SquadTeamLabel {
+    fn first_team() -> Self {
+        Self {
+            kind: "firstTeam",
+            age: None,
+        }
+    }
+
+    fn youth(age: Option<u8>) -> Self {
+        Self { kind: "youth", age }
+    }
+
+    fn reserves() -> Self {
+        Self {
+            kind: "reserves",
+            age: None,
+        }
+    }
+
+    fn unknown() -> Self {
+        Self {
+            kind: "unknown",
+            age: None,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -716,10 +772,11 @@ impl Store {
                   raw_attributes_json, best_role_id, best_role_name, best_role_score,
                   best_role_position, injury_status, injury_until, recent_injury,
                   suspension_count, injuries_json, suspensions_json, contract_end, wage, on_loan,
-                  transfer_listed, loan_listed, league_competition_id, league_name, data_json)
+                  transfer_listed, loan_listed, league_competition_id, league_name, team_id,
+                  team_slot, data_json)
                  VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18,?19,
                          ?20,?21,?22,?23,?24,?25,?26,?27,?28,?29,?30,?31,?32,?33,?34,?35,?36,
-                         ?37,?38,?39,?40,?41,?42,?43,?44,?45,?46)",
+                         ?37,?38,?39,?40,?41,?42,?43,?44,?45,?46,?47,?48)",
             )?;
             let mut snapshot_stmt = transaction.prepare(
                 "INSERT INTO player_snapshots
@@ -813,6 +870,8 @@ impl Store {
                     player.loan_listed,
                     player.league_competition_id,
                     player.league_name,
+                    player.team_id,
+                    player.team_slot,
                     serde_json::to_string(player)?,
                 ])?;
 
@@ -1175,6 +1234,22 @@ impl Store {
                     competition.name,
                     competition.stage_ids.len() as i64,
                     serde_json::to_string(&competition.stage_ids)?,
+                ])?;
+            }
+        }
+
+        {
+            let mut team_competition_stmt = transaction.prepare(
+                "INSERT INTO team_competitions
+                 (save_id, team_id, competition_id, fixtures)
+                 VALUES (?1,?2,?3,?4)",
+            )?;
+            for row in &parsed.team_competitions {
+                team_competition_stmt.execute(params![
+                    save_id,
+                    row.team_id,
+                    row.competition_id,
+                    row.fixtures,
                 ])?;
             }
         }
@@ -2452,6 +2527,7 @@ impl Store {
             }
         }
 
+        let teams = self.squad_teams(save_id, &page.rows)?;
         Ok(SquadAnalysis {
             club_uid,
             club_name,
@@ -2466,7 +2542,81 @@ impl Store {
             age_bands: distribution(&AGE_BANDS, &age_counts),
             contract_years: contract_year_bands(contract_years),
             players: page.rows,
+            teams,
         })
+    }
+
+    fn squad_teams(&self, save_id: i64, players: &[PlayerRow]) -> Result<Vec<SquadTeam>> {
+        let mut by_slot: HashMap<u8, (u32, Vec<i32>)> = HashMap::new();
+        for player in players {
+            let (Some(team_id), Some(slot)) = (player.team_id, player.team_slot) else {
+                continue;
+            };
+            let (_, ages) = by_slot.entry(slot).or_insert_with(|| (team_id, Vec::new()));
+            if let Some(age) = player.age {
+                ages.push(age);
+            }
+        }
+        if by_slot.is_empty() {
+            return Ok(Vec::new());
+        }
+        let target: std::collections::HashSet<u32> =
+            by_slot.values().map(|(team_id, _)| *team_id).collect();
+        let mut statement = self.conn.prepare(
+            "SELECT tc.team_id, tc.competition_id, c.name, tc.fixtures
+             FROM team_competitions tc
+             LEFT JOIN competitions c
+               ON c.save_id = tc.save_id AND c.id = tc.competition_id
+             WHERE tc.save_id = ?1
+             ORDER BY tc.team_id, tc.fixtures DESC, tc.competition_id",
+        )?;
+        let mut rows = statement.query(params![save_id])?;
+        let mut competitions_by_team: HashMap<u32, Vec<TeamCompetitionRow>> = HashMap::new();
+        while let Some(row) = rows.next()? {
+            let team_id: u32 = row.get(0)?;
+            if !target.contains(&team_id) {
+                continue;
+            }
+            competitions_by_team
+                .entry(team_id)
+                .or_default()
+                .push(TeamCompetitionRow {
+                    competition_id: row.get(1)?,
+                    name: row.get(2)?,
+                    fixtures: u64::try_from(row.get::<_, i64>(3)?).unwrap_or(0),
+                });
+        }
+
+        let mut slots: Vec<u8> = by_slot.keys().copied().collect();
+        slots.sort_unstable();
+        let mut teams = Vec::with_capacity(slots.len());
+        for slot in slots {
+            let (team_id, ages) = &by_slot[&slot];
+            let rows = competitions_by_team
+                .get(team_id)
+                .map(Vec::as_slice)
+                .unwrap_or(&[]);
+            let primary = rows
+                .iter()
+                .find(|row| !row.name.as_deref().is_some_and(is_friendly_competition));
+            let (label, inferred) = if slot == 0 {
+                (SquadTeamLabel::first_team(), false)
+            } else if let Some(name) = primary.and_then(|row| row.name.as_deref()) {
+                (label_from_competition(name, slot), false)
+            } else {
+                (inferred_squad_label(ages), true)
+            };
+            teams.push(SquadTeam {
+                team_id: *team_id,
+                slot: Some(slot),
+                competition_id: primary.map(|row| row.competition_id),
+                competition_name: primary.and_then(|row| row.name.clone()),
+                fixture_count: primary.map_or(0, |row| row.fixtures),
+                label,
+                inferred,
+            });
+        }
+        Ok(teams)
     }
 
     pub fn query_clubs(&self, query: &ClubQuery) -> Result<ClubPage> {
@@ -3222,6 +3372,8 @@ fn migrate(conn: &Connection) -> Result<()> {
         ("players", "nation_name", "TEXT"),
         ("players", "league_competition_id", "INTEGER"),
         ("players", "league_name", "TEXT"),
+        ("players", "team_id", "INTEGER"),
+        ("players", "team_slot", "INTEGER"),
         ("players", "gender", "INTEGER"),
         ("players", "best_role_id", "TEXT"),
         ("players", "best_role_name", "TEXT"),
@@ -3329,6 +3481,10 @@ fn map_player_row(row: &Row<'_>, include_hidden: bool) -> rusqlite::Result<Playe
         age: row.get(2)?,
         club_uid: row.get(3)?,
         club_name: row.get(4)?,
+        team_id: row.get(37)?,
+        team_slot: row
+            .get::<_, Option<i64>>(38)?
+            .and_then(|value| u8::try_from(value).ok()),
         league_competition_id: row.get(5)?,
         league_name: row.get(6)?,
         nation_id: row.get(7)?,
@@ -4156,6 +4312,112 @@ pub fn summary_from_parse(parsed: &ParsedSave) -> SaveSummary {
     parsed.summary.clone()
 }
 
+struct TeamCompetitionRow {
+    competition_id: u32,
+    name: Option<String>,
+    fixtures: u64,
+}
+
+fn is_friendly_competition(name: &str) -> bool {
+    name.eq_ignore_ascii_case("friendly")
+}
+
+fn label_from_competition(name: &str, slot: u8) -> SquadTeamLabel {
+    if let Some(age) = parse_age_marker(name) {
+        return SquadTeamLabel::youth(Some(age));
+    }
+    let lower = name.to_ascii_lowercase();
+    if lower.contains("primavera") {
+        return SquadTeamLabel::youth(Some(20));
+    }
+    if lower.contains("youth") || lower.contains("academy") {
+        return SquadTeamLabel::youth(None);
+    }
+    if lower.contains("reserve") || lower.contains("b team") {
+        return SquadTeamLabel::reserves();
+    }
+    if slot > 0 {
+        SquadTeamLabel::reserves()
+    } else {
+        SquadTeamLabel::first_team()
+    }
+}
+
+/// Read U19 / Under 19 / Sub-20 style age markers without inventing one from a
+/// competition with no age in its name.
+fn parse_age_marker(name: &str) -> Option<u8> {
+    let lower = name.to_ascii_lowercase();
+    if let Some(age) = age_after_word(&lower, "under") {
+        return Some(age);
+    }
+    if let Some(age) = age_after_word(&lower, "sub") {
+        return Some(age);
+    }
+    let bytes = lower.as_bytes();
+    for (index, byte) in bytes.iter().enumerate() {
+        if *byte == b'u'
+            && (index == 0 || !bytes[index - 1].is_ascii_alphabetic())
+            && let Some(age) = age_after(bytes, index + 1)
+        {
+            return Some(age);
+        }
+    }
+    None
+}
+
+fn age_after_word(text: &str, word: &str) -> Option<u8> {
+    let bytes = text.as_bytes();
+    let mut from = 0;
+    while let Some(found) = text[from..].find(word) {
+        let index = from + found;
+        let before_ok = index == 0 || !bytes[index - 1].is_ascii_alphabetic();
+        if before_ok && let Some(age) = age_after(bytes, index + word.len()) {
+            return Some(age);
+        }
+        from = index + word.len();
+        if from >= text.len() {
+            break;
+        }
+    }
+    None
+}
+
+fn age_after(bytes: &[u8], mut index: usize) -> Option<u8> {
+    while index < bytes.len() && matches!(bytes[index], b' ' | b'-' | b'_') {
+        index += 1;
+    }
+    if index + 1 >= bytes.len()
+        || !bytes[index].is_ascii_digit()
+        || !bytes[index + 1].is_ascii_digit()
+    {
+        return None;
+    }
+    let age = (bytes[index] - b'0') * 10 + (bytes[index + 1] - b'0');
+    (13..=23).contains(&age).then_some(age)
+}
+
+fn inferred_squad_label(ages: &[i32]) -> SquadTeamLabel {
+    let known: Vec<i32> = ages
+        .iter()
+        .copied()
+        .filter(|age| (10..=60).contains(age))
+        .collect();
+    if known.len() < 3 {
+        return SquadTeamLabel::unknown();
+    }
+    let young = known.iter().filter(|age| **age <= 20).count();
+    let adult = known.iter().filter(|age| **age >= 18).count();
+    let minimum = known.iter().copied().min().unwrap_or(0);
+    let average = known.iter().sum::<i32>() as f64 / known.len() as f64;
+    if young * 10 >= known.len() * 7 || (minimum <= 17 && young * 2 >= known.len()) {
+        return SquadTeamLabel::youth(None);
+    }
+    if adult * 10 >= known.len() * 7 && average >= 19.0 {
+        return SquadTeamLabel::reserves();
+    }
+    SquadTeamLabel::unknown()
+}
+
 pub fn report_from_parse(parsed: &ParsedSave) -> ParseReport {
     parsed.report.clone()
 }
@@ -4963,5 +5225,114 @@ mod tests {
         assert_eq!(priced.fair_price, Some(1234.0));
         assert_eq!(priced.value_gap_pct, Some(12.5));
         assert_eq!(priced.bargain_score, Some(61.5));
+    }
+
+    #[test]
+    fn parses_age_markers_and_labels_across_naming_styles() {
+        assert_eq!(parse_age_marker("English U21 Premier Division 1"), Some(21));
+        assert_eq!(
+            parse_age_marker("French Under 19 National - Group A"),
+            Some(19)
+        );
+        assert_eq!(parse_age_marker("French Under-19 National"), Some(19));
+        assert_eq!(parse_age_marker("Italian U20 Primavera 1"), Some(20));
+        assert_eq!(parse_age_marker("Brazilian Sub-20"), Some(20));
+        assert_eq!(parse_age_marker("UEFA Youth League"), None);
+        assert_eq!(parse_age_marker("Premier League"), None);
+
+        let youth = label_from_competition("UEFA Youth League", 2);
+        assert_eq!(youth.kind, "youth");
+        assert_eq!(youth.age, None);
+        assert_eq!(
+            label_from_competition("Argentina Reserves Division", 2).kind,
+            "reserves"
+        );
+        assert_eq!(
+            label_from_competition("Spanish Second Division", 2).kind,
+            "reserves"
+        );
+        assert_eq!(
+            label_from_competition("Italian Serie A", 0).kind,
+            "firstTeam"
+        );
+    }
+
+    #[test]
+    fn infers_a_label_from_the_squad_age_profile() {
+        assert_eq!(inferred_squad_label(&[19, 20, 21, 22, 23]).kind, "reserves");
+        assert_eq!(inferred_squad_label(&[15, 16, 17, 18, 19]).kind, "youth");
+        assert_eq!(inferred_squad_label(&[15, 25, 33]).kind, "unknown");
+        assert_eq!(inferred_squad_label(&[19, 20]).kind, "unknown");
+    }
+
+    #[test]
+    fn labels_squad_teams_from_competitions_and_age_profiles() {
+        let store = Store::open_in_memory().expect("store");
+        store
+            .conn
+            .execute_batch(
+                "INSERT INTO saves
+                   (id, path, file_name, file_size, mtime_ns, fingerprint, game, build,
+                    parser_version, parsed_at)
+                 VALUES (1, '/tmp/test.fm', 'test.fm', 1, 1, 'fp', 'FM27', '27.0.0',
+                         'test', 'now');
+                 INSERT INTO competitions
+                   (save_id, id, database_id, name, stage_count, stage_ids_json)
+                 VALUES
+                   (1, 22, 29, 'Italian Serie A', 1, '[347]'),
+                   (1, 3560, 43344138, 'Italian U20 Primavera 1', 1, '[354]'),
+                   (1, 3572, 43344150, 'Italian U18 Division 1 Group A', 1, '[365]');
+                 INSERT INTO team_competitions
+                   (save_id, team_id, competition_id, fixtures)
+                 VALUES
+                   (1, 900, 22, 38),
+                   (1, 901, 3560, 38),
+                   (1, 902, 3572, 26);
+                 INSERT INTO players
+                   (save_id, uid, name, age, ca, club_uid, club_name, team_id, team_slot,
+                    positions_json, attributes_json, raw_attributes_json, data_json)
+                 VALUES
+                   (1, 1, 'First A', 27, 150, 1099, 'Milan', 900, 0, '{}', '{}', '{}', '{}'),
+                   (1, 2, 'First B', 24, 140, 1099, 'Milan', 900, 0, '{}', '{}', '{}', '{}'),
+                   (1, 3, 'First C', 30, 130, 1099, 'Milan', 900, 0, '{}', '{}', '{}', '{}'),
+                   (1, 4, 'U20 A', 18, 120, 1099, 'Milan', 901, 1, '{}', '{}', '{}', '{}'),
+                   (1, 5, 'U20 B', 19, 110, 1099, 'Milan', 901, 1, '{}', '{}', '{}', '{}'),
+                   (1, 6, 'U20 C', 20, 100, 1099, 'Milan', 901, 1, '{}', '{}', '{}', '{}'),
+                   (1, 7, 'U18 A', 16, 90, 1099, 'Milan', 902, 2, '{}', '{}', '{}', '{}'),
+                   (1, 8, 'U18 B', 17, 80, 1099, 'Milan', 902, 2, '{}', '{}', '{}', '{}'),
+                   (1, 9, 'U18 C', 18, 70, 1099, 'Milan', 902, 2, '{}', '{}', '{}', '{}'),
+                   (1, 10, 'Reserve A', 20, 60, 1099, 'Milan', 903, 3, '{}', '{}', '{}', '{}'),
+                   (1, 11, 'Reserve B', 21, 60, 1099, 'Milan', 903, 3, '{}', '{}', '{}', '{}'),
+                   (1, 12, 'Reserve C', 22, 60, 1099, 'Milan', 903, 3, '{}', '{}', '{}', '{}'),
+                   (1, 13, 'Youth A', 15, 50, 1099, 'Milan', 904, 4, '{}', '{}', '{}', '{}'),
+                   (1, 14, 'Youth B', 16, 50, 1099, 'Milan', 904, 4, '{}', '{}', '{}', '{}'),
+                   (1, 15, 'Youth C', 17, 50, 1099, 'Milan', 904, 4, '{}', '{}', '{}', '{}'),
+                   (1, 16, 'Mixed A', 15, 50, 1099, 'Milan', 905, 5, '{}', '{}', '{}', '{}'),
+                   (1, 17, 'Mixed B', 25, 50, 1099, 'Milan', 905, 5, '{}', '{}', '{}', '{}'),
+                   (1, 18, 'Mixed C', 33, 50, 1099, 'Milan', 905, 5, '{}', '{}', '{}', '{}');",
+            )
+            .expect("seed");
+
+        let analysis = store.squad_analysis(1, 1099).expect("squad");
+        let team = |slot: u8| {
+            analysis
+                .teams
+                .iter()
+                .find(|team| team.slot == Some(slot))
+                .expect("team")
+        };
+        assert_eq!(team(0).label.kind, "firstTeam");
+        assert_eq!(team(0).competition_name.as_deref(), Some("Italian Serie A"));
+        assert_eq!(team(1).label.kind, "youth");
+        assert_eq!(team(1).label.age, Some(20));
+        assert_eq!(team(1).fixture_count, 38);
+        assert_eq!(team(2).label.kind, "youth");
+        assert_eq!(team(2).label.age, Some(18));
+        assert!(team(3).inferred);
+        assert_eq!(team(3).label.kind, "reserves");
+        assert!(team(4).inferred);
+        assert_eq!(team(4).label.kind, "youth");
+        assert!(team(5).inferred);
+        assert_eq!(team(5).label.kind, "unknown");
     }
 }
