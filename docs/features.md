@@ -62,9 +62,8 @@
   (table, filters, profile and comparison); no separate toggle is required.
 - Light and dark themes.
 - Analysis centre: the save's managed club is detected from the `humans` section
-  and checked against the save summary. Overview, squad depth and needs follow
-  that club; the overview keeps a save-wide club strength ranking so the managed
-  club can be compared with the rest of the database.
+  and checked against the save summary. The Overview tab opens on that club's
+  squad: size, age, CA/PA, wages, value, position depth and contract expiry.
 - Quick filters: wonderkids, expiring contracts, high potential, injured /
   injury history / suspended / on loan / free agent / available.
 - Player origin: system-generated newgens are marked in the table and profile and
@@ -87,10 +86,10 @@
   and the advanced model only scores rows with the advanced stat block. Contract,
   market, confidence, injury and fee filters are available, and the current view
   exports to CSV or JSON.
-- Squad needs: the analysis centre's Needs tab and the club inspector's squad tab
-  rank a club's weakest position groups by current stats quality and list same-tier,
-  fee-known upgrades with quality gain, fair price and value gap. They use 300+ minute
-  samples and exclude loanee stats.
+- Squad needs: the club inspector's squad tab ranks a club's weakest position
+  groups by current stats quality and lists same-tier, fee-known upgrades with
+  quality gain, fair price and value gap. It uses 300+ minute samples and excludes
+  loanee stats.
 - Transfer scouting (Full mode): the Scouting tab works from the managed club and
   separates role fit from signing probability. Advice is relative to the club's own
   squad (first team, rotation, future), uses an optional role filter, and explains

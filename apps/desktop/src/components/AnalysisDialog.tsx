@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import {
   BarChart3,
   CalendarClock,
@@ -10,15 +10,11 @@ import {
   Download,
   Loader2,
   RefreshCw,
-  Shield,
-  Target,
   TrendingUp,
   Users,
 } from "lucide-react";
 import { exportStats, pickExportFile } from "@/lib/api";
 import {
-  useAnalysisOverview,
-  useFilterOptions,
   useManagedClub,
   useSimilarStatsPlayers,
   useSquadAnalysis,
@@ -26,7 +22,6 @@ import {
   useValueFinder,
 } from "@/lib/query";
 import type {
-  AnalysisOverview,
   DistributionBand,
   SquadAnalysis,
   StatsMoneyballRequest,
@@ -40,11 +35,9 @@ import { useI18n } from "@/lib/useI18n";
 import { caLabelClass, cn, initials, paTone } from "@/lib/utils";
 import { useAppStore } from "@/store/app";
 import { ScoutPanel } from "./ScoutPanel";
-import { SquadNeedsSection } from "./SquadNeeds";
 import { Badge, Button, Input, Modal, Select } from "./ui";
-import { MultiSelect } from "./MultiSelect";
 
-type AnalysisTab = "overview" | "squad" | "needs" | "scout" | "value" | "stats";
+type AnalysisTab = "overview" | "scout" | "value" | "stats";
 
 export function AnalysisDialog() {
   const { t, locale } = useI18n();
@@ -55,58 +48,30 @@ export function AnalysisDialog() {
   const summary = useAppStore((state) => state.summary);
   const setSelectedUid = useAppStore((state) => state.setSelectedUid);
   const setInspectorOpen = useAppStore((state) => state.setInspectorOpen);
+  const setViewMode = useAppStore((state) => state.setViewMode);
   const [tab, setTab] = useState<AnalysisTab>(
     dataMode === "full" ? "overview" : "stats",
   );
-  const [clubUid, setClubUid] = useState<number | null>(null);
-  const clubChosen = useRef(false);
   const managed = useManagedClub(saveId);
   const managedClubUid = managed.data?.club_uid ?? null;
-  const overview = useAnalysisOverview(open && !managed.isLoading, managedClubUid);
-  const options = useFilterOptions();
-  const squad = useSquadAnalysis(tab === "squad" ? clubUid : null);
+  const squad = useSquadAnalysis(tab === "overview" ? managedClubUid : null);
+
+  const openPlayer = (uid: number) => {
+    setSelectedUid(uid);
+    setViewMode("players");
+    setInspectorOpen(true);
+    setOpen(false);
+  };
 
   useEffect(() => {
     const allowed: AnalysisTab[] = [
-      ...(dataMode === "full" ? (["overview", "scout"] as AnalysisTab[]) : []),
-      "squad",
-      "needs",
+      "overview",
+      ...(dataMode === "full" ? (["scout"] as AnalysisTab[]) : []),
       ...(dataMode !== "moneyball" ? (["value"] as AnalysisTab[]) : []),
       "stats",
     ];
     if (!allowed.includes(tab)) setTab("stats");
   }, [dataMode, tab]);
-
-  useEffect(() => {
-    clubChosen.current = false;
-    setClubUid(null);
-  }, [saveId]);
-
-  useEffect(() => {
-    if (clubChosen.current || clubUid != null) return;
-    if (managed.isLoading) return;
-    const managedClub = managed.data?.club_uid;
-    if (managedClub != null) {
-      clubChosen.current = true;
-      setClubUid(managedClub);
-      return;
-    }
-    const first = options.data?.clubs[0]?.id ?? null;
-    if (first != null) {
-      clubChosen.current = true;
-      setClubUid(first);
-    }
-  }, [clubUid, managed.data, managed.isLoading, options.data]);
-
-  const chooseClub = (uid: number | null) => {
-    clubChosen.current = true;
-    setClubUid(uid);
-  };
-
-  const clubName = useMemo(
-    () => options.data?.clubs.find((club) => club.id === clubUid)?.name,
-    [clubUid, options.data],
-  );
 
   if (!open) return null;
 
@@ -133,8 +98,7 @@ export function AnalysisDialog() {
             variant="secondary"
             size="sm"
             onClick={() => {
-              void overview.refetch();
-              if (tab === "squad") void squad.refetch();
+              if (tab === "overview") void squad.refetch();
             }}
           >
             <RefreshCw size={13} />
@@ -145,11 +109,7 @@ export function AnalysisDialog() {
     >
       <div className="flex gap-1 border-b border-[var(--line)] px-4 pt-3">
         {[
-          ...(dataMode === "full"
-            ? [["overview", t("analysis.tab.overview"), <BarChart3 size={12} key="overview" />]]
-            : []),
-          ["squad", t("analysis.tab.squad"), <Users size={12} key="squad" />],
-          ["needs", t("analysis.tab.needs"), <Target size={12} key="needs" />],
+          ["overview", t("analysis.tab.overview"), <Users size={12} key="overview" />],
           ...(dataMode === "full"
             ? [["scout", t("analysis.tab.scout"), <Compass size={12} key="scout" />]]
             : []),
@@ -177,293 +137,45 @@ export function AnalysisDialog() {
 
       <div className="p-4">
         {tab === "overview" &&
-          (managed.isLoading || overview.isLoading ? (
+          (managed.isLoading ? (
             <LoadingBlock />
-          ) : overview.data ? (
-            <OverviewPanel
-              data={overview.data}
-              managedClubUid={managedClubUid}
-              managedClubName={managed.data?.club_name ?? null}
-              onClub={(uid) => {
-                chooseClub(uid);
-                setTab("squad");
-              }}
-            />
+          ) : managedClubUid == null ? (
+            <EmptyHint text={t("analysis.noManagedClub")} />
           ) : (
-            <div className="text-xs text-[var(--danger)]">{t("analysis.loadError")}</div>
+            <div className="space-y-4">
+              <span className="text-[10px] text-[var(--muted)]">
+                {dataMode === "full"
+                  ? t("analysis.sortedByCa", { club: managed.data?.club_name ?? "" })
+                  : t("analysis.squadListHint", { club: managed.data?.club_name ?? "" })}
+              </span>
+              {squad.isLoading ? (
+                <LoadingBlock />
+              ) : squad.data ? (
+                <SquadPanel data={squad.data} onPlayer={openPlayer} />
+              ) : (
+                <EmptyHint text={t("analysis.noSquad")} />
+              )}
+            </div>
           ))}
 
-        {tab === "squad" && (
-          <div className="space-y-4">
-            <div className="flex items-center gap-3">
-              <div className="w-[280px]">
-                <MultiSelect
-                  options={options.data?.clubs ?? []}
-                  selected={clubUid == null ? [] : [clubUid]}
-                  onChange={(ids) => chooseClub(ids[0] ?? null)}
-                  placeholder={t("analysis.chooseClub")}
-                  maxLabel={1}
-                  single
-                />
-              </div>
-              <span className="text-[10px] text-[var(--muted)]">
-                {clubName
-                  ? dataMode === "full"
-                    ? t("analysis.sortedByCa", { club: clubName })
-                    : t("analysis.squadListHint", { club: clubName })
-                  : t("analysis.chooseClubHint")}
-              </span>
-            </div>
-            {squad.isLoading ? (
-              <LoadingBlock />
-            ) : squad.data ? (
-              <SquadPanel
-                data={squad.data}
-                onPlayer={(uid) => {
-                  setSelectedUid(uid);
-                  setInspectorOpen(true);
-                  setOpen(false);
-                }}
-              />
-            ) : clubUid == null ? (
-              <EmptyHint text={t("analysis.chooseFirst")} />
-            ) : (
-              <EmptyHint text={t("analysis.noSquad")} />
-            )}
-          </div>
-        )}
-
-        {tab === "needs" && (
-          <div className="space-y-4">
-            <div className="flex items-center gap-3">
-              <div className="w-[280px]">
-                <MultiSelect
-                  options={options.data?.clubs ?? []}
-                  selected={clubUid == null ? [] : [clubUid]}
-                  onChange={(ids) => chooseClub(ids[0] ?? null)}
-                  placeholder={t("analysis.chooseClub")}
-                  maxLabel={1}
-                  single
-                />
-              </div>
-              <span className="text-[10px] text-[var(--muted)]">
-                {clubName
-                  ? t("analysis.squadNeedsForClub", { club: clubName })
-                  : t("analysis.chooseClubHint")}
-              </span>
-            </div>
-            <SquadNeedsSection
-              clubUid={clubUid}
-              showEmpty
-              onPlayer={(uid) => {
-                setSelectedUid(uid);
-                setInspectorOpen(true);
-                setOpen(false);
-              }}
-            />
-          </div>
-        )}
-
-        {tab === "scout" && clubUid != null && (
-          <ScoutPanel
-            clubUid={clubUid}
-            onPlayer={(uid) => {
-              setSelectedUid(uid);
-              setInspectorOpen(true);
-              setOpen(false);
-            }}
-          />
-        )}
-        {tab === "scout" && clubUid == null && (
-          <EmptyHint text={t("analysis.chooseFirst")} />
-        )}
+        {tab === "scout" &&
+          (managed.isLoading ? (
+            <LoadingBlock />
+          ) : managedClubUid != null ? (
+            <ScoutPanel clubUid={managedClubUid} onPlayer={openPlayer} />
+          ) : (
+            <EmptyHint text={t("analysis.noManagedClub")} />
+          ))}
 
         {tab === "value" && (
-          <ValueFinderPanel
-            saveId={saveId}
-            onPlayer={(uid) => {
-              setSelectedUid(uid);
-              setInspectorOpen(true);
-              setOpen(false);
-            }}
-          />
+          <ValueFinderPanel saveId={saveId} onPlayer={openPlayer} />
         )}
 
         {tab === "stats" && (
-          <StatsMoneyballPanel
-            saveId={saveId}
-            onPlayer={(uid) => {
-              setSelectedUid(uid);
-              setInspectorOpen(true);
-              setOpen(false);
-            }}
-          />
+          <StatsMoneyballPanel saveId={saveId} onPlayer={openPlayer} />
         )}
       </div>
     </Modal>
-  );
-}
-
-function OverviewPanel({
-  data,
-  managedClubUid,
-  managedClubName,
-  onClub,
-}: {
-  data: AnalysisOverview;
-  managedClubUid: number | null;
-  managedClubName: string | null;
-  onClub: (clubUid: number) => void;
-}) {
-  const { t, locale, formatValue } = useI18n();
-  const scoped = managedClubUid != null;
-  return (
-    <div className="space-y-4">
-      {scoped && managedClubName && (
-        <div
-          data-testid="analysis-managed-club"
-          className="flex items-center gap-2 rounded-lg border border-[var(--accent-line)] bg-[var(--accent-soft)] px-3 py-2 text-[10px] text-[var(--accent-strong)]"
-        >
-          <Badge tone="accent">{t("analysis.managedClub")}</Badge>
-          <span className="font-medium">{managedClubName}</span>
-        </div>
-      )}
-      <div className="grid grid-cols-3 gap-2 lg:grid-cols-6">
-        <Stat
-          icon={<Users size={13} />}
-          label={t("analysis.players")}
-          value={formatNumber(data.total_players, locale)}
-        />
-        {scoped ? (
-          <Stat
-            icon={<Users size={13} />}
-            label={t("analysis.loanees")}
-            value={formatNumber(data.loanees, locale)}
-          />
-        ) : (
-          <Stat
-            icon={<Shield size={13} />}
-            label={t("analysis.clubs")}
-            value={formatNumber(data.total_clubs, locale)}
-          />
-        )}
-        <Stat
-          icon={<CalendarClock size={13} />}
-          label={t("analysis.averageAge")}
-          value={data.average_age.toFixed(1)}
-        />
-        <Stat
-          icon={<TrendingUp size={13} />}
-          label={t("analysis.medianCa")}
-          value={String(data.median_ca)}
-        />
-        <Stat
-          icon={<Coins size={13} />}
-          label={t("analysis.totalValue")}
-          value={formatValue(data.total_value)}
-        />
-        <Stat
-          icon={<CalendarClock size={13} />}
-          label={t("analysis.expiringWithinYear")}
-          value={formatNumber(data.expiring_contracts, locale)}
-        />
-      </div>
-
-      <div className="grid gap-3 md:grid-cols-2">
-        <div className="rounded-xl border border-[var(--line)] bg-[var(--surface-2)] p-3">
-          <SectionTitle>{t("analysis.ageStructure")}</SectionTitle>
-          <BandBars bands={data.age_bands} tone="accent" />
-        </div>
-        <div className="rounded-xl border border-[var(--line)] bg-[var(--surface-2)] p-3">
-          <SectionTitle>{t("analysis.caDistribution")}</SectionTitle>
-          <BandBars bands={data.ca_bands} tone="gold" />
-        </div>
-      </div>
-
-      <div className="grid gap-3 lg:grid-cols-[1.6fr_1fr]">
-        <div className="rounded-xl border border-[var(--line)] bg-[var(--surface-2)] p-3">
-          <div className="mb-2 flex items-center justify-between">
-            <SectionTitle>{t("analysis.clubStrength")}</SectionTitle>
-            <Badge tone="outline">{t("analysis.averageCa")}</Badge>
-          </div>
-          <div className="thin-scroll max-h-[300px] overflow-auto">
-            <table className="w-full text-left">
-              <thead className="sticky top-0 bg-[var(--surface-2)]">
-                <tr className="text-[9px] uppercase tracking-wider text-[var(--muted)]">
-                  <th className="py-1 pr-2">#</th>
-                  <th className="py-1">{t("analysis.table.club")}</th>
-                  <th className="py-1 text-right">{t("analysis.table.players")}</th>
-                  <th className="py-1 text-right">{t("analysis.averageCa")}</th>
-                  <th className="py-1 text-right">{t("analysis.table.maxCa")}</th>
-                  <th className="py-1 text-right">{t("analysis.averageAge")}</th>
-                  <th className="py-1 text-right">{t("analysis.table.value")}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {data.top_clubs.map((club, index) => (
-                  <tr
-                    key={club.club_uid}
-                    className={cn(
-                      "cursor-pointer border-t border-[var(--line)]/60 text-[10px] hover:bg-[var(--surface)]",
-                      club.club_uid === managedClubUid &&
-                        "bg-[var(--accent-soft)]/60 hover:bg-[var(--accent-soft)]",
-                    )}
-                    onClick={() => onClub(club.club_uid)}
-                  >
-                    <td className="py-1.5 pr-2 font-mono text-[var(--muted)]">
-                      {data.top_clubs.length > 12 && index === 12 ? "—" : index + 1}
-                    </td>
-                    <td className="max-w-[190px] truncate py-1.5 font-medium text-[var(--ink)]">
-                      {club.club_name}
-                    </td>
-                    <td className="py-1.5 text-right font-mono text-[var(--muted)]">{club.players}</td>
-                    <td className="py-1.5 text-right font-mono font-semibold text-[var(--accent-strong)]">
-                      {club.avg_ca}
-                    </td>
-                    <td className="py-1.5 text-right font-mono text-[var(--muted)]">{club.max_ca}</td>
-                    <td className="py-1.5 text-right font-mono text-[var(--muted)]">{club.avg_age}</td>
-                    <td className="py-1.5 text-right font-mono text-[var(--muted)]">
-                      {formatValue(club.total_value)}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-
-        <div className="space-y-3">
-          <div className="rounded-xl border border-[var(--line)] bg-[var(--surface-2)] p-3">
-            <SectionTitle>{t("analysis.contractYears")}</SectionTitle>
-            <BandBars bands={data.contract_years} tone="blue" compact />
-          </div>
-          <div className="rounded-xl border border-[var(--line)] bg-[var(--surface-2)] p-3">
-            <SectionTitle>{t("analysis.status")}</SectionTitle>
-            <div
-              className={cn(
-                "mt-2 grid gap-2 text-center",
-                scoped ? "grid-cols-2" : "grid-cols-3",
-              )}
-            >
-              {!scoped && (
-                <MiniStat
-                  label={t("analysis.freeAgents")}
-                  value={formatNumber(data.free_agents, locale)}
-                />
-              )}
-              <MiniStat
-                label={t("analysis.loanees")}
-                value={formatNumber(data.loanees, locale)}
-              />
-              <MiniStat
-                label={t("analysis.expiringWithinYear")}
-                value={formatNumber(data.expiring_contracts, locale)}
-              />
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
   );
 }
 
@@ -476,12 +188,32 @@ function SquadPanel({
 }) {
   const { t, locale, formatValue, formatWage } = useI18n();
   const dataMode = useAppStore((state) => state.dataMode);
+  const [sortBy, setSortBy] = useState<"ca" | "pa">("ca");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
+  const changeSort = (by: string) => {
+    if (by !== "ca" && by !== "pa") return;
+    if (sortBy === by) {
+      setSortDir((current) => (current === "desc" ? "asc" : "desc"));
+    } else {
+      setSortBy(by);
+      setSortDir("desc");
+    }
+  };
   // The backend returns the squad by CA; do not leak that order when ability
-  // is hidden.
-  const players =
-    dataMode === "full"
-      ? data.players
-      : [...data.players].sort((left, right) => (right.wage ?? 0) - (left.wage ?? 0));
+  // is hidden. Unknown PA values always sort last.
+  const players = useMemo(() => {
+    if (dataMode !== "full") {
+      return [...data.players].sort((left, right) => (right.wage ?? 0) - (left.wage ?? 0));
+    }
+    const direction = sortDir === "desc" ? -1 : 1;
+    return [...data.players].sort((left, right) => {
+      if (sortBy === "ca") return (left.ca - right.ca) * direction;
+      if (left.pa == null && right.pa == null) return 0;
+      if (left.pa == null) return 1;
+      if (right.pa == null) return -1;
+      return (left.pa - right.pa) * direction;
+    });
+  }, [data.players, dataMode, sortBy, sortDir]);
   return (
     <div className="space-y-3">
       <div className="grid grid-cols-3 gap-2 lg:grid-cols-6">
@@ -551,8 +283,20 @@ function SquadPanel({
                 <th className="px-2 py-1.5">{t("analysis.table.positions")}</th>
                 {dataMode === "full" && (
                   <>
-                    <th className="px-2 py-1.5 text-right">CA</th>
-                    <th className="px-2 py-1.5 text-right">PA</th>
+                    <SortHeader
+                      label="CA"
+                      by="ca"
+                      active={sortBy}
+                      dir={sortDir}
+                      onClick={changeSort}
+                    />
+                    <SortHeader
+                      label="PA"
+                      by="pa"
+                      active={sortBy}
+                      dir={sortDir}
+                      onClick={changeSort}
+                    />
                   </>
                 )}
                 <th className="px-2 py-1.5 text-right">{t("analysis.table.wage")}</th>
@@ -1205,7 +949,7 @@ function StatsMoneyballPanel({
                 <tr>
                   <th className="px-3 py-1.5">{t("analysis.stats.table.player")}</th>
                   <th className="px-2 py-1.5">{t("analysis.stats.table.position")}</th>
-                  <ValueSortHeader
+                  <SortHeader
                     label={t("analysis.stats.table.age")}
                     by="age"
                     active={sortBy}
@@ -1213,7 +957,7 @@ function StatsMoneyballPanel({
                     onClick={changeSort}
                   />
                   {dataMode === "full" && (
-                    <ValueSortHeader
+                    <SortHeader
                       label={t("analysis.stats.table.ca")}
                       by="ca"
                       active={sortBy}
@@ -1221,35 +965,35 @@ function StatsMoneyballPanel({
                       onClick={changeSort}
                     />
                   )}
-                  <ValueSortHeader
+                  <SortHeader
                     label={t("analysis.stats.table.minutes")}
                     by="minutes"
                     active={sortBy}
                     dir={sortDir}
                     onClick={changeSort}
                   />
-                  <ValueSortHeader
+                  <SortHeader
                     label={t("analysis.stats.table.production")}
                     by="production"
                     active={sortBy}
                     dir={sortDir}
                     onClick={changeSort}
                   />
-                  <ValueSortHeader
+                  <SortHeader
                     label={t("analysis.stats.table.cost")}
                     by="cost"
                     active={sortBy}
                     dir={sortDir}
                     onClick={changeSort}
                   />
-                  <ValueSortHeader
+                  <SortHeader
                     label={t("analysis.stats.table.valueGap")}
                     by="value_gap"
                     active={sortBy}
                     dir={sortDir}
                     onClick={changeSort}
                   />
-                  <ValueSortHeader
+                  <SortHeader
                     label={t("analysis.stats.table.bargain")}
                     by="bargain"
                     active={sortBy}
@@ -1977,7 +1721,7 @@ function ValueFinderPanel({
                 <tr>
                   <th className="px-3 py-1.5">{t("analysis.value.table.player")}</th>
                   <th className="px-2 py-1.5">{t("analysis.value.table.position")}</th>
-                  <ValueSortHeader
+                  <SortHeader
                     label={t("analysis.value.table.age")}
                     by="age"
                     active={sortBy}
@@ -1985,7 +1729,7 @@ function ValueFinderPanel({
                     onClick={changeSort}
                   />
                   {dataMode === "full" && (
-                    <ValueSortHeader
+                    <SortHeader
                       label={t("analysis.value.table.ca")}
                       by="ca"
                       active={sortBy}
@@ -1993,35 +1737,35 @@ function ValueFinderPanel({
                       onClick={changeSort}
                     />
                   )}
-                  <ValueSortHeader
+                  <SortHeader
                     label={t("analysis.value.table.role")}
                     by="role"
                     active={sortBy}
                     dir={sortDir}
                     onClick={changeSort}
                   />
-                  <ValueSortHeader
+                  <SortHeader
                     label={t("analysis.value.table.fee")}
                     by="fee"
                     active={sortBy}
                     dir={sortDir}
                     onClick={changeSort}
                   />
-                  <ValueSortHeader
+                  <SortHeader
                     label={t("analysis.value.table.wage")}
                     by="wage"
                     active={sortBy}
                     dir={sortDir}
                     onClick={changeSort}
                   />
-                  <ValueSortHeader
+                  <SortHeader
                     label={t("analysis.value.table.cost")}
                     by="cost"
                     active={sortBy}
                     dir={sortDir}
                     onClick={changeSort}
                   />
-                  <ValueSortHeader
+                  <SortHeader
                     label={t("analysis.value.table.score")}
                     by="score"
                     active={sortBy}
@@ -2207,7 +1951,7 @@ function ValueFilter({
   );
 }
 
-function ValueSortHeader({
+function SortHeader({
   label,
   by,
   active,
@@ -2245,15 +1989,6 @@ function Stat({ icon, label, value }: { icon: React.ReactNode; label: string; va
         {label}
       </div>
       <div className="mt-0.5 font-mono text-[14px] font-semibold text-[var(--ink)]">{value}</div>
-    </div>
-  );
-}
-
-function MiniStat({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-lg border border-[var(--line)] bg-[var(--surface)] px-2 py-1.5">
-      <div className="text-[9px] text-[var(--muted)]">{label}</div>
-      <div className="font-mono text-[12px] font-semibold text-[var(--ink)]">{value}</div>
     </div>
   );
 }

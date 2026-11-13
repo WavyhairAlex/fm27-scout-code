@@ -1,7 +1,6 @@
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import {
   appInfo,
-  getAnalysisOverview,
   getManagedClub,
   getClub,
   getClubFilterOptions,
@@ -385,19 +384,6 @@ export function useManagedClub(saveId: number | null) {
     queryFn: () => getManagedClub(saveId!),
     enabled: saveId != null,
     staleTime: Infinity,
-  });
-}
-
-export function useAnalysisOverview(
-  enabled = true,
-  clubUid: number | null = null,
-) {
-  const saveId = useAppStore((state) => state.saveId);
-  return useQuery({
-    queryKey: ["analysis-overview", saveId, clubUid],
-    queryFn: () => getAnalysisOverview(saveId!, clubUid),
-    enabled: saveId != null && enabled,
-    staleTime: 60_000,
   });
 }
 

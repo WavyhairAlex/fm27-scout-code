@@ -3,7 +3,6 @@ import {
   MOCK_PLAYERS,
   MOCK_SAVE_ID,
   MOCK_STAFF,
-  mockAnalysisOverview,
   mockClubDetail,
   mockClubFilterOptions,
   mockFilterOptions,
@@ -158,12 +157,7 @@ describe("mock player query", () => {
   });
 });
 
-  it("aggregates analysis overview and squad depth", () => {
-    const overview = mockAnalysisOverview();
-    expect(overview.total_players).toBe(MOCK_PLAYERS.length);
-    expect(overview.age_bands.length).toBe(6);
-    expect(overview.top_clubs.length).toBeGreaterThan(0);
-
+  it("aggregates squad depth", () => {
     const clubUid = MOCK_PLAYERS[0].club_uid;
     expect(clubUid).not.toBeNull();
     const squad = mockSquadAnalysis(clubUid!);
@@ -172,13 +166,6 @@ describe("mock player query", () => {
 
     const managed = mockManagedClub();
     expect(managed.club_uid).toBe(clubUid);
-    const scoped = mockAnalysisOverview(managed.club_uid);
-    expect(scoped.total_players).toBe(
-      MOCK_PLAYERS.filter((player) => player.club_uid === managed.club_uid).length,
-    );
-    expect(scoped.total_players).toBeLessThan(overview.total_players);
-    expect(scoped.total_clubs).toBe(overview.total_clubs);
-    expect(scoped.top_clubs.some((club) => club.club_uid === managed.club_uid)).toBe(true);
   });
 
 describe("mock scouting", () => {

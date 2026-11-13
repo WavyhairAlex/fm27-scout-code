@@ -4,7 +4,7 @@ use std::collections::HashMap;
 use std::path::Path;
 use std::sync::{Arc, Mutex};
 
-use chrono::{Months, NaiveDate, Utc};
+use chrono::{NaiveDate, Utc};
 use rusqlite::types::Value;
 use rusqlite::{Connection, OptionalExtension, Row, params, params_from_iter};
 use serde::{Deserialize, Serialize};
@@ -516,34 +516,6 @@ pub struct ClubFilterOptions {
 pub struct DistributionBand {
     pub label: String,
     pub count: u64,
-}
-
-#[derive(Debug, Clone, Serialize)]
-pub struct ClubOverview {
-    pub club_uid: u32,
-    pub club_name: String,
-    pub players: u64,
-    pub avg_ca: f64,
-    pub max_ca: u16,
-    pub avg_age: f64,
-    pub total_value: u64,
-}
-
-#[derive(Debug, Clone, Serialize)]
-pub struct AnalysisOverview {
-    pub total_players: u64,
-    pub total_clubs: u64,
-    pub average_age: f64,
-    pub median_ca: u16,
-    pub total_value: u64,
-    pub free_agents: u64,
-    pub loanees: u64,
-    pub expiring_contracts: u64,
-    pub game_date: Option<String>,
-    pub age_bands: Vec<DistributionBand>,
-    pub ca_bands: Vec<DistributionBand>,
-    pub contract_years: Vec<DistributionBand>,
-    pub top_clubs: Vec<ClubOverview>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -2399,176 +2371,6 @@ impl Store {
         }))
     }
 
-    /// Save-wide analysis, or one club's analysis when `club_uid` is set. Club
-    /// strength always stays save-wide so the managed club can be compared with
-    /// the rest of the database.
-    pub fn analysis_overview(
-        &self,
-        save_id: i64,
-        club_uid: Option<u32>,
-    ) -> Result<AnalysisOverview> {
-        let game_date_text: Option<String> = self
-            .conn
-            .query_row(
-                "SELECT game_date FROM saves WHERE id = ?1",
-                params![save_id],
-                |row| row.get(0),
-            )
-            .optional()?
-            .flatten();
-        let game_date = game_date_text
-            .as_deref()
-            .and_then(|text| NaiveDate::parse_from_str(text, "%Y-%m-%d").ok());
-        let cutoff = game_date.and_then(|date| date.checked_add_months(Months::new(12)));
-        let total_clubs: u64 = self.conn.query_row(
-            "SELECT COUNT(*) FROM clubs WHERE save_id = ?1",
-            params![save_id],
-            |row| row.get(0),
-        )?;
-
-        let mut statement = self.conn.prepare(
-            "SELECT p.age, p.ca, p.pa, p.transfer_value, p.club_uid, p.club_name,
-                    c.end_date, c.on_loan
-             FROM players p
-             LEFT JOIN contracts c ON c.save_id = p.save_id AND c.player_uid = p.uid
-             WHERE p.save_id = ?1",
-        )?;
-        let rows = statement.query_map(params![save_id], |row| {
-            Ok((
-                row.get::<_, Option<i32>>(0)?,
-                row.get::<_, u16>(1)?,
-                row.get::<_, Option<i16>>(2)?,
-                row.get::<_, Option<u32>>(3)?,
-                row.get::<_, Option<u32>>(4)?,
-                row.get::<_, Option<String>>(5)?,
-                row.get::<_, Option<String>>(6)?,
-                row.get::<_, Option<bool>>(7)?,
-            ))
-        })?;
-
-        let mut player_count = 0u64;
-        let mut age_sum = 0i64;
-        let mut age_count = 0u64;
-        let mut ca_values = Vec::new();
-        let mut total_value = 0u64;
-        let mut free_agents = 0u64;
-        let mut loanees = 0u64;
-        let mut expiring = 0u64;
-        let mut age_counts: HashMap<&'static str, u64> = HashMap::new();
-        let mut ca_counts: HashMap<&'static str, u64> = HashMap::new();
-        let mut contract_years: HashMap<u16, u64> = HashMap::new();
-        let mut clubs: HashMap<u32, (String, u64, u64, u16, u64, u64)> = HashMap::new();
-
-        for row in rows {
-            let (age, ca, _pa, value, row_club_uid, club_name, contract_end, on_loan) = row?;
-            let in_scope = club_uid.is_none() || row_club_uid == club_uid;
-            if in_scope {
-                player_count += 1;
-                if let Some(age) = age {
-                    age_sum += age as i64;
-                    age_count += 1;
-                    *age_counts.entry(age_band_label(age)).or_default() += 1;
-                }
-                if ca > 0 {
-                    ca_values.push(ca);
-                    *ca_counts.entry(ca_band_label(ca)).or_default() += 1;
-                }
-                if let Some(value) = value {
-                    total_value += value as u64;
-                }
-                if row_club_uid.is_none() {
-                    free_agents += 1;
-                }
-                if on_loan == Some(true) {
-                    loanees += 1;
-                }
-                if let (Some(end), Some(cutoff)) = (contract_end.as_deref(), cutoff) {
-                    if end <= cutoff.format("%Y-%m-%d").to_string().as_str()
-                        && game_date.is_none_or(|start| {
-                            end >= start.format("%Y-%m-%d").to_string().as_str()
-                        })
-                    {
-                        expiring += 1;
-                    }
-                }
-                if let Some(year) = contract_end.as_deref().and_then(contract_year) {
-                    *contract_years.entry(year).or_default() += 1;
-                }
-            }
-            if let (Some(uid), Some(name)) = (row_club_uid, club_name) {
-                let entry = clubs.entry(uid).or_insert((name, 0, 0, 0, 0, 0));
-                entry.1 += 1;
-                entry.2 += ca as u64;
-                entry.3 = entry.3.max(ca);
-                if let Some(age) = age {
-                    entry.4 += age as u64;
-                }
-                if let Some(value) = value {
-                    entry.5 += value as u64;
-                }
-            }
-        }
-
-        ca_values.sort_unstable();
-        let median_ca = ca_values.get(ca_values.len() / 2).copied().unwrap_or(0);
-        let mut top_clubs: Vec<ClubOverview> = clubs
-            .iter()
-            .filter(|(_, (_, players, _, _, _, _))| *players >= 10)
-            .map(
-                |(club_uid, (club_name, players, ca_sum, max_ca, age_sum, value))| ClubOverview {
-                    club_uid: *club_uid,
-                    club_name: club_name.clone(),
-                    players: *players,
-                    avg_ca: round1(*ca_sum as f64 / *players as f64),
-                    max_ca: *max_ca,
-                    avg_age: round1(*age_sum as f64 / *players as f64),
-                    total_value: *value,
-                },
-            )
-            .collect();
-        let by_strength = |left: &ClubOverview, right: &ClubOverview| {
-            right
-                .avg_ca
-                .total_cmp(&left.avg_ca)
-                .then_with(|| right.players.cmp(&left.players))
-        };
-        top_clubs.sort_by(by_strength);
-        top_clubs.truncate(12);
-        if let Some(scope_uid) = club_uid
-            && !top_clubs.iter().any(|club| club.club_uid == scope_uid)
-            && let Some((club_name, players, ca_sum, max_ca, age_sum, value)) =
-                clubs.get(&scope_uid)
-            && *players > 0
-        {
-            top_clubs.push(ClubOverview {
-                club_uid: scope_uid,
-                club_name: club_name.clone(),
-                players: *players,
-                avg_ca: round1(*ca_sum as f64 / *players as f64),
-                max_ca: *max_ca,
-                avg_age: round1(*age_sum as f64 / *players as f64),
-                total_value: *value,
-            });
-            top_clubs.sort_by(by_strength);
-        }
-
-        Ok(AnalysisOverview {
-            total_players: player_count,
-            total_clubs,
-            average_age: round1(age_sum as f64 / age_count.max(1) as f64),
-            median_ca,
-            total_value,
-            free_agents,
-            loanees,
-            expiring_contracts: expiring,
-            game_date: game_date_text,
-            age_bands: distribution(&AGE_BANDS, &age_counts),
-            ca_bands: distribution(&CA_BANDS, &ca_counts),
-            contract_years: contract_year_bands(contract_years),
-            top_clubs,
-        })
-    }
-
     pub fn squad_analysis(&self, save_id: i64, club_uid: u32) -> Result<SquadAnalysis> {
         let page = self.query_players(&PlayerQuery {
             save_id,
@@ -4285,7 +4087,6 @@ fn staff_sort_expression(by: &str) -> String {
 }
 
 const AGE_BANDS: [&str; 6] = ["≤17", "18–21", "22–25", "26–29", "30–33", "34+"];
-const CA_BANDS: [&str; 6] = ["<100", "100–119", "120–139", "140–159", "160–179", "180+"];
 const SQUAD_GROUPS: [&str; 4] = ["门将", "后卫", "中场", "前锋"];
 
 fn round1(value: f64) -> f64 {
@@ -4300,17 +4101,6 @@ fn age_band_label(age: i32) -> &'static str {
         26..=29 => "26–29",
         30..=33 => "30–33",
         _ => "34+",
-    }
-}
-
-fn ca_band_label(ca: u16) -> &'static str {
-    match ca {
-        0..=99 => "<100",
-        100..=119 => "100–119",
-        120..=139 => "120–139",
-        140..=159 => "140–159",
-        160..=179 => "160–179",
-        _ => "180+",
     }
 }
 
@@ -4507,7 +4297,7 @@ mod tests {
     }
 
     #[test]
-    fn analysis_overview_scopes_to_one_club_and_reads_the_managed_club() {
+    fn reads_the_managed_club() {
         let store = Store::open_in_memory().expect("store");
         store
             .conn
@@ -4531,24 +4321,6 @@ mod tests {
         assert_eq!(managed.club_uid, 1099);
         assert_eq!(managed.club_name, "Milan");
         assert_eq!(managed.manager_name.as_deref(), Some("Alice"));
-
-        let global = store.analysis_overview(1, None).expect("global overview");
-        assert_eq!(global.total_players, 3);
-        assert_eq!(global.total_value, 6000);
-
-        let scoped = store
-            .analysis_overview(1, Some(1099))
-            .expect("scoped overview");
-        assert_eq!(scoped.total_players, 2);
-        assert_eq!(scoped.average_age, 22.0);
-        assert_eq!(scoped.median_ca, 150);
-        assert_eq!(scoped.total_value, 3000);
-        assert!(
-            scoped
-                .top_clubs
-                .iter()
-                .any(|club| club.club_uid == 1099 && club.players == 2)
-        );
     }
 
     #[test]

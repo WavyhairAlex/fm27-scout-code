@@ -1016,32 +1016,6 @@ export interface DistributionBand {
   count: number;
 }
 
-export interface ClubOverview {
-  club_uid: number;
-  club_name: string;
-  players: number;
-  avg_ca: number;
-  max_ca: number;
-  avg_age: number;
-  total_value: number;
-}
-
-export interface AnalysisOverview {
-  total_players: number;
-  total_clubs: number;
-  average_age: number;
-  median_ca: number;
-  total_value: number;
-  free_agents: number;
-  loanees: number;
-  expiring_contracts: number;
-  game_date: string | null;
-  age_bands: DistributionBand[];
-  ca_bands: DistributionBand[];
-  contract_years: DistributionBand[];
-  top_clubs: ClubOverview[];
-}
-
 export interface SquadAnalysis {
   club_uid: number;
   club_name: string;

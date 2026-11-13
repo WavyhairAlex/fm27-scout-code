@@ -11,9 +11,8 @@ use fm27_core::export::ExportWriter;
 use fm27_core::metadata::read_metadata;
 use fm27_core::model::{Attributes, ClubDetail, Positions};
 use fm27_core::store::{
-    AnalysisOverview, ClubFilterOptions, ClubPage, ClubQuery, FilterOptions, PlayerPage,
-    PlayerQuery, SaveRecord, SnapshotPoint, SquadAnalysis, StaffFilterOptions, StaffPage,
-    StaffQuery, Store,
+    ClubFilterOptions, ClubPage, ClubQuery, FilterOptions, PlayerPage, PlayerQuery, SaveRecord,
+    SnapshotPoint, SquadAnalysis, StaffFilterOptions, StaffPage, StaffQuery, Store,
 };
 use fm27_core::{
     ParseReport, Player, SaveSummary, inspect_save, parse_save_with_progress,
@@ -789,20 +788,6 @@ async fn managed_club(
 }
 
 #[tauri::command]
-async fn analysis_overview(
-    state: State<'_, AppState>,
-    save_id: i64,
-    club_uid: Option<u32>,
-) -> Result<AnalysisOverview, String> {
-    run_read_command(state, move |store| {
-        store
-            .analysis_overview(save_id, club_uid)
-            .map_err(error_string)
-    })
-    .await
-}
-
-#[tauri::command]
 async fn squad_analysis(
     state: State<'_, AppState>,
     save_id: i64,
@@ -1180,7 +1165,6 @@ pub fn run() {
             player_roles,
             growth_history,
             managed_club,
-            analysis_overview,
             squad_analysis,
             scout_overview,
             scout_advice,

@@ -26,7 +26,7 @@
 - 核心纯函数：`stats_moneyball::squad_needs_from_rows`。
 - Store：`Store::squad_needs(SquadNeedsRequest)`，复用 `stats_scored_rows` 缓存；默认 `core` / `overall` / 300 分钟。
 - Tauri 命令：`squad_needs`。
-- 前端：`useSquadNeeds(clubUid)`；分析中心新增独立“需求”页签（带俱乐部选择器），俱乐部检查器的阵容页也显示同一区块；点击候选打开球员详情。
+- 前端：`useSquadNeeds(clubUid)`；俱乐部检查器的阵容页显示需求区块；点击候选打开球员详情。分析中心的独立“需求”页签已移除。
 - 模式：三种侦察模式都可使用；不使用 CA/PA，只看统计质量与价格。
 
 ## 3. 真实存档示例（AP King - Milan，2027-10）

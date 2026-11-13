@@ -2,7 +2,6 @@ import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { writeText as writeClipboardText } from "@tauri-apps/plugin-clipboard-manager";
 import { open, save } from "@tauri-apps/plugin-dialog";
 import type {
-  AnalysisOverview,
   BatchEditResult,
   CaEstimate,
   CaEstimateRequest,
@@ -51,7 +50,6 @@ import {
   MOCK_SAVE_ID,
   MOCK_SUMMARY,
   MOCK_TRAIT_OPTIONS,
-  mockAnalysisOverview,
   mockClubDetail,
   mockClubFilterOptions,
   mockFilterOptions,
@@ -533,14 +531,6 @@ export async function logMessage(message: string): Promise<void> {
 export async function getManagedClub(saveId: number): Promise<ManagedClub | null> {
   if (!isTauri) return mockManagedClub();
   return timedInvoke<ManagedClub | null>("managed_club", { saveId });
-}
-
-export async function getAnalysisOverview(
-  saveId: number,
-  clubUid: number | null = null,
-): Promise<AnalysisOverview> {
-  if (!isTauri) return mockAnalysisOverview(clubUid);
-  return timedInvoke<AnalysisOverview>("analysis_overview", { saveId, clubUid });
 }
 
 export async function listCompetitions(saveId: number): Promise<Competition[]> {

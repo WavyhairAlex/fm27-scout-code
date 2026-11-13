@@ -1,10 +1,8 @@
 import type {
-  AnalysisOverview,
   Attributes,
   Club,
   ClubDetail,
   ClubFilterOptions,
-  ClubOverview,
   ClubPage,
   ClubQuery,
   ClubRow,
@@ -1632,90 +1630,8 @@ function mockAgeLabel(age: number): string {
   return "34+";
 }
 
-function mockCaLabel(ca: number): string {
-  if (ca < 100) return "<100";
-  if (ca < 120) return "100–119";
-  if (ca < 140) return "120–139";
-  if (ca < 160) return "140–159";
-  if (ca < 180) return "160–179";
-  return "180+";
-}
-
 function roundOne(value: number): number {
   return Math.round(value * 10) / 10;
-}
-
-export function mockAnalysisOverview(clubUid: number | null = null): AnalysisOverview {
-  const players =
-    clubUid == null
-      ? MOCK_PLAYERS
-      : MOCK_PLAYERS.filter((player) => player.club_uid === clubUid);
-  const ages = players.map((player) => player.age).filter((age): age is number => age != null);
-  const ca = players.map((player) => player.ca).sort((a, b) => a - b);
-  // Club strength is always save-wide so a scoped overview can compare against
-  // the rest of the database.
-  const clubs = new Map<number, ClubOverview>();
-  for (const player of MOCK_PLAYERS) {
-    if (player.club_uid == null || !player.club_name) continue;
-    const entry = clubs.get(player.club_uid) ?? {
-      club_uid: player.club_uid,
-      club_name: player.club_name,
-      players: 0,
-      avg_ca: 0,
-      max_ca: 0,
-      avg_age: 0,
-      total_value: 0,
-    };
-    entry.players += 1;
-    entry.avg_ca += player.ca;
-    entry.max_ca = Math.max(entry.max_ca, player.ca);
-    entry.avg_age += player.age ?? 0;
-    entry.total_value += player.transfer_value ?? 0;
-    clubs.set(player.club_uid, entry);
-  }
-  const topClubs = [...clubs.values()]
-    .map((club) => ({
-      ...club,
-      avg_ca: roundOne(club.avg_ca / club.players),
-      avg_age: roundOne(club.avg_age / club.players),
-    }))
-    .sort((left, right) => right.avg_ca - left.avg_ca)
-    .slice(0, 12);
-  if (clubUid != null && !topClubs.some((club) => club.club_uid === clubUid)) {
-    const entry = clubs.get(clubUid);
-    if (entry && entry.players > 0) {
-      topClubs.push({
-        ...entry,
-        avg_ca: roundOne(entry.avg_ca / entry.players),
-        avg_age: roundOne(entry.avg_age / entry.players),
-      });
-      topClubs.sort((left, right) => right.avg_ca - left.avg_ca);
-    }
-  }
-  const contractYears = new Map<string, number>();
-  for (const player of players) {
-    const year = player.contract?.end?.slice(0, 4);
-    if (year) contractYears.set(year, (contractYears.get(year) ?? 0) + 1);
-  }
-  return {
-    total_players: players.length,
-    total_clubs: new Set(MOCK_PLAYERS.map((player) => player.club_uid)).size,
-    average_age: roundOne(ages.reduce((sum, age) => sum + age, 0) / Math.max(1, ages.length)),
-    median_ca: ca[Math.floor(ca.length / 2)] ?? 0,
-    total_value: players.reduce((sum, player) => sum + (player.transfer_value ?? 0), 0),
-    free_agents: players.filter((player) => player.club_uid == null).length,
-    loanees: players.filter((player) => player.on_loan).length,
-    expiring_contracts: players.filter(
-      (player) => player.contract?.end != null && player.contract.end <= "2027-07-13",
-    ).length,
-    game_date: "2026-07-13",
-    age_bands: bandLabels(ages, mockAgeLabel, ["≤17", "18–21", "22–25", "26–29", "30–33", "34+"]),
-    ca_bands: bandLabels(ca, mockCaLabel, ["<100", "100–119", "120–139", "140–159", "160–179", "180+"]),
-    contract_years: [...contractYears.entries()]
-      .sort(([a], [b]) => a.localeCompare(b))
-      .map(([label, count]) => ({ label, count })),
-    top_clubs: topClubs,
-  };
 }
 
 export function mockSquadAnalysis(clubUid: number): SquadAnalysis {
