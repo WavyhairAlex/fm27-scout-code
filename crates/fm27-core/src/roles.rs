@@ -656,6 +656,34 @@ pub fn role_score(spec: &RoleSpec, attributes: &Attributes, positions: &Position
     score_uncached(spec, attributes, positions).0
 }
 
+/// The role's weighted attribute average, 1-20, before position familiarity is
+/// applied. Scouting applies its own familiarity factors so a role rating and a
+/// position rating stay separate inputs.
+pub fn raw_role_score(spec: &RoleSpec, attributes: &Attributes) -> f32 {
+    if let Some(role) = compiled_roles()
+        .iter()
+        .find(|role| std::ptr::eq(role.spec, spec))
+    {
+        let mut weighted = 0.0f32;
+        for (index, weight) in &role.weights {
+            let value = index.map_or(1, |index| attributes.values[index]) as f32;
+            weighted += value * weight;
+        }
+        return if role.total > 0.0 {
+            weighted / role.total
+        } else {
+            1.0
+        };
+    }
+    let mut weighted = 0.0f32;
+    let mut total = 0.0f32;
+    for (key, weight) in spec.weights {
+        weighted += attributes.get(key).unwrap_or(1) as f32 * weight;
+        total += weight;
+    }
+    if total > 0.0 { weighted / total } else { 1.0 }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

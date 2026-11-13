@@ -19,7 +19,6 @@ export function ExportDialog() {
   const viewMode = useAppStore((state) => state.viewMode);
   const filters = useAppStore((state) => state.filters);
   const sort = useAppStore((state) => state.sort);
-  const hiddenEnabled = useAppStore((state) => state.hiddenEnabled);
   const dataMode = useAppStore((state) => state.dataMode);
   const selectedUid = useAppStore((state) => state.selectedUid);
   const compareUids = useAppStore((state) => state.compareUids);
@@ -76,7 +75,6 @@ export function ExportDialog() {
                 sort,
                 0,
                 100000,
-                hiddenEnabled,
               ),
               uids: scope === "selected" ? selected : [],
             },

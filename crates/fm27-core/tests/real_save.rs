@@ -95,6 +95,54 @@ fn parses_the_reference_career() {
 
 #[test]
 #[ignore = "requires a real FM27 save and FM27_TEST_SAVE"]
+fn labels_managed_squad_teams_from_the_fixture_calendar() {
+    use fm27_core::store::Store;
+    use std::collections::HashSet;
+
+    let path = std::env::var("FM27_TEST_SAVE").expect("set FM27_TEST_SAVE");
+    let parsed = parse_save(&path).expect("parse save");
+    assert!(
+        !parsed.team_competitions.is_empty(),
+        "fixture team competitions"
+    );
+    let managed = parsed.managed_club.as_ref().expect("managed club");
+    let club = parsed
+        .clubs
+        .iter()
+        .find(|club| club.uid == managed.club_uid)
+        .expect("managed club record");
+    let team_ids: HashSet<u32> = club.teams.iter().copied().collect();
+    assert!(
+        parsed
+            .team_competitions
+            .iter()
+            .any(|row| team_ids.contains(&row.team_id)),
+        "managed club teams appear in the fixture calendar"
+    );
+
+    let mut store = Store::open_in_memory().expect("open store");
+    let save_id = store.insert_parsed(&parsed).expect("insert");
+    let analysis = store
+        .squad_analysis(save_id, managed.club_uid)
+        .expect("squad");
+    assert!(!analysis.teams.is_empty(), "squad teams");
+    assert!(
+        analysis
+            .teams
+            .iter()
+            .any(|team| team.label.kind == "firstTeam")
+    );
+    assert!(
+        analysis
+            .teams
+            .iter()
+            .any(|team| team.competition_name.is_some() && team.label.kind != "unknown"),
+        "at least one named competition labels a team"
+    );
+}
+
+#[test]
+#[ignore = "requires a real FM27 save and FM27_TEST_SAVE"]
 fn resolves_second_nationality_names() {
     let path = std::env::var("FM27_TEST_SAVE").expect("set FM27_TEST_SAVE");
     let parsed = parse_save(&path).expect("parse save");
@@ -182,18 +230,6 @@ fn caches_queries_and_exports_the_reference_career() {
     assert_eq!(competitions[1].database_id, Some(2));
     assert_eq!(competitions[1].stage_ids, vec![187]);
 
-    let overview = store.analysis_overview(save_id, None).expect("overview");
-    assert_eq!(overview.total_players, 46_273);
-    assert!(!overview.top_clubs.is_empty());
-    assert!(overview.median_ca > 0);
-
-    let scoped = store
-        .analysis_overview(save_id, Some(1099))
-        .expect("scoped overview");
-    assert!(scoped.total_players > 0);
-    assert!(scoped.total_players < overview.total_players);
-    assert!(scoped.top_clubs.iter().any(|club| club.club_uid == 1099));
-
     let managed = store
         .managed_club(save_id)
         .expect("managed club")
@@ -219,6 +255,14 @@ fn caches_queries_and_exports_the_reference_career() {
     assert_eq!(squad.club_name, "Casciavit Milano");
     assert!(squad.player_count > 0);
     assert!(!squad.players.is_empty());
+    // A player's club is resolved through a team, so every squad row carries
+    // the slot that the Overview groups by.
+    assert!(
+        squad
+            .players
+            .iter()
+            .all(|player| player.team_slot.is_some())
+    );
 
     let options = store.filter_options(save_id).expect("filter options");
     assert!(!options.clubs.is_empty());

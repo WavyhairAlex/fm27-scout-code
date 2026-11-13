@@ -11,8 +11,8 @@
 - Apart from a user-triggered update check, makes no network requests; the
   updater only contacts the configured GitHub Releases endpoint and downloads a
   signed package, and no save or player data is uploaded.
-- Hidden attributes are off by default; enabling them shows a single-player-only
-  warning.
+- Hidden attributes are always shown in attribute views and carry a
+  single-player-only warning.
 - Databases, logs and snapshots are written only to
   `~/Library/Application Support/com.fm27scout.desktop/`; snapshots are deleted
   after parsing.
@@ -66,6 +66,27 @@
   stats-based Moneyball model. It uses role/CA quality and transfer value plus
   wages; `transfer_value` is not an actual transfer fee, players with unknown
   fees or wages are excluded by default, and league strength is not adjusted.
+- Transfer scouting is an estimator. Fit uses the editor's role weights and
+  position familiarity, not FM's own role ratings. Signing probability and the
+  fee/wage estimates are hand-tuned from transfer value, contract status, club
+  reputation, personality, budget and wage room; they are not calibrated against
+  completed transfers. Release clauses use the FM27 clause kinds
+  (`0, 1, 2, 16, 17, 18, 27, 31, 55, 56`); a clause of zero is ignored because
+  its behaviour is unverified. Relegation and promotion conditions are not
+  modelled, so those clauses are treated as live caps. The squad view works from
+  every player whose `club_uid` is the managed club and splits them into team
+  tabs by their registered team slot. The save stores team ids and their order
+  in the club's list but no team names or age categories. Tab labels are derived
+  from the fixture calendar: the current season's competition for each team gives
+  an age group such as U20 or U18; a named senior competition on a non-first team
+  reads as Reserves; a team with an unnamed competition or no competitive
+  fixtures falls back to its squad age profile (Youth or Reserves) and is marked
+  inferred, otherwise it keeps the Squad N label. These are derived labels, not
+  official in-game names. A save only stores full fixtures for the leagues loaded
+  in that career, so a foreign club inspected from a save whose league is not
+  loaded can only use the age fallback. Competition names come from
+  `shared/competition-names.csv`; unnamed competitions use the same fallback.
+  Tactics are not read; the role filter is manual.
 - Stats moneyball is also experimental. FM27 zeroes the advanced-stat block
   (key passes, progressive passes, interceptions, headers, clearances, blocks,
   sprints, saves, xGP) for about 37% of players; those zeroes are stored as

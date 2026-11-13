@@ -1,7 +1,6 @@
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import {
   appInfo,
-  getAnalysisOverview,
   getManagedClub,
   getClub,
   getClubFilterOptions,
@@ -9,6 +8,8 @@ import {
   getGrowthHistory,
   getPlayer,
   getPlayerRoles,
+  getScoutAdvice,
+  getScoutOverview,
   getStaffFilterOptions,
   getSquadAnalysis,
   listSaves,
@@ -23,6 +24,7 @@ import {
 import type {
   ClubQuery,
   PlayerQuery,
+  ScoutRequest,
   SortRule,
   StaffQuery,
   StatsMoneyballRequest,
@@ -41,7 +43,6 @@ export function buildPlayerQuery(
   sort: SortRule[],
   page: number,
   pageSize: number,
-  includeHidden: boolean,
 ): PlayerQuery {
   const primary = sort[0];
   return {
@@ -74,7 +75,7 @@ export function buildPlayerQuery(
     wage_max: filters.wageMax,
     contract_end_before: filters.contractEndBefore,
     contract_end_after: filters.contractEndAfter,
-    include_hidden: includeHidden,
+    include_hidden: true,
     sort,
     sort_by: primary?.by ?? "ca",
     sort_dir: primary?.dir ?? "desc",
@@ -192,9 +193,8 @@ export function usePlayerPage(enabled = true) {
   const sort = useAppStore((state) => state.sort);
   const page = useAppStore((state) => state.page);
   const pageSize = useAppStore((state) => state.pageSize);
-  const hiddenEnabled = useAppStore((state) => state.hiddenEnabled);
   const query = saveId
-    ? buildPlayerQuery(saveId, filters, sort, page, pageSize, hiddenEnabled)
+    ? buildPlayerQuery(saveId, filters, sort, page, pageSize)
     : null;
   return useQuery({
     queryKey: ["players", query],
@@ -340,10 +340,9 @@ export function useClubFilterOptions() {
 
 export function usePlayerDetail(uid: number | null) {
   const saveId = useAppStore((state) => state.saveId);
-  const hiddenEnabled = useAppStore((state) => state.hiddenEnabled);
   return useQuery({
-    queryKey: ["player", saveId, uid, hiddenEnabled],
-    queryFn: () => getPlayer(saveId!, uid!, hiddenEnabled),
+    queryKey: ["player", saveId, uid],
+    queryFn: () => getPlayer(saveId!, uid!),
     enabled: saveId != null && uid != null,
     staleTime: 60_000,
   });
@@ -353,7 +352,7 @@ export function usePlayerEditDetail(uid: number | null) {
   const saveId = useAppStore((state) => state.saveId);
   return useQuery({
     queryKey: ["player-edit", saveId, uid],
-    queryFn: () => getPlayer(saveId!, uid!, true),
+    queryFn: () => getPlayer(saveId!, uid!),
     enabled: saveId != null && uid != null,
     staleTime: 60_000,
   });
@@ -388,19 +387,6 @@ export function useManagedClub(saveId: number | null) {
   });
 }
 
-export function useAnalysisOverview(
-  enabled = true,
-  clubUid: number | null = null,
-) {
-  const saveId = useAppStore((state) => state.saveId);
-  return useQuery({
-    queryKey: ["analysis-overview", saveId, clubUid],
-    queryFn: () => getAnalysisOverview(saveId!, clubUid),
-    enabled: saveId != null && enabled,
-    staleTime: 60_000,
-  });
-}
-
 export function useSquadAnalysis(clubUid: number | null) {
   const saveId = useAppStore((state) => state.saveId);
   return useQuery({
@@ -411,15 +397,33 @@ export function useSquadAnalysis(clubUid: number | null) {
   });
 }
 
+export function useScoutOverview(clubUid: number | null) {
+  const saveId = useAppStore((state) => state.saveId);
+  return useQuery({
+    queryKey: ["scout-overview", saveId, clubUid],
+    queryFn: () => getScoutOverview(saveId!, clubUid!),
+    enabled: saveId != null && clubUid != null,
+    staleTime: 60_000,
+  });
+}
+
+export function useScoutAdvice(request: ScoutRequest | null) {
+  return useQuery({
+    queryKey: ["scout-advice", request],
+    queryFn: () => getScoutAdvice(request!),
+    enabled: request != null,
+    placeholderData: keepPreviousData,
+    staleTime: 30_000,
+  });
+}
+
 export function useFilterOptions() {
   const saveId = useAppStore((state) => state.saveId);
   const filters = useAppStore((state) => state.filters);
-  const sort = useAppStore((state) => state.sort);
-  const hiddenEnabled = useAppStore((state) => state.hiddenEnabled);
   // Filter options do not depend on table sorting; excluding it avoids a full
   // facet recomputation whenever the user changes the sort order.
   const query = saveId
-    ? buildPlayerQuery(saveId, filters, [], 0, 1, hiddenEnabled)
+    ? buildPlayerQuery(saveId, filters, [], 0, 1)
     : null;
   return useQuery({
     queryKey: ["filter-options", query],

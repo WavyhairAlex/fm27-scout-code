@@ -11,9 +11,8 @@ use fm27_core::export::ExportWriter;
 use fm27_core::metadata::read_metadata;
 use fm27_core::model::{Attributes, ClubDetail, Positions};
 use fm27_core::store::{
-    AnalysisOverview, ClubFilterOptions, ClubPage, ClubQuery, FilterOptions, PlayerPage,
-    PlayerQuery, SaveRecord, SnapshotPoint, SquadAnalysis, StaffFilterOptions, StaffPage,
-    StaffQuery, Store,
+    ClubFilterOptions, ClubPage, ClubQuery, FilterOptions, PlayerPage, PlayerQuery, SaveRecord,
+    SnapshotPoint, SquadAnalysis, StaffFilterOptions, StaffPage, StaffQuery, Store,
 };
 use fm27_core::{
     ParseReport, Player, SaveSummary, inspect_save, parse_save_with_progress,
@@ -789,20 +788,6 @@ async fn managed_club(
 }
 
 #[tauri::command]
-async fn analysis_overview(
-    state: State<'_, AppState>,
-    save_id: i64,
-    club_uid: Option<u32>,
-) -> Result<AnalysisOverview, String> {
-    run_read_command(state, move |store| {
-        store
-            .analysis_overview(save_id, club_uid)
-            .map_err(error_string)
-    })
-    .await
-}
-
-#[tauri::command]
 async fn squad_analysis(
     state: State<'_, AppState>,
     save_id: i64,
@@ -812,6 +797,31 @@ async fn squad_analysis(
         store
             .squad_analysis(save_id, club_uid)
             .map_err(error_string)
+    })
+    .await
+}
+
+#[tauri::command]
+async fn scout_overview(
+    state: State<'_, AppState>,
+    save_id: i64,
+    club_uid: u32,
+) -> Result<fm27_core::scouting::ScoutOverview, String> {
+    run_read_command(state, move |store| {
+        store
+            .scout_overview(save_id, club_uid)
+            .map_err(error_string)
+    })
+    .await
+}
+
+#[tauri::command]
+async fn scout_advice(
+    state: State<'_, AppState>,
+    request: fm27_core::scouting::ScoutRequest,
+) -> Result<fm27_core::scouting::Scouted, String> {
+    run_read_command(state, move |store| {
+        store.scout_advice(&request).map_err(error_string)
     })
     .await
 }
@@ -925,7 +935,6 @@ struct MenuLabels {
     settings: &'static str,
     sidebar: &'static str,
     inspector: &'static str,
-    hidden: &'static str,
     compare: &'static str,
     analysis: &'static str,
     undo: &'static str,
@@ -952,7 +961,6 @@ fn menu_labels(locale: &str) -> MenuLabels {
             settings: "设置…",
             sidebar: "显示/隐藏筛选栏",
             inspector: "显示/隐藏球员档案",
-            hidden: "开关隐藏属性",
             compare: "球员对比",
             analysis: "分析中心",
             undo: "撤销",
@@ -977,7 +985,6 @@ fn menu_labels(locale: &str) -> MenuLabels {
             settings: "Settings…",
             sidebar: "Show/Hide Filters",
             inspector: "Show/Hide Player Profile",
-            hidden: "Toggle Hidden Attributes",
             compare: "Compare Players",
             analysis: "Analysis Centre",
             undo: "Undo",
@@ -1025,13 +1032,6 @@ fn build_menu<R: tauri::Runtime>(
         labels.inspector,
         true,
         Some("CmdOrCtrl+Shift+I"),
-    )?;
-    let hidden = MenuItem::with_id(
-        handle,
-        "hidden",
-        labels.hidden,
-        true,
-        Some("CmdOrCtrl+Shift+H"),
     )?;
     let compare = MenuItem::with_id(
         handle,
@@ -1084,7 +1084,7 @@ fn build_menu<R: tauri::Runtime>(
         handle,
         labels.view_menu,
         true,
-        &[&sidebar, &inspector, &sep5, &hidden, &compare, &analysis],
+        &[&sidebar, &inspector, &sep5, &compare, &analysis],
     )?;
     let help_menu = Submenu::with_items(handle, labels.help_menu, true, &[&helper])?;
     Menu::with_items(
@@ -1165,8 +1165,9 @@ pub fn run() {
             player_roles,
             growth_history,
             managed_club,
-            analysis_overview,
             squad_analysis,
+            scout_overview,
+            scout_advice,
             list_competitions,
             get_filter_options,
             delete_save,

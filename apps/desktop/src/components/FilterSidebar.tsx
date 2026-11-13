@@ -15,7 +15,7 @@ import { attributeLabel, nationLabel } from "@/lib/labels";
 import { useI18n } from "@/lib/useI18n";
 import { cn } from "@/lib/utils";
 import { EMPTY_FILTERS, useAppStore, type Filters } from "@/store/app";
-import { Badge, Button, Checkbox, Input, Label, Select, Switch } from "./ui";
+import { Button, Checkbox, Input, Label, Select } from "./ui";
 import { MultiSelect } from "./MultiSelect";
 import { RangeInput } from "./RangeInput";
 
@@ -37,10 +37,7 @@ export function FilterSidebar() {
   const addAttribute = useAppStore((state) => state.addAttribute);
   const updateAttribute = useAppStore((state) => state.updateAttribute);
   const removeAttribute = useAppStore((state) => state.removeAttribute);
-  const hiddenEnabled = useAppStore((state) => state.hiddenEnabled);
   const dataMode = useAppStore((state) => state.dataMode);
-  const setHiddenEnabled = useAppStore((state) => state.setHiddenEnabled);
-  const pushToast = useAppStore((state) => state.pushToast);
   const summary = useAppStore((state) => state.summary);
   const savedViews = useAppStore((state) => state.savedViews);
   const saveView = useAppStore((state) => state.saveView);
@@ -626,43 +623,6 @@ export function FilterSidebar() {
           </div>
         </Section>
       </div>
-
-      {dataMode === "full" && (
-      <div className="border-t border-[var(--line)] px-3 py-3">
-        <div className="flex items-start justify-between gap-2">
-          <div>
-            <div className="text-[11px] font-semibold text-[var(--ink)]">
-              {t("filter.hiddenAttributes")}
-            </div>
-            <div className="mt-0.5 text-[10px] leading-snug text-[var(--muted)]">
-              {t("filter.hiddenWarning")}
-            </div>
-          </div>
-          <Switch
-            checked={hiddenEnabled}
-            onChange={(enabled) => {
-              if (!enabled) {
-                setHiddenEnabled(false);
-                return;
-              }
-              pushToast({
-                title: t("toast.hiddenOn.title"),
-                description: t("toast.hiddenOn.description"),
-                tone: "default",
-              });
-              setHiddenEnabled(true);
-            }}
-            label={t("filter.hiddenAttributes")}
-          />
-        </div>
-        {hiddenEnabled && (
-          <div className="mt-2 flex items-center gap-1.5">
-            <Badge tone="danger">{t("filter.soloOnly")}</Badge>
-            <span className="text-[10px] text-[var(--muted)]">{t("filter.hiddenEnabled")}</span>
-          </div>
-        )}
-      </div>
-      )}
     </aside>
   );
 }

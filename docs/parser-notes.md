@@ -105,6 +105,10 @@ object kind is 2 or 3. The completeness scan is an O(n) pass that finds 15 conse
 bytes in `1..=20` and then validates 54 bytes in `1..=125`; it found 485 markerless
 records in the reference save.
 
+The team id at `+16` resolves through the club team lists to the fielding club and the
+team's slot in that club's stored list. Slot 0 is the first team; the save names no
+other team, so reserve, youth and affiliate sides are distinguishable only by slot.
+
 Attribute display values use `max(1, (raw + 2) / 5)`. Natural positions are ratings
 ≥18; accomplished are 15–17, both sorted by rating descending.
 
@@ -206,6 +210,49 @@ scope code at `+14`, and the scope id (competition or nation) at `+16`. An entry
 the player whose record starts within 30 bytes before it. The reference save has 17 unserved
 bans.
 
+## Fixture calendar and squad labels
+
+FM27 stores no team names or age categories, so reserve and youth tabs are
+labelled from the competition each team played in. The fixture calendar lives in
+the unlisted span after `non_pl_hist_ls`, in the same region as the season
+statistics. It is a packed run of 66-byte records whose locator origin is the
+home team id:
+
+```text
+marker              -12  1F
+stage id            -11  u32
+home team id         +0  u32
+sentinels            +4  FF, +11 FF
+away team id         +7  u32
+kick-off date       +13  two u16 words; year at +15
+season start year   +22  u16 (0 or FFFF means none)
+```
+
+The locator is accepted only when the record lies inside the frame, the marker
+and both sentinels match, the kick-off year is within 7 years before to 8 years
+after the save's clock year, and both team ids are below 3,000,000. The game
+writes the calendar as the largest run of records in one frame; other frames
+hold stray copies and fixed template blocks, so the scan keeps the largest run
+split by gaps over 1 MiB. Frame heads of 16 KiB identify the dense frame without
+decompressing the whole region, and a physically adjacent frame is merged when
+it holds at least 10% as many records, which covers a calendar that crosses a
+frame boundary.
+
+Only the save's current season is used. The season starts on 1 July, matching
+fmsave's boundary; the current season is used when it holds at least 20 records,
+otherwise the latest completed season with the most records is used. Stages are
+joined through the parsed competition index, and every home and away appearance
+is counted per team and competition. The resulting `team_competitions` table is
+what `squad_analysis` reads.
+
+Labels use the primary non-friendly competition by fixture count. Explicit
+`U19` / `Under 19` / `Sub-20` markers win first, then `Primavera` (U20), then
+`Youth` / `Academy` (age unknown), then `Reserve` / `B Team`. A named senior
+competition on a non-first team means Reserves. An unnamed or fixture-less
+competition falls back to the squad's age profile: mostly age 20 or younger is
+Youth, an adult squad is Reserves, and a mixed profile stays Squad N. The
+fallback is marked inferred so the UI never presents it as a competition name.
+
 ## Snapshots and role scores
 
 Every successful parse writes one `player_snapshots` row per player, keyed by
@@ -232,6 +279,14 @@ tail. Contract type is read from the head at clause base -35 (gate 5).
 
 Loans use the tail-shaped block before a no-terms chain record: marker `FFFFFFFF` at
 +24 and an end date at +28.
+
+Clause kinds `0, 1, 2, 16, 17, 18, 27, 31, 55` and `56` are minimum-fee release
+obligations (and their relegation, promotion and competition variants, including the
+active forms). Their value is the fee and their `parameter` counts days from the
+contract start until the clause expires; a condition past 7,305 days is treated as a
+mark that never expires. Scouting caps the estimated fee at the lowest clause that
+still holds. Clause kind `0` with a value of zero is ignored because the game's
+behaviour is unverified.
 
 The in-effect contract tail also carries transfer status. At +39 the flags byte uses
 bit 0 for listed for transfer and bit 1 for listed for loan; other bits (for example

@@ -1,10 +1,8 @@
 import type {
-  AnalysisOverview,
   Attributes,
   Club,
   ClubDetail,
   ClubFilterOptions,
-  ClubOverview,
   ClubPage,
   ClubQuery,
   ClubRow,
@@ -19,9 +17,21 @@ import type {
   Positions,
   RoleScore,
   SaveRecord,
+  ScoutDeparture,
+  ScoutDepartureAction,
+  ScoutDepthPlayer,
+  ScoutFitting,
+  ScoutLine,
+  ScoutOverview,
+  ScoutPlayer,
+  ScoutRequest,
+  ScoutRoleInfo,
+  ScoutSuggestion,
+  Scouted,
   SnapshotPoint,
   SaveSummary,
   SquadAnalysis,
+  SquadTeam,
   Stadium,
   StaffFilterOptions,
   StaffAttributes,
@@ -219,7 +229,9 @@ function buildPlayer(index: number): Player {
     league_competition_id: 22,
     league_name: "Italian Serie A",
     team_id: 800 + index,
-    team_slot: 0,
+    // Three mock squads so the Overview grouping has something to show:
+    // first team, then two youth sides by age.
+    team_slot: age >= 22 ? 0 : age >= 19 ? 1 : 2,
     club_join_date: "2025-07-14",
     natural_positions: pos2 ? [pos1, pos2] : [pos1],
     accomplished_positions: [],
@@ -398,6 +410,8 @@ export function mockPlayerRow(player: Player): PlayerRow {
     age: player.age,
     club_uid: player.club_uid,
     club_name: player.club_name,
+    team_id: player.team_id,
+    team_slot: player.team_slot,
     league_competition_id: player.league_competition_id,
     league_name: player.league_name,
     nation_id: player.nation_id,
@@ -1621,90 +1635,8 @@ function mockAgeLabel(age: number): string {
   return "34+";
 }
 
-function mockCaLabel(ca: number): string {
-  if (ca < 100) return "<100";
-  if (ca < 120) return "100–119";
-  if (ca < 140) return "120–139";
-  if (ca < 160) return "140–159";
-  if (ca < 180) return "160–179";
-  return "180+";
-}
-
 function roundOne(value: number): number {
   return Math.round(value * 10) / 10;
-}
-
-export function mockAnalysisOverview(clubUid: number | null = null): AnalysisOverview {
-  const players =
-    clubUid == null
-      ? MOCK_PLAYERS
-      : MOCK_PLAYERS.filter((player) => player.club_uid === clubUid);
-  const ages = players.map((player) => player.age).filter((age): age is number => age != null);
-  const ca = players.map((player) => player.ca).sort((a, b) => a - b);
-  // Club strength is always save-wide so a scoped overview can compare against
-  // the rest of the database.
-  const clubs = new Map<number, ClubOverview>();
-  for (const player of MOCK_PLAYERS) {
-    if (player.club_uid == null || !player.club_name) continue;
-    const entry = clubs.get(player.club_uid) ?? {
-      club_uid: player.club_uid,
-      club_name: player.club_name,
-      players: 0,
-      avg_ca: 0,
-      max_ca: 0,
-      avg_age: 0,
-      total_value: 0,
-    };
-    entry.players += 1;
-    entry.avg_ca += player.ca;
-    entry.max_ca = Math.max(entry.max_ca, player.ca);
-    entry.avg_age += player.age ?? 0;
-    entry.total_value += player.transfer_value ?? 0;
-    clubs.set(player.club_uid, entry);
-  }
-  const topClubs = [...clubs.values()]
-    .map((club) => ({
-      ...club,
-      avg_ca: roundOne(club.avg_ca / club.players),
-      avg_age: roundOne(club.avg_age / club.players),
-    }))
-    .sort((left, right) => right.avg_ca - left.avg_ca)
-    .slice(0, 12);
-  if (clubUid != null && !topClubs.some((club) => club.club_uid === clubUid)) {
-    const entry = clubs.get(clubUid);
-    if (entry && entry.players > 0) {
-      topClubs.push({
-        ...entry,
-        avg_ca: roundOne(entry.avg_ca / entry.players),
-        avg_age: roundOne(entry.avg_age / entry.players),
-      });
-      topClubs.sort((left, right) => right.avg_ca - left.avg_ca);
-    }
-  }
-  const contractYears = new Map<string, number>();
-  for (const player of players) {
-    const year = player.contract?.end?.slice(0, 4);
-    if (year) contractYears.set(year, (contractYears.get(year) ?? 0) + 1);
-  }
-  return {
-    total_players: players.length,
-    total_clubs: new Set(MOCK_PLAYERS.map((player) => player.club_uid)).size,
-    average_age: roundOne(ages.reduce((sum, age) => sum + age, 0) / Math.max(1, ages.length)),
-    median_ca: ca[Math.floor(ca.length / 2)] ?? 0,
-    total_value: players.reduce((sum, player) => sum + (player.transfer_value ?? 0), 0),
-    free_agents: players.filter((player) => player.club_uid == null).length,
-    loanees: players.filter((player) => player.on_loan).length,
-    expiring_contracts: players.filter(
-      (player) => player.contract?.end != null && player.contract.end <= "2027-07-13",
-    ).length,
-    game_date: "2026-07-13",
-    age_bands: bandLabels(ages, mockAgeLabel, ["≤17", "18–21", "22–25", "26–29", "30–33", "34+"]),
-    ca_bands: bandLabels(ca, mockCaLabel, ["<100", "100–119", "120–139", "140–159", "160–179", "180+"]),
-    contract_years: [...contractYears.entries()]
-      .sort(([a], [b]) => a.localeCompare(b))
-      .map(([label, count]) => ({ label, count })),
-    top_clubs: topClubs,
-  };
 }
 
 export function mockSquadAnalysis(clubUid: number): SquadAnalysis {
@@ -1724,6 +1656,43 @@ export function mockSquadAnalysis(clubUid: number): SquadAnalysis {
     if ([row.positions.dm, row.positions.ml, row.positions.mc, row.positions.mr].some((rating) => rating >= 15)) positionGroups[2].count += 1;
     if ([row.positions.stc, row.positions.aml, row.positions.amc, row.positions.amr].some((rating) => rating >= 15)) positionGroups[3].count += 1;
   }
+  const teamInfo: Record<number, Pick<SquadTeam, "competition_id" | "competition_name" | "fixture_count" | "label">> = {
+    0: {
+      competition_id: 22,
+      competition_name: "Italian Serie A",
+      fixture_count: 38,
+      label: { kind: "firstTeam", age: null },
+    },
+    1: {
+      competition_id: 3560,
+      competition_name: "Italian U20 Primavera 1",
+      fixture_count: 38,
+      label: { kind: "youth", age: 20 },
+    },
+    2: {
+      competition_id: 3572,
+      competition_name: "Italian U18 Division 1 Group A",
+      fixture_count: 26,
+      label: { kind: "youth", age: 18 },
+    },
+  };
+  const teams = [...new Set(rows.map((row) => row.team_slot).filter((slot): slot is number => slot != null))]
+    .sort((left, right) => left - right)
+    .map((slot): SquadTeam => {
+      const info = teamInfo[slot];
+      if (info) {
+        return { team_id: 800 + slot, slot, inferred: false, ...info };
+      }
+      return {
+        team_id: 800 + slot,
+        slot,
+        competition_id: null,
+        competition_name: null,
+        fixture_count: 0,
+        label: { kind: "unknown", age: null },
+        inferred: true,
+      };
+    });
   return {
     club_uid: clubUid,
     club_name: players[0]?.club_name ?? `Club ${clubUid}`,
@@ -1740,5 +1709,340 @@ export function mockSquadAnalysis(clubUid: number): SquadAnalysis {
       .sort(([a], [b]) => a.localeCompare(b))
       .map(([label, count]) => ({ label, count })),
     players: rows.sort((a, b) => b.ca - a.ca),
+    teams,
+  };
+}
+
+const MOCK_SCOUT_POSITIONS = [
+  "gk", "dr", "dc", "dl", "wbr", "wbl", "dm", "mc", "mr", "ml", "amr", "amc", "aml", "stc",
+];
+
+const MOCK_SCOUT_LINES: { key: string; positions: string[]; target: number }[] = [
+  { key: "gk", positions: ["gk"], target: 2 },
+  { key: "dc", positions: ["dc"], target: 4 },
+  { key: "rightBack", positions: ["dr", "wbr"], target: 2 },
+  { key: "leftBack", positions: ["dl", "wbl"], target: 2 },
+  { key: "dm", positions: ["dm"], target: 2 },
+  { key: "mc", positions: ["mc"], target: 3 },
+  { key: "rightWing", positions: ["amr", "mr"], target: 2 },
+  { key: "leftWing", positions: ["aml", "ml"], target: 2 },
+  { key: "amc", positions: ["amc"], target: 2 },
+  { key: "st", positions: ["stc"], target: 3 },
+];
+
+const MOCK_SCOUT_ROLES: ScoutRoleInfo[] = [
+  ["goalkeeper", "门将（防守）", ["gk"]],
+  ["sweeper_keeper", "清道夫门将（策应）", ["gk"]],
+  ["central_defender", "中后卫（防守）", ["dc"]],
+  ["ball_playing_defender", "出球后卫（防守）", ["dc"]],
+  ["no_nonsense_centre_back", "传统中后卫（防守）", ["dc"]],
+  ["full_back", "边后卫（防守）", ["dl", "dr"]],
+  ["wing_back", "翼卫（进攻）", ["dl", "dr", "wbl", "wbr"]],
+  ["inverted_full_back", "内收边后卫（防守）", ["dl", "dr"]],
+  ["defensive_midfielder", "防守型中场（防守）", ["dm"]],
+  ["anchor", "锚定中场（防守）", ["dm"]],
+  ["deep_lying_playmaker", "后组织核心（策应）", ["dm", "mc"]],
+  ["central_midfielder", "中场（策应）", ["mc"]],
+  ["box_to_box_midfielder", "全能中场（策应）", ["mc"]],
+  ["advanced_playmaker", "前组织核心（进攻）", ["amc", "mc"]],
+  ["attacking_midfielder", "攻击型中场（进攻）", ["amc"]],
+  ["winger", "边锋（进攻）", ["aml", "amr", "ml", "mr"]],
+  ["inverted_winger", "内切边锋（进攻）", ["aml", "amr"]],
+  ["inside_forward", "内锋（进攻）", ["aml", "amr", "stc"]],
+  ["advanced_forward", "突前前锋（进攻）", ["stc"]],
+  ["poacher", "抢点前锋（进攻）", ["stc"]],
+  ["complete_forward", "全能前锋（进攻）", ["stc"]],
+  ["target_forward", "站桩中锋（进攻）", ["stc"]],
+  ["deep_lying_forward", "拖后前锋（策应）", ["stc"]],
+  ["pressing_forward", "逼抢前锋（防守）", ["stc"]],
+].map(([id, name, positions]) => ({
+  id: id as string,
+  name: name as string,
+  positions: positions as string[],
+}));
+
+function mockScoutPlayer(player: Player): ScoutPlayer {
+  return {
+    uid: player.uid,
+    name: player.name,
+    age: player.age,
+    club_uid: player.club_uid,
+    club_name: player.club_name,
+    ca: player.ca,
+    pa: player.pa,
+    transfer_value:
+      player.transfer_value_state === "ok" ? player.transfer_value : null,
+    wage: player.contract?.wage ?? null,
+    contract_end: player.contract?.end ?? null,
+    transfer_listed: player.transfer_listed,
+  };
+}
+
+function mockPositionRating(player: Player, position: string): number {
+  return (player.positions as unknown as Record<string, number>)[position] ?? 0;
+}
+
+function mockScoutLineOf(player: Player): { line: number; rating: number } | null {
+  let best: { line: number; rating: number } | null = null;
+  MOCK_SCOUT_LINES.forEach((line, index) => {
+    const rating = Math.max(
+      0,
+      ...line.positions.map((position) => mockPositionRating(player, position)),
+    );
+    if (rating > 0 && rating > (best?.rating ?? 0)) best = { line: index, rating };
+  });
+  return best;
+}
+
+function mockScoutFactor(rating: number): number {
+  if (rating >= 18) return 1;
+  if (rating >= 15) return 0.97;
+  if (rating >= 13) return 0.88;
+  if (rating >= 10) return 0.75;
+  return 0;
+}
+
+function mockScoutFit(
+  player: Player,
+  position: string,
+  roleId: string | null,
+): ScoutFitting | null {
+  const rating = mockPositionRating(player, position);
+  if (rating < 10) return null;
+  const roles = MOCK_SCOUT_ROLES.filter((role) => role.positions.includes(position));
+  const role = roleId
+    ? roles.find((candidate) => candidate.id === roleId) ?? roles[0]
+    : roles[0];
+  if (!role) return null;
+  const raw = Math.min(
+    20,
+    Math.max(
+      1,
+      Math.round(player.ca / 14 + (rating - 10) * 0.3) + (player.uid % 3) - 1,
+    ),
+  );
+  return {
+    player: mockScoutPlayer(player),
+    fit: Math.max(0, Math.min(100, Math.round(((raw - 5) / 12) * 100 * mockScoutFactor(rating)))),
+    role_id: role.id,
+    role_name: role.name,
+    role_score: raw,
+    position_rating: rating,
+  };
+}
+
+function mockScoutFee(player: Player): number | null {
+  if (player.transfer_value_state !== "ok") return null;
+  const value = player.transfer_value;
+  if (value == null || value === 300_000_000) return null;
+  return Math.round(player.transfer_listed ? value * 0.8 : value);
+}
+
+function mockScoutWage(player: Player): number {
+  const wage = player.contract?.wage;
+  if (wage != null && wage > 0) return Math.round(wage * 1.25);
+  const base = Math.max(0, player.ca - 50);
+  return Math.max(250, Math.round((base * base * base) / 17));
+}
+
+function mockScoutProbability(player: Player): number {
+  let points = 50;
+  if (player.transfer_listed) points += 12;
+  if (player.transfer_value_state !== "ok") points += 8;
+  if ((player.age ?? 27) >= 30) points -= 5;
+  if (player.transfer_value != null && player.transfer_value > 30_000_000) points -= 10;
+  points += ((player.uid * 7) % 19) - 9;
+  return Math.max(0, Math.min(100, points));
+}
+
+export function mockScoutOverview(clubUid: number): ScoutOverview {
+  const players = MOCK_PLAYERS.filter((player) => player.club_uid === clubUid);
+  const people = players.map(mockScoutPlayer);
+  const abilities = people.map((player) => player.ca).sort((a, b) => b - a);
+  const level = abilities.length
+    ? Math.round(abilities.slice(0, Math.min(11, abilities.length)).reduce((sum, ca) => sum + ca, 0) / Math.min(11, abilities.length))
+    : 0;
+  const ages = people.map((player) => player.age).filter((age): age is number => age != null);
+  const averageAge = ages.length
+    ? Math.round((ages.reduce((sum, age) => sum + age, 0) / ages.length) * 10) / 10
+    : null;
+
+  const lines: ScoutLine[] = MOCK_SCOUT_LINES.map((line, index) => {
+    const own = players
+      .map((player) => ({ player, place: mockScoutLineOf(player) }))
+      .filter((entry) => entry.place?.line === index)
+      .map(
+        ({ player, place }): ScoutDepthPlayer => ({
+          player: mockScoutPlayer(player),
+          rating: place?.rating ?? 0,
+          on_loan: player.on_loan === true,
+        }),
+      )
+      .sort((a, b) => b.player.ca - a.player.ca);
+    const cover = players
+      .filter((player) => mockScoutLineOf(player)?.line !== index)
+      .map((player) => ({
+        player,
+        rating: Math.max(
+          0,
+          ...line.positions.map((position) => mockPositionRating(player, position)),
+        ),
+      }))
+      .filter((entry) => entry.rating >= 15)
+      .map(
+        ({ player, rating }): ScoutDepthPlayer => ({
+          player: mockScoutPlayer(player),
+          rating,
+          on_loan: player.on_loan === true,
+        }),
+      )
+      .sort((a, b) => b.player.ca - a.player.ca);
+    const status =
+      own.length === 0 && cover.length === 0
+        ? "missing"
+        : own.length + Math.floor(cover.length / 2) < line.target
+          ? "thin"
+          : own.length >= line.target + 2
+            ? "crowded"
+            : "fine";
+    return {
+      key: line.key,
+      positions: line.positions,
+      target: line.target,
+      players: own,
+      cover,
+      status,
+      weak: own.length > 0 && own[0].player.ca + 15 < level,
+      ageing:
+        own.length > 0 && own.every((player) => (player.player.age ?? 0) >= 31),
+    };
+  });
+
+  const departures: ScoutDeparture[] = [];
+  for (const player of players) {
+    const place = mockScoutLineOf(player);
+    if (!place) continue;
+    const line = lines[place.line];
+    const rank = line.players.findIndex((entry) => entry.player.uid === player.uid) + 1;
+    const reasons: ScoutDeparture["reasons"] = [];
+    if (line.status === "crowded" && rank > line.target) {
+      reasons.push({ code: "surplus", value: line.players.length });
+    }
+    if ((player.age ?? 0) >= 32) reasons.push({ code: "ageing", value: player.age });
+    if (player.transfer_listed) reasons.push({ code: "listed", value: null });
+    if (reasons.length === 0) continue;
+    const value = player.transfer_value_state === "ok" ? player.transfer_value : null;
+    const action: ScoutDepartureAction =
+      value != null && value < 250_000 && (player.age ?? 0) >= 28
+        ? "release"
+        : "sell";
+    departures.push({
+      player: mockScoutPlayer(player),
+      action,
+      reasons,
+      priority: reasons.length,
+      value,
+      not_for_sale: value === 300_000_000,
+      wage: player.contract?.wage ?? null,
+      line: line.key,
+      rank,
+    });
+  }
+  departures.sort((a, b) => b.priority - a.priority || a.player.ca - b.player.ca);
+
+  const wageBill = people.reduce((sum, player) => sum + (player.wage ?? 0), 0);
+  const wageBudget = 1_500_000;
+  return {
+    club_uid: clubUid,
+    club_name: players[0]?.club_name ?? `Club ${clubUid}`,
+    transfer_budget: 30_000_000,
+    wage_budget: wageBudget,
+    wage_bill: wageBill,
+    wage_room: wageBudget - wageBill,
+    squad_size: people.length,
+    average_age: averageAge,
+    level,
+    lines,
+    departures,
+    positions: MOCK_SCOUT_POSITIONS,
+    roles: MOCK_SCOUT_ROLES,
+  };
+}
+
+export function mockScoutAdvice(request: ScoutRequest): Scouted {
+  const own = MOCK_PLAYERS.filter((player) => player.club_uid === request.club_uid);
+  const ownFits = own
+    .map((player) => mockScoutFit(player, request.position, request.role_id ?? null))
+    .filter((fitting): fitting is ScoutFitting => fitting != null)
+    .sort((a, b) => b.fit - a.fit);
+  const bestOwn = ownFits[0]?.fit ?? 0;
+  const secondOwn = ownFits[1]?.fit ?? 0;
+
+  const candidates = MOCK_PLAYERS.filter(
+    (player) =>
+      player.club_uid != null &&
+      player.club_uid !== request.club_uid &&
+      player.gender === 0,
+  );
+  const suggestions: ScoutSuggestion[] = [];
+  for (const player of candidates) {
+    const fitting = mockScoutFit(player, request.position, request.role_id ?? null);
+    if (!fitting) continue;
+    const age = player.age ?? 27;
+    const room = (player.pa ?? player.ca) - player.ca;
+    if (request.min_age != null && age < request.min_age) continue;
+    if (request.max_age != null && age > request.max_age) continue;
+    if (request.no_free_agents && player.club_uid == null) continue;
+    if (request.purpose === "future" && (age > 21 || room < 15)) continue;
+    if (request.purpose === "firstTeam" && fitting.fit <= bestOwn) continue;
+    if (request.purpose === "rotation" && fitting.fit < Math.max(secondOwn, bestOwn - 10)) continue;
+    const probability = mockScoutProbability(player);
+    if (request.min_probability != null && probability < request.min_probability) continue;
+    const fee = mockScoutFee(player);
+    if (request.max_fee != null && (fee == null || fee > request.max_fee)) continue;
+    const growth = age <= 23 && room >= 15 ? Math.min(6, Math.floor(room / 5)) : 0;
+    suggestions.push({
+      ...fitting,
+      probability,
+      reasons: player.transfer_listed
+        ? [{ code: "listed", points: 12, value: null }]
+        : player.uid % 3 === 0
+          ? [
+              { code: "smallerClub", points: 8, value: null },
+              { code: "ambitious", points: 4, value: 16 },
+            ]
+          : player.uid % 3 === 1
+            ? [{ code: "fringe", points: 8, value: 4 }]
+            : [{ code: "biggerClub", points: -18, value: 170 }],
+      fee,
+      wage: mockScoutWage(player),
+      value:
+        player.transfer_value_state === "ok" ? player.transfer_value : null,
+      score: Math.max(
+        0,
+        Math.min(100, Math.round(0.7 * fitting.fit + 0.3 * probability) + growth),
+      ),
+      owner_club: null,
+      owner_club_uid: null,
+    });
+  }
+  suggestions.sort((a, b) => b.score - a.score || b.fit - a.fit);
+  const limit = Math.max(1, Math.min(200, request.how_many ?? 50));
+  const wageBill = own.reduce((sum, player) => sum + (player.contract?.wage ?? 0), 0);
+  return {
+    suggestions: suggestions.slice(0, limit),
+    squad: ownFits.slice(0, 5),
+    transfer_budget: 30_000_000,
+    wage_budget: 1_500_000,
+    wage_bill: wageBill,
+    wage_room: 1_500_000 - wageBill,
+    examined: candidates.filter(
+      (player) => mockPositionRating(player, request.position) >= 10,
+    ).length,
+    candidates: candidates.filter(
+      (player) => mockScoutFit(player, request.position, request.role_id ?? null) != null,
+    ).length,
+    eligible: suggestions.length,
+    game_date: MOCK_SUMMARY.game_date,
   };
 }

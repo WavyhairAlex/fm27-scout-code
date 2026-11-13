@@ -23,7 +23,7 @@ import { type PlayerRow } from "@/lib/types";
 import { attributeLabel, nationLabel, roleName } from "@/lib/labels";
 import { formatNumber } from "@/lib/i18n";
 import { useI18n } from "@/lib/useI18n";
-import { caTone, cn, initials } from "@/lib/utils";
+import { caLabelClass, cn, initials, paTone } from "@/lib/utils";
 import { useAppStore } from "@/store/app";
 import { Button, EmptyState } from "./ui";
 
@@ -50,7 +50,6 @@ export function PlayerTable() {
   const currentPage = useAppStore((state) => state.page);
   const setPage = useAppStore((state) => state.setPage);
   const pageSize = useAppStore((state) => state.pageSize);
-  const hiddenEnabled = useAppStore((state) => state.hiddenEnabled);
   const dataMode = useAppStore((state) => state.dataMode);
   const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({
     height: false,
@@ -240,7 +239,7 @@ export function PlayerTable() {
           <span
             className={cn(
               "inline-flex h-5 min-w-8 items-center justify-center rounded border px-1.5 font-mono text-[10px] font-bold",
-              caTone(row.original.ca),
+              caLabelClass,
             )}
           >
             {row.original.ca}
@@ -253,7 +252,12 @@ export function PlayerTable() {
         header: "PA",
         size: 42,
         cell: ({ row }) => (
-          <span className="font-mono text-[11px] font-semibold text-[var(--muted)]">
+          <span
+            className={cn(
+              "inline-flex h-5 min-w-8 items-center justify-center rounded border px-1.5 font-mono text-[10px] font-bold",
+              paTone(row.original.pa),
+            )}
+          >
             {row.original.pa != null ? row.original.pa : row.original.pa_range_code != null ? "?" : "—"}
           </span>
         ),
@@ -338,7 +342,7 @@ export function PlayerTable() {
         header: t("table.hidden"),
         size: 52,
         cell: ({ row }) =>
-          hiddenEnabled && row.original.personality ? (
+          row.original.personality ? (
             <span className="font-mono text-[10px] font-semibold text-[var(--gold)]">
               {t("table.professionalismShort")} {row.original.personality.professionalism}
             </span>
@@ -350,9 +354,9 @@ export function PlayerTable() {
     const visibleColumns = baseColumns.filter((column) => {
       if (dataMode === "full") return true;
       const id = String(column.id ?? "");
-      if (id === "ca" || id === "pa" || id === "hidden") return false;
+      if (id === "ca" || id === "pa") return false;
       if (dataMode === "moneyball") {
-        return id !== "role" && !id.startsWith("attr_");
+        return id !== "hidden" && id !== "role" && !id.startsWith("attr_");
       }
       return true;
     });
@@ -365,7 +369,6 @@ export function PlayerTable() {
     compareUids,
     formatValue,
     formatWage,
-    hiddenEnabled,
     dataMode,
     locale,
     t,

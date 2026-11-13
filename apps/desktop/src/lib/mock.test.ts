@@ -3,7 +3,6 @@ import {
   MOCK_PLAYERS,
   MOCK_SAVE_ID,
   MOCK_STAFF,
-  mockAnalysisOverview,
   mockClubDetail,
   mockClubFilterOptions,
   mockFilterOptions,
@@ -11,6 +10,8 @@ import {
   mockQuery,
   mockQueryClubs,
   mockQueryStaff,
+  mockScoutAdvice,
+  mockScoutOverview,
   mockSquadAnalysis,
   mockStaffFilterOptions,
   mockStatsMoneyball,
@@ -156,28 +157,57 @@ describe("mock player query", () => {
   });
 });
 
-  it("aggregates analysis overview and squad depth", () => {
-    const overview = mockAnalysisOverview();
-    expect(overview.total_players).toBe(MOCK_PLAYERS.length);
-    expect(overview.age_bands.length).toBe(6);
-    expect(overview.top_clubs.length).toBeGreaterThan(0);
-
+  it("aggregates squad depth", () => {
     const clubUid = MOCK_PLAYERS[0].club_uid;
     expect(clubUid).not.toBeNull();
     const squad = mockSquadAnalysis(clubUid!);
     expect(squad.player_count).toBeGreaterThan(0);
     expect(squad.players[0].club_uid).toBe(clubUid);
+    expect(new Set(squad.players.map((row) => row.team_slot)).size).toBeGreaterThan(1);
+    const slots = new Set(
+      squad.players
+        .map((row) => row.team_slot)
+        .filter((slot): slot is number => slot != null),
+    );
+    expect(squad.teams).toHaveLength(slots.size);
+    expect(squad.teams.find((team) => team.slot === 0)?.label.kind).toBe("firstTeam");
+    expect(squad.teams.find((team) => team.label.kind === "youth")?.competition_name).toContain(
+      "U20",
+    );
 
     const managed = mockManagedClub();
     expect(managed.club_uid).toBe(clubUid);
-    const scoped = mockAnalysisOverview(managed.club_uid);
-    expect(scoped.total_players).toBe(
-      MOCK_PLAYERS.filter((player) => player.club_uid === managed.club_uid).length,
-    );
-    expect(scoped.total_players).toBeLessThan(overview.total_players);
-    expect(scoped.total_clubs).toBe(overview.total_clubs);
-    expect(scoped.top_clubs.some((club) => club.club_uid === managed.club_uid)).toBe(true);
   });
+
+describe("mock scouting", () => {
+  it("builds squad depth and recommendations for the managed club", () => {
+    const managed = mockManagedClub();
+    const overview = mockScoutOverview(managed.club_uid);
+    expect(overview.lines).toHaveLength(10);
+    expect(overview.positions.length).toBeGreaterThan(0);
+    expect(overview.roles.length).toBeGreaterThan(0);
+    expect(overview.squad_size).toBeGreaterThan(0);
+
+    const position =
+      overview.lines.find((line) => line.status === "missing" || line.status === "thin")
+        ?.positions[0] ?? "stc";
+    const advice = mockScoutAdvice({
+      save_id: MOCK_SAVE_ID,
+      club_uid: managed.club_uid,
+      position,
+      purpose: "any",
+      how_many: 10,
+    });
+    expect(advice.suggestions.length).toBeLessThanOrEqual(10);
+    for (const suggestion of advice.suggestions) {
+      expect(suggestion.fit).toBeGreaterThanOrEqual(0);
+      expect(suggestion.fit).toBeLessThanOrEqual(100);
+      expect(suggestion.probability).toBeGreaterThanOrEqual(0);
+      expect(suggestion.probability).toBeLessThanOrEqual(100);
+      expect(suggestion.player.club_uid).not.toBe(managed.club_uid);
+    }
+  });
+});
 
 describe("mock club query", () => {
   it("searches clubs by name", () => {

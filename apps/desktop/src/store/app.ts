@@ -7,7 +7,6 @@ import {
 } from "@/lib/i18n";
 import { isCurrencyCode, type CurrencyCode } from "@/lib/currency";
 import {
-  HIDDEN_FILTERS,
   type FilterOptions,
   type ParseProgress,
   type PlayerEditRequest,
@@ -239,7 +238,6 @@ interface AppState {
   staffPageSize: number;
   selectedStaffUid: number | null;
   compareUids: number[];
-  hiddenEnabled: boolean;
   dataMode: DataMode;
   displayMode: DisplayMode;
   theme: Theme;
@@ -294,7 +292,6 @@ interface AppState {
   setSelectedUid: (uid: number | null) => void;
   toggleCompare: (uid: number) => void;
   clearCompare: () => void;
-  setHiddenEnabled: (enabled: boolean) => void;
   setDataMode: (mode: DataMode) => void;
   setDisplayMode: (mode: DisplayMode) => void;
   setTheme: (theme: Theme) => void;
@@ -343,7 +340,6 @@ export const useAppStore = create<AppState>((set, get) => ({
   staffPageSize: 100,
   selectedStaffUid: null,
   compareUids: [],
-  hiddenEnabled: false,
   dataMode: loadDataMode(),
   displayMode: "display",
   theme: "system",
@@ -559,24 +555,8 @@ export const useAppStore = create<AppState>((set, get) => ({
         ? null
         : (view.filters.availability ?? null);
     const dataMode = get().dataMode;
-    const enableHidden =
-      dataMode === "full" &&
-      !get().hiddenEnabled &&
-      (view.filters.attributes ?? []).some((rule) => HIDDEN_FILTERS.has(rule.key));
-    if (enableHidden) {
-      const locale = resolveLocale(get().language);
-      get().pushToast({
-        title: translate(locale, "toast.hiddenOn.title"),
-        description: translate(locale, "toast.hiddenOn.description"),
-        tone: "default",
-      });
-    }
     const visibleAttributes =
-      dataMode === "full"
-        ? (view.filters.attributes ?? [])
-        : dataMode === "moneyball"
-          ? []
-          : (view.filters.attributes ?? []).filter((rule) => !HIDDEN_FILTERS.has(rule.key));
+      dataMode === "moneyball" ? [] : (view.filters.attributes ?? []);
     const visibleSort =
       dataMode === "full"
         ? view.sort
@@ -597,7 +577,6 @@ export const useAppStore = create<AppState>((set, get) => ({
         paMax: dataMode === "full" ? view.filters.paMax : null,
         paCaGapMin: dataMode === "full" ? view.filters.paCaGapMin : null,
       },
-      ...(enableHidden ? { hiddenEnabled: true } : {}),
       sort: visibleSort?.length
         ? visibleSort
         : dataMode === "full"
@@ -622,15 +601,6 @@ export const useAppStore = create<AppState>((set, get) => ({
   addAttribute: (key) =>
     set((state) => {
       if (state.filters.attributes.some((rule) => rule.key === key)) return state;
-      const enableHidden = HIDDEN_FILTERS.has(key) && !state.hiddenEnabled;
-      if (enableHidden) {
-        const locale = resolveLocale(state.language);
-        get().pushToast({
-          title: translate(locale, "toast.hiddenOn.title"),
-          description: translate(locale, "toast.hiddenOn.description"),
-          tone: "default",
-        });
-      }
       return {
         filters: {
           ...state.filters,
@@ -639,7 +609,6 @@ export const useAppStore = create<AppState>((set, get) => ({
             { id: `${key}-${Date.now()}`, key, min: null, max: null },
           ],
         },
-        ...(enableHidden ? { hiddenEnabled: true } : {}),
         page: 0,
       };
     }),
@@ -706,39 +675,17 @@ export const useAppStore = create<AppState>((set, get) => ({
       return { compareUids: [...state.compareUids, uid] };
     }),
   clearCompare: () => set({ compareUids: [] }),
-  setHiddenEnabled: (hiddenEnabled) =>
-    set((state) => {
-      // Hidden attributes are a Full-mode tool; the menu shortcut must not
-      // re-enable them after switching to Fair play or Moneyball.
-      if (hiddenEnabled && state.dataMode !== "full") return state;
-      return {
-        hiddenEnabled,
-        filters: hiddenEnabled
-          ? state.filters
-          : {
-              ...state.filters,
-              attributes: state.filters.attributes.filter(
-                (rule) => !HIDDEN_FILTERS.has(rule.key),
-              ),
-            },
-        page: hiddenEnabled ? state.page : 0,
-      };
-    }),
   setDataMode: (dataMode) => {
     persistDataMode(dataMode);
     set((state) => {
       const full = dataMode === "full";
-      const visibleAttributes = full
-        ? state.filters.attributes
-        : dataMode === "moneyball"
-          ? []
-          : state.filters.attributes.filter((rule) => !HIDDEN_FILTERS.has(rule.key));
+      const visibleAttributes =
+        dataMode === "moneyball" ? [] : state.filters.attributes;
       const sortUsesHiddenAbility = state.sort.some(
         (rule) => rule.by === "ca" || rule.by === "pa" || rule.by === "best_role_score",
       );
       return {
         dataMode,
-        hiddenEnabled: full ? state.hiddenEnabled : false,
         filters: {
           ...state.filters,
           // CA/PA and the PA-CA gap are not visible outside Full mode.

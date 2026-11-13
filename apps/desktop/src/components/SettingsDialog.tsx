@@ -5,10 +5,8 @@ import {
   Coins,
   Database,
   Download,
-  Eye,
   Info,
   Languages,
-  LockKeyhole,
   Monitor,
   Moon,
   RefreshCw,
@@ -32,7 +30,7 @@ import { LANGUAGE_OPTIONS, type Language } from "@/lib/i18n";
 import { useI18n } from "@/lib/useI18n";
 import { relativeTime } from "@/lib/utils";
 import { useAppStore, type DisplayMode, type Theme } from "@/store/app";
-import { Badge, Button, Modal, Select, Switch } from "./ui";
+import { Badge, Button, Modal, Select } from "./ui";
 
 type UpdateStatus =
   | { kind: "idle" }
@@ -51,8 +49,6 @@ export function SettingsDialog() {
   const { t, locale, formatMoney } = useI18n();
   const open = useAppStore((state) => state.settingsOpen);
   const setOpen = useAppStore((state) => state.setSettingsOpen);
-  const hiddenEnabled = useAppStore((state) => state.hiddenEnabled);
-  const setHiddenEnabled = useAppStore((state) => state.setHiddenEnabled);
   const displayMode = useAppStore((state) => state.displayMode);
   const setDisplayMode = useAppStore((state) => state.setDisplayMode);
   const theme = useAppStore((state) => state.theme);
@@ -279,37 +275,6 @@ export function SettingsDialog() {
                 <option value="raw">{t("settings.rawValues")}</option>
               </Select>
             </div>
-          </div>
-        </section>
-
-        <section className="space-y-2">
-          <h3 className="text-[11px] font-semibold uppercase tracking-wider text-[var(--muted)]">
-            {t("settings.hiddenAttributes")}
-          </h3>
-          <div className="flex items-center justify-between rounded-xl border border-[var(--line)] bg-[var(--surface-2)] p-3">
-            <div>
-              <div className="flex items-center gap-2 text-[12px] font-semibold text-[var(--ink)]">
-                {hiddenEnabled ? <Eye size={14} /> : <LockKeyhole size={14} />}
-                {t("settings.showHidden")}
-              </div>
-              <p className="mt-1 max-w-sm text-[10px] leading-relaxed text-[var(--muted)]">
-                {t("settings.hiddenDescription")}
-              </p>
-            </div>
-            <Switch
-              checked={hiddenEnabled}
-              onChange={(enabled) => {
-                setHiddenEnabled(enabled);
-                if (enabled) {
-                  pushToast({
-                    title: t("toast.hiddenOn.title"),
-                    description: t("toast.hiddenOn.description"),
-                    tone: "default",
-                  });
-                }
-              }}
-              label={t("settings.hiddenLabel")}
-            />
           </div>
         </section>
 

@@ -14,6 +14,7 @@ const STAGE_KEYS: Record<string, TranslationKey> = {
   decode: "parse.stage.decode",
   staff: "parse.stage.staff",
   season_stats: "parse.stage.season_stats",
+  fixtures: "parse.stage.fixtures",
   done: "parse.stage.done",
 };
 
@@ -28,6 +29,7 @@ const STAGE_ORDER = [
   "decode",
   "staff",
   "season_stats",
+  "fixtures",
 ];
 
 export function ParseOverlay() {

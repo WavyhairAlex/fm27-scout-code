@@ -516,7 +516,6 @@ sqlite_autoindex_club_finances_1
 | 项目 | 位置 | 建议 | 前置条件 |
 |---|---|---|---|
 | 搜索和 JSON 筛选索引 | `store.rs:2750-3004`、`schema.sql:75-87` | 仅为热点位置/属性和 `pa-ca` 增加生成列/表达式索引；搜索评估 FTS5 | 必须先用 `EXPLAIN QUERY PLAN` 确认扫描与临时 B-tree |
-| Analysis Overview | `store.rs:1649-1788` | 循环外格式化截止日期；移除未使用 `pa`；中位数用 `select_nth_unstable` | 保持空年龄、空俱乐部、CA=0 口径 |
 | 球员详情角色面板 | `lib.rs:579-594`、`store.rs:1553-1575` | 只读取 `attributes_json` 和 `positions_json`，避免重复解析完整 `data_json` | 保持 `include_hidden=true` 语义 |
 | 筛选选项请求 | `store.rs:2245-2469`、`apps/desktop/src/lib/query.ts` | 从 React Query key 去掉排序等无关字段；缓存基础 facet | facet 各自清除不同维度，不能简单合并 |
 | 解析并行化 | `parse.rs:210-496` | 在角色、扫描、分配优化后评估 Rayon indexed parallel iterator | 保持球员顺序、进度和确定性；先测内存带宽与分配器竞争 |

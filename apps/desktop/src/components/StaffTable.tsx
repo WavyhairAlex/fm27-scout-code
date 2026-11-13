@@ -33,7 +33,7 @@ import {
 } from "@/lib/labels";
 import { formatNumber } from "@/lib/i18n";
 import { useI18n } from "@/lib/useI18n";
-import { caTone, cn, initials } from "@/lib/utils";
+import { caLabelClass, cn, initials } from "@/lib/utils";
 import { useAppStore } from "@/store/app";
 import { Button, EmptyState } from "./ui";
 
@@ -174,7 +174,7 @@ export function StaffTable() {
           <span
             className={cn(
               "inline-flex h-5 min-w-8 items-center justify-center rounded border px-1.5 font-mono text-[10px] font-bold",
-              caTone(row.original.ca ?? 0),
+              caLabelClass,
             )}
           >
             {row.original.ca ?? "—"}

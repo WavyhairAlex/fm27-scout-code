@@ -286,6 +286,10 @@ export interface PlayerRow {
   age: number | null;
   club_uid: number | null;
   club_name: string | null;
+  /** Registered club team, when the save resolves one. */
+  team_id: number | null;
+  /** Position of that team in the club's stored list; 0 is the first team. */
+  team_slot: number | null;
   league_competition_id: number | null;
   league_name: string | null;
   nation_id: number | null;
@@ -1016,30 +1020,19 @@ export interface DistributionBand {
   count: number;
 }
 
-export interface ClubOverview {
-  club_uid: number;
-  club_name: string;
-  players: number;
-  avg_ca: number;
-  max_ca: number;
-  avg_age: number;
-  total_value: number;
+export interface SquadTeamLabel {
+  kind: "firstTeam" | "youth" | "reserves" | "unknown";
+  age: number | null;
 }
 
-export interface AnalysisOverview {
-  total_players: number;
-  total_clubs: number;
-  average_age: number;
-  median_ca: number;
-  total_value: number;
-  free_agents: number;
-  loanees: number;
-  expiring_contracts: number;
-  game_date: string | null;
-  age_bands: DistributionBand[];
-  ca_bands: DistributionBand[];
-  contract_years: DistributionBand[];
-  top_clubs: ClubOverview[];
+export interface SquadTeam {
+  team_id: number;
+  slot: number | null;
+  competition_id: number | null;
+  competition_name: string | null;
+  fixture_count: number;
+  label: SquadTeamLabel;
+  inferred: boolean;
 }
 
 export interface SquadAnalysis {
@@ -1056,6 +1049,134 @@ export interface SquadAnalysis {
   age_bands: DistributionBand[];
   contract_years: DistributionBand[];
   players: PlayerRow[];
+  teams: SquadTeam[];
+}
+
+export type ScoutPurpose = "firstTeam" | "rotation" | "future" | "any";
+export type ScoutDepthStatus = "missing" | "thin" | "fine" | "crowded";
+export type ScoutDepartureAction = "sell" | "loan" | "release";
+
+export interface ScoutPlayer {
+  uid: number;
+  name: string | null;
+  age: number | null;
+  club_uid: number | null;
+  club_name: string | null;
+  ca: number;
+  pa: number | null;
+  transfer_value: number | null;
+  wage: number | null;
+  contract_end: string | null;
+  transfer_listed: boolean;
+}
+
+export interface ScoutFitting {
+  player: ScoutPlayer;
+  fit: number;
+  role_id: string;
+  role_name: string;
+  role_score: number;
+  position_rating: number;
+}
+
+export interface ScoutReason {
+  code: string;
+  points: number;
+  value: number | null;
+}
+
+export interface ScoutSuggestion extends ScoutFitting {
+  probability: number;
+  reasons: ScoutReason[];
+  fee: number | null;
+  wage: number | null;
+  value: number | null;
+  score: number;
+  owner_club: string | null;
+  owner_club_uid: number | null;
+}
+
+export interface Scouted {
+  suggestions: ScoutSuggestion[];
+  squad: ScoutFitting[];
+  transfer_budget: number | null;
+  wage_budget: number | null;
+  wage_bill: number | null;
+  wage_room: number | null;
+  examined: number;
+  candidates: number;
+  eligible: number;
+  game_date: string | null;
+}
+
+export interface ScoutRoleInfo {
+  id: string;
+  name: string;
+  positions: string[];
+}
+
+export interface ScoutDepthPlayer {
+  player: ScoutPlayer;
+  rating: number;
+  on_loan: boolean;
+}
+
+export interface ScoutLine {
+  key: string;
+  positions: string[];
+  target: number;
+  players: ScoutDepthPlayer[];
+  cover: ScoutDepthPlayer[];
+  status: ScoutDepthStatus;
+  weak: boolean;
+  ageing: boolean;
+}
+
+export interface ScoutDepartureReason {
+  code: string;
+  value: number | null;
+}
+
+export interface ScoutDeparture {
+  player: ScoutPlayer;
+  action: ScoutDepartureAction;
+  reasons: ScoutDepartureReason[];
+  priority: number;
+  value: number | null;
+  not_for_sale: boolean;
+  wage: number | null;
+  line: string;
+  rank: number;
+}
+
+export interface ScoutOverview {
+  club_uid: number;
+  club_name: string;
+  transfer_budget: number | null;
+  wage_budget: number | null;
+  wage_bill: number | null;
+  wage_room: number | null;
+  squad_size: number;
+  average_age: number | null;
+  level: number;
+  lines: ScoutLine[];
+  departures: ScoutDeparture[];
+  positions: string[];
+  roles: ScoutRoleInfo[];
+}
+
+export interface ScoutRequest {
+  save_id: number;
+  club_uid: number;
+  position: string;
+  role_id?: string | null;
+  purpose?: ScoutPurpose;
+  min_age?: number | null;
+  max_age?: number | null;
+  max_fee?: number | null;
+  min_probability?: number | null;
+  no_free_agents?: boolean;
+  how_many?: number | null;
 }
 
 export interface OpenSaveResult {
@@ -1215,8 +1336,6 @@ export const CA_EXEMPT_ATTRIBUTE_KEYS: ReadonlySet<string> = new Set([
   "flair",
   "aggression",
 ]);
-export const HIDDEN_FILTER_KEYS = [...HIDDEN_ATTRIBUTE_KEYS, ...PERSONALITY_KEYS];
-export const HIDDEN_FILTERS: ReadonlySet<string> = new Set(HIDDEN_FILTER_KEYS);
 
 function filterGroupLabelKey(key: AttributeGroupKey): TranslationKey {
   return `attribute.group.${key}`;

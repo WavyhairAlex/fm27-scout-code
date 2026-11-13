@@ -40,22 +40,22 @@ import {
 import { useI18n } from "@/lib/useI18n";
 import {
   attributeTone,
-  caTone,
+  caLabelClass,
   cn,
   formatDate,
   initials,
+  paTone,
 } from "@/lib/utils";
 import { useAppStore } from "@/store/app";
 import { AttributeRadar } from "./AttributeRadar";
 import { Badge, Button, EmptyState, Switch } from "./ui";
 
-type Tab = "attributes" | "roles" | "positions" | "growth" | "hidden" | "contract";
+type Tab = "attributes" | "roles" | "positions" | "growth" | "contract";
 
 export function Inspector() {
   const { t, locale, formatValue, formatWage } = useI18n();
   const selectedUid = useAppStore((state) => state.selectedUid);
   const setSelectedUid = useAppStore((state) => state.setSelectedUid);
-  const hiddenEnabled = useAppStore((state) => state.hiddenEnabled);
   const dataMode = useAppStore((state) => state.dataMode);
   const setEditOpen = useAppStore((state) => state.setEditOpen);
   const pendingEdits = useAppStore((state) => state.pendingEdits);
@@ -82,11 +82,10 @@ export function Inspector() {
       ...(dataMode !== "moneyball" ? (["attributes", "roles"] as Tab[]) : []),
       "positions",
       ...(dataMode === "full" ? (["growth"] as Tab[]) : []),
-      ...(dataMode === "full" && hiddenEnabled ? (["hidden"] as Tab[]) : []),
       "contract",
     ];
     if (!allowed.includes(tab)) setTab("positions");
-  }, [dataMode, hiddenEnabled, tab]);
+  }, [dataMode, tab]);
 
   useLayoutEffect(() => {
     const element = tabBarRef.current;
@@ -103,7 +102,7 @@ export function Inspector() {
         padding,
     );
     setTabBarWidth((current) => (current === width ? current : width));
-  }, [dataMode, hiddenEnabled, locale, selectedUid, isLoading]);
+  }, [dataMode, locale, selectedUid, isLoading]);
 
   useEffect(() => {
     if (!nameCopied) return;
@@ -148,9 +147,6 @@ export function Inspector() {
     )
     .filter((label) => label.length > 0);
   const maxValue = displayMode === "display" ? 20 : 100;
-  const hiddenTab: Array<[Tab, string]> = hiddenEnabled
-    ? [["hidden", t("inspector.tab.hidden")]]
-    : [];
   const tabs: Array<[Tab, string]> = [
     ...(dataMode !== "moneyball"
       ? ([
@@ -162,7 +158,6 @@ export function Inspector() {
     ...(dataMode === "full"
       ? ([["growth", t("inspector.tab.growth")]] as Array<[Tab, string]>)
       : []),
-    ...hiddenTab,
     ["contract", t("inspector.tab.contract")],
   ];
 
@@ -293,11 +288,11 @@ export function Inspector() {
                 <div className="flex shrink-0 flex-col items-end gap-1">
                   {dataMode === "full" && (
                     <div className="flex gap-1">
-                      <span className={cn("flex h-8 min-w-10 flex-col items-center justify-center rounded-lg border px-1.5", caTone(player.ca))}>
+                      <span className={cn("flex h-8 min-w-10 flex-col items-center justify-center rounded-lg border px-1.5", caLabelClass)}>
                         <span className="text-[8px] font-bold uppercase opacity-60">CA</span>
                         <span className="font-mono text-[12px] font-bold leading-none">{player.ca}</span>
                       </span>
-                      <span className="flex h-8 min-w-10 flex-col items-center justify-center rounded-lg border border-[var(--line)] bg-[var(--surface-2)] px-1.5 text-[var(--muted)]">
+                      <span className={cn("flex h-8 min-w-10 flex-col items-center justify-center rounded-lg border px-1.5", paTone(player.pa))}>
                         <span className="text-[8px] font-bold uppercase opacity-60">PA</span>
                         <span className="font-mono text-[12px] font-bold leading-none">
                           {player.pa ?? (player.pa_range_code != null ? "?" : "—")}
@@ -471,9 +466,6 @@ export function Inspector() {
             injuries={player.injuries}
           />
         )}
-        {tab === "hidden" && (
-          <HiddenPanel player={player} attributes={attributes} max={maxValue} />
-        )}
         {tab === "positions" && <PositionsPanel positions={player.positions} />}
         {tab === "contract" && <ContractPanel player={player} />}
       </div>
@@ -552,8 +544,13 @@ function AttributesPanel({
   const { t, locale } = useI18n();
   const isGoalkeeper = player.natural_positions.includes("GK") || player.positions.gk >= 15;
   const groups = isGoalkeeper
-    ? [...ATTRIBUTE_GROUPS.technical.slice(0, 2), ...ATTRIBUTE_GROUPS.goalkeeping, ...ATTRIBUTE_GROUPS.technical.slice(2)]
-    : ATTRIBUTE_GROUPS.technical;
+    ? [
+        ...ATTRIBUTE_GROUPS.technical.slice(0, 2),
+        ...ATTRIBUTE_GROUPS.goalkeeping,
+        ...ATTRIBUTE_GROUPS.technical.slice(2),
+        ...ATTRIBUTE_GROUPS.hidden,
+      ]
+    : [...ATTRIBUTE_GROUPS.technical, ...ATTRIBUTE_GROUPS.hidden];
   const radarKeys = isGoalkeeper
     ? ["handling", "reflexes", "aerial_reach", "command_of_area", "kicking", "one_on_ones"]
     : ["passing", "dribbling", "finishing", "tackling", "vision", "pace"];
@@ -582,54 +579,6 @@ function AttributesPanel({
           </div>
         </div>
       ))}
-    </div>
-  );
-}
-
-function AttributeRow({ label, value, max }: { label: string; value: number; max: number }) {
-  const tone = attributeTone(max === 20 ? value : Math.round(value / 5));
-  return (
-    <div className="flex items-center gap-1.5">
-      <span className="w-[68px] shrink-0 truncate text-[10px] text-[var(--muted)]">{label}</span>
-      <div className="relative h-1.5 flex-1 overflow-hidden rounded-full bg-[var(--surface-3)]">
-        <div
-          className={cn("h-full rounded-full", tone.split(" ")[0])}
-          style={{ width: `${Math.max(4, Math.min(100, (value / max) * 100))}%` }}
-        />
-      </div>
-      <span className="w-6 text-right font-mono text-[10px] font-semibold text-[var(--ink)]">{value}</span>
-    </div>
-  );
-}
-
-function HiddenPanel({
-  player,
-  attributes,
-  max,
-}: {
-  player: Player;
-  attributes: Attributes;
-  max: number;
-}) {
-  const { t, locale } = useI18n();
-  const hidden = attributes;
-  return (
-    <div className="space-y-4 px-4 py-3">
-      <div>
-        <div className="mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-[var(--muted)]">
-          {t("inspector.hiddenAttributes")}
-        </div>
-        <div className="grid grid-cols-2 gap-x-3 gap-y-1.5">
-          {ATTRIBUTE_GROUPS.hidden[0].keys.map((key) => (
-            <AttributeRow
-              key={key}
-              label={attributeLabel(key, locale)}
-              value={hidden[key] ?? 0}
-              max={max}
-            />
-          ))}
-        </div>
-      </div>
       {player.personality && (
         <div>
           <div className="mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-[var(--muted)]">
@@ -650,6 +599,22 @@ function HiddenPanel({
       <div className="rounded-lg border border-[var(--danger-line)] bg-[var(--danger-soft)]/50 p-2 text-[10px] leading-relaxed text-[var(--danger)]">
         {t("inspector.hiddenWarning")}
       </div>
+    </div>
+  );
+}
+
+function AttributeRow({ label, value, max }: { label: string; value: number; max: number }) {
+  const tone = attributeTone(max === 20 ? value : Math.round(value / 5));
+  return (
+    <div className="flex items-center gap-1.5">
+      <span className="w-[68px] shrink-0 truncate text-[10px] text-[var(--muted)]">{label}</span>
+      <div className="relative h-1.5 flex-1 overflow-hidden rounded-full bg-[var(--surface-3)]">
+        <div
+          className={cn("h-full rounded-full", tone.split(" ")[0])}
+          style={{ width: `${Math.max(4, Math.min(100, (value / max) * 100))}%` }}
+        />
+      </div>
+      <span className="w-6 text-right font-mono text-[10px] font-semibold text-[var(--ink)]">{value}</span>
     </div>
   );
 }

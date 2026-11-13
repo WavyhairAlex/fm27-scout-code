@@ -4,7 +4,7 @@ use std::collections::HashMap;
 use std::path::Path;
 use std::sync::{Arc, Mutex};
 
-use chrono::{Months, NaiveDate, Utc};
+use chrono::{NaiveDate, Utc};
 use rusqlite::types::Value;
 use rusqlite::{Connection, OptionalExtension, Row, params, params_from_iter};
 use serde::{Deserialize, Serialize};
@@ -14,11 +14,16 @@ use crate::layout::{
     ATTRIBUTE_KEYS, HIDDEN_ATTRIBUTE_KEYS, PERSONALITY_KEYS, POSITION_KEYS, STAFF_ATTRIBUTE_KEYS,
 };
 use crate::model::{
-    Attributes, Club, ClubDetail, ClubLink, Competition, Contract, FinanceMonth,
+    Attributes, Clause, Club, ClubDetail, ClubLink, Competition, Contract, FinanceMonth,
     GENERATED_UNIQUE_ID_MINIMUM, ManagedClub, ParseReport, Personality, Player, Positions,
-    SaveSummary, Stadium, Staff, StaffAttributes, Trait, attribute_index, is_generated_unique_id,
+    SaveSummary, Stadium, Staff, StaffAttributes, Trait, TransferValueState, attribute_index,
+    is_generated_unique_id,
 };
 use crate::parse::ParsedSave;
+use crate::scouting::{
+    LOWEST_POSITION_RATING, ScoutCandidate, ScoutContext, ScoutOverview, ScoutRequest, Scouted,
+    is_scout_position,
+};
 
 const SCHEMA: &str = include_str!("../../../shared/schema.sql");
 
@@ -58,7 +63,7 @@ const PLAYER_ROWS_SELECT: &str =
             p.nation_name, p.gender, p.best_role_id, p.best_role_name,
             p.best_role_score, p.best_role_position, p.injury_status, p.injury_until,
             p.recent_injury, p.suspension_count, p.transfer_listed, p.loan_listed,
-            p.unique_id
+            p.unique_id, p.team_id, p.team_slot
      FROM players p
      LEFT JOIN contracts c ON c.save_id = p.save_id AND c.player_uid = p.uid";
 
@@ -71,10 +76,144 @@ const STAFF_ROWS_SELECT: &str = "SELECT s.uid, s.unique_id, s.name, s.age, s.clu
 
 const MAX_EXPORT_ROWS: usize = 500_000;
 
+const SCOUT_CANDIDATE_SELECT: &str = "SELECT p.uid, p.name, p.age, p.club_uid, p.club_name,
+            c.club_uid, c.club_name, p.gender, p.ca, p.pa,
+            p.positions_json, p.attributes_json, p.personality_json,
+            p.transfer_value, p.transfer_value_state, p.transfer_listed,
+            c.wage, c.start_date, c.end_date, c.squad_status, c.on_loan,
+            c.loan_parent_club_uid, c.loan_parent_club_name, c.clauses_json,
+            cl.reputation,
+            COALESCE(json_extract(p.data_json, '$.reputation.current'), 0)
+     FROM players p
+     LEFT JOIN contracts c ON c.save_id = p.save_id AND c.player_uid = p.uid
+     LEFT JOIN clubs cl ON cl.save_id = p.save_id AND cl.uid = p.club_uid";
+
 /// Reserved gender id for players whose gender cannot be resolved. Players
 /// inherit gender from their club's team list, so free agents are stored with
 /// `gender = NULL`; the filter UI groups those players under "unknown".
 pub const UNKNOWN_GENDER_ID: u8 = 255;
+
+struct ScoutRow {
+    uid: u32,
+    name: Option<String>,
+    age: Option<i32>,
+    club_uid: Option<u32>,
+    club_name: Option<String>,
+    contract_club_uid: Option<u32>,
+    contract_club_name: Option<String>,
+    gender: Option<u8>,
+    ca: u16,
+    pa: Option<i16>,
+    positions_json: String,
+    attributes_json: String,
+    personality_json: Option<String>,
+    transfer_value: Option<u32>,
+    transfer_value_state: Option<String>,
+    transfer_listed: bool,
+    wage: Option<u32>,
+    start_date: Option<String>,
+    end_date: Option<String>,
+    squad_status: Option<u8>,
+    on_loan: Option<bool>,
+    loan_parent_club_uid: Option<u32>,
+    loan_parent_club_name: Option<String>,
+    clauses_json: Option<String>,
+    club_reputation: Option<i64>,
+    reputation: Option<i64>,
+}
+
+impl ScoutRow {
+    fn read(row: &Row<'_>) -> rusqlite::Result<Self> {
+        Ok(Self {
+            uid: row.get(0)?,
+            name: row.get(1)?,
+            age: row.get(2)?,
+            club_uid: row.get(3)?,
+            club_name: row.get(4)?,
+            contract_club_uid: row.get(5)?,
+            contract_club_name: row.get(6)?,
+            gender: row.get(7)?,
+            ca: row.get(8)?,
+            pa: row.get(9)?,
+            positions_json: row.get(10)?,
+            attributes_json: row.get(11)?,
+            personality_json: row.get(12)?,
+            transfer_value: row.get(13)?,
+            transfer_value_state: row.get(14)?,
+            transfer_listed: row.get(15)?,
+            wage: row.get(16)?,
+            start_date: row.get(17)?,
+            end_date: row.get(18)?,
+            squad_status: row.get(19)?,
+            on_loan: row.get(20)?,
+            loan_parent_club_uid: row.get(21)?,
+            loan_parent_club_name: row.get(22)?,
+            clauses_json: row.get(23)?,
+            club_reputation: row.get(24)?,
+            reputation: row.get(25)?,
+        })
+    }
+
+    fn into_candidate(self) -> Result<ScoutCandidate> {
+        let attributes = serde_json::from_str::<Attributes>(&self.attributes_json)?;
+        let positions = serde_json::from_str::<Positions>(&self.positions_json)?;
+        let personality = self
+            .personality_json
+            .as_deref()
+            .map(serde_json::from_str::<Personality>)
+            .transpose()?;
+        let clauses = self
+            .clauses_json
+            .as_deref()
+            .map(serde_json::from_str::<Vec<Clause>>)
+            .transpose()?
+            .unwrap_or_default();
+        let transfer_value_state = self
+            .transfer_value_state
+            .as_deref()
+            .and_then(|text| serde_json::from_str::<TransferValueState>(text).ok())
+            .unwrap_or(TransferValueState::Ok);
+        let reputation = self
+            .reputation
+            .filter(|value| *value > 0)
+            .map(|value| value.clamp(0, i64::from(u16::MAX)) as u16);
+        Ok(ScoutCandidate {
+            uid: self.uid,
+            name: self.name,
+            age: self.age,
+            club_uid: self.club_uid,
+            club_name: self.club_name,
+            contract_club_uid: self.contract_club_uid,
+            contract_club_name: self.contract_club_name,
+            gender: self.gender,
+            ca: self.ca,
+            pa: self.pa,
+            attributes,
+            positions,
+            personality,
+            transfer_value: self.transfer_value,
+            transfer_value_state,
+            transfer_listed: self.transfer_listed,
+            wage: self.wage,
+            contract_start: self.start_date.as_deref().and_then(parse_scout_date),
+            contract_end: self.end_date.as_deref().and_then(parse_scout_date),
+            squad_status: self.squad_status,
+            clauses,
+            on_loan: self.on_loan.unwrap_or(false),
+            loan_parent_club_uid: self.loan_parent_club_uid,
+            loan_parent_club_name: self.loan_parent_club_name,
+            reputation,
+            club_reputation: self
+                .club_reputation
+                .filter(|value| *value > 0)
+                .map(|value| value.clamp(0, i64::from(u16::MAX)) as u16),
+        })
+    }
+}
+
+fn parse_scout_date(text: &str) -> Option<NaiveDate> {
+    NaiveDate::parse_from_str(text, "%Y-%m-%d").ok()
+}
 
 pub struct Store {
     conn: Connection,
@@ -156,6 +295,10 @@ pub struct PlayerRow {
     pub age: Option<i32>,
     pub club_uid: Option<u32>,
     pub club_name: Option<String>,
+    /// The club team a player is registered with, when the save resolves it.
+    pub team_id: Option<u32>,
+    /// Position of that team in the club's stored team list; `0` is the first team.
+    pub team_slot: Option<u8>,
     pub league_competition_id: Option<u32>,
     pub league_name: Option<String>,
     pub nation_id: Option<u16>,
@@ -380,34 +523,6 @@ pub struct DistributionBand {
 }
 
 #[derive(Debug, Clone, Serialize)]
-pub struct ClubOverview {
-    pub club_uid: u32,
-    pub club_name: String,
-    pub players: u64,
-    pub avg_ca: f64,
-    pub max_ca: u16,
-    pub avg_age: f64,
-    pub total_value: u64,
-}
-
-#[derive(Debug, Clone, Serialize)]
-pub struct AnalysisOverview {
-    pub total_players: u64,
-    pub total_clubs: u64,
-    pub average_age: f64,
-    pub median_ca: u16,
-    pub total_value: u64,
-    pub free_agents: u64,
-    pub loanees: u64,
-    pub expiring_contracts: u64,
-    pub game_date: Option<String>,
-    pub age_bands: Vec<DistributionBand>,
-    pub ca_bands: Vec<DistributionBand>,
-    pub contract_years: Vec<DistributionBand>,
-    pub top_clubs: Vec<ClubOverview>,
-}
-
-#[derive(Debug, Clone, Serialize)]
 pub struct SquadAnalysis {
     pub club_uid: u32,
     pub club_name: String,
@@ -422,6 +537,58 @@ pub struct SquadAnalysis {
     pub age_bands: Vec<DistributionBand>,
     pub contract_years: Vec<DistributionBand>,
     pub players: Vec<PlayerRow>,
+    /// One entry per registered team that has squad players. The label comes
+    /// from the team's current-season competition, or from its age profile when
+    /// the competition is unnamed or has no fixtures.
+    pub teams: Vec<SquadTeam>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct SquadTeam {
+    pub team_id: u32,
+    pub slot: Option<u8>,
+    pub competition_id: Option<u32>,
+    pub competition_name: Option<String>,
+    pub fixture_count: u64,
+    pub label: SquadTeamLabel,
+    /// True when the label is inferred from the squad's age rather than read
+    /// from a named competition.
+    pub inferred: bool,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct SquadTeamLabel {
+    /// `firstTeam`, `youth`, `reserves` or `unknown`.
+    pub kind: &'static str,
+    /// Present for a specific youth age such as 20 in `U20`.
+    pub age: Option<u8>,
+}
+
+impl SquadTeamLabel {
+    fn first_team() -> Self {
+        Self {
+            kind: "firstTeam",
+            age: None,
+        }
+    }
+
+    fn youth(age: Option<u8>) -> Self {
+        Self { kind: "youth", age }
+    }
+
+    fn reserves() -> Self {
+        Self {
+            kind: "reserves",
+            age: None,
+        }
+    }
+
+    fn unknown() -> Self {
+        Self {
+            kind: "unknown",
+            age: None,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -605,10 +772,11 @@ impl Store {
                   raw_attributes_json, best_role_id, best_role_name, best_role_score,
                   best_role_position, injury_status, injury_until, recent_injury,
                   suspension_count, injuries_json, suspensions_json, contract_end, wage, on_loan,
-                  transfer_listed, loan_listed, league_competition_id, league_name, data_json)
+                  transfer_listed, loan_listed, league_competition_id, league_name, team_id,
+                  team_slot, data_json)
                  VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18,?19,
                          ?20,?21,?22,?23,?24,?25,?26,?27,?28,?29,?30,?31,?32,?33,?34,?35,?36,
-                         ?37,?38,?39,?40,?41,?42,?43,?44,?45,?46)",
+                         ?37,?38,?39,?40,?41,?42,?43,?44,?45,?46,?47,?48)",
             )?;
             let mut snapshot_stmt = transaction.prepare(
                 "INSERT INTO player_snapshots
@@ -702,6 +870,8 @@ impl Store {
                     player.loan_listed,
                     player.league_competition_id,
                     player.league_name,
+                    player.team_id,
+                    player.team_slot,
                     serde_json::to_string(player)?,
                 ])?;
 
@@ -1064,6 +1234,22 @@ impl Store {
                     competition.name,
                     competition.stage_ids.len() as i64,
                     serde_json::to_string(&competition.stage_ids)?,
+                ])?;
+            }
+        }
+
+        {
+            let mut team_competition_stmt = transaction.prepare(
+                "INSERT INTO team_competitions
+                 (save_id, team_id, competition_id, fixtures)
+                 VALUES (?1,?2,?3,?4)",
+            )?;
+            for row in &parsed.team_competitions {
+                team_competition_stmt.execute(params![
+                    save_id,
+                    row.team_id,
+                    row.competition_id,
+                    row.fixtures,
                 ])?;
             }
         }
@@ -1934,6 +2120,111 @@ impl Store {
         ))
     }
 
+    /// The managed club's senior squad line by line, its money and the players
+    /// a scout would let go.
+    pub fn scout_overview(&self, save_id: i64, club_uid: u32) -> Result<ScoutOverview> {
+        let context = self.scout_context(save_id, club_uid)?;
+        let squad = self.scout_candidates(save_id, Some(club_uid), None)?;
+        Ok(crate::scouting::overview(&context, &squad))
+    }
+
+    /// Players the scout recommends for the position and purpose in `request`.
+    pub fn scout_advice(&self, request: &ScoutRequest) -> Result<Scouted> {
+        let position = request.position.trim().to_owned();
+        if !is_scout_position(&position) {
+            return Err(Error::parse(format!("unknown position {position:?}")));
+        }
+        let context = self.scout_context(request.save_id, request.club_uid)?;
+        let own =
+            self.scout_candidates(request.save_id, Some(request.club_uid), Some(&position))?;
+        let candidates = self.scout_candidates(request.save_id, None, Some(&position))?;
+        crate::scouting::advise(request, &context, &own, &candidates)
+    }
+
+    fn scout_context(&self, save_id: i64, club_uid: u32) -> Result<ScoutContext> {
+        let club = self
+            .conn
+            .query_row(
+                "SELECT name, gender, reputation, transfer_budget_remaining, wage_budget_weekly
+                 FROM clubs WHERE save_id = ?1 AND uid = ?2",
+                params![save_id, club_uid],
+                |row| {
+                    Ok((
+                        row.get::<_, String>(0)?,
+                        row.get::<_, Option<i64>>(1)?,
+                        row.get::<_, Option<i64>>(2)?,
+                        row.get::<_, Option<i64>>(3)?,
+                        row.get::<_, Option<i64>>(4)?,
+                    ))
+                },
+            )
+            .optional()?
+            .ok_or_else(|| Error::parse(format!("unknown club {club_uid}")))?;
+        let finance = self
+            .conn
+            .query_row(
+                "SELECT transfer_budget_remaining, wage_budget_weekly
+                 FROM club_finances
+                 WHERE save_id = ?1 AND club_uid = ?2
+                 ORDER BY month DESC LIMIT 1",
+                params![save_id, club_uid],
+                |row| Ok((row.get::<_, Option<i64>>(0)?, row.get::<_, Option<i64>>(1)?)),
+            )
+            .optional()?;
+        let wage_bill: Option<i64> = self.conn.query_row(
+            "SELECT SUM(wage) FROM contracts WHERE save_id = ?1 AND club_uid = ?2",
+            params![save_id, club_uid],
+            |row| row.get(0),
+        )?;
+        let game_date = self
+            .save_game_date(save_id)?
+            .as_deref()
+            .and_then(parse_scout_date);
+        Ok(ScoutContext {
+            club_uid,
+            club_name: club.0,
+            club_gender: club
+                .1
+                .map(|gender| gender.clamp(0, i64::from(u8::MAX)) as u8),
+            club_reputation: club
+                .2
+                .filter(|value| *value > 0)
+                .map(|value| value.clamp(0, i64::from(u16::MAX)) as u16),
+            transfer_budget: club.3.or(finance.and_then(|value| value.0)),
+            wage_budget: club.4.or(finance.and_then(|value| value.1)),
+            wage_bill,
+            game_date,
+        })
+    }
+
+    fn scout_candidates(
+        &self,
+        save_id: i64,
+        club_uid: Option<u32>,
+        position: Option<&str>,
+    ) -> Result<Vec<ScoutCandidate>> {
+        let mut sql = format!("{SCOUT_CANDIDATE_SELECT} WHERE p.save_id = ?1");
+        if club_uid.is_some() {
+            sql.push_str(" AND p.club_uid = ?2");
+        }
+        if let Some(position) = position {
+            sql.push_str(&format!(
+                " AND json_extract(p.positions_json, '$.{position}') >= {LOWEST_POSITION_RATING}"
+            ));
+        }
+        let mut values = vec![Value::Integer(save_id)];
+        if let Some(uid) = club_uid {
+            values.push(Value::Integer(i64::from(uid)));
+        }
+        let mut statement = self.conn.prepare(&sql)?;
+        let rows = statement.query_map(params_from_iter(values.iter()), ScoutRow::read)?;
+        let mut out = Vec::new();
+        for row in rows {
+            out.push(row?.into_candidate()?);
+        }
+        Ok(out)
+    }
+
     /// Style-similar players inside the target's position group. Reuses the
     /// scored cache, including the per-metric percentile vectors.
     pub fn similar_stats_players(
@@ -2155,176 +2446,6 @@ impl Store {
         }))
     }
 
-    /// Save-wide analysis, or one club's analysis when `club_uid` is set. Club
-    /// strength always stays save-wide so the managed club can be compared with
-    /// the rest of the database.
-    pub fn analysis_overview(
-        &self,
-        save_id: i64,
-        club_uid: Option<u32>,
-    ) -> Result<AnalysisOverview> {
-        let game_date_text: Option<String> = self
-            .conn
-            .query_row(
-                "SELECT game_date FROM saves WHERE id = ?1",
-                params![save_id],
-                |row| row.get(0),
-            )
-            .optional()?
-            .flatten();
-        let game_date = game_date_text
-            .as_deref()
-            .and_then(|text| NaiveDate::parse_from_str(text, "%Y-%m-%d").ok());
-        let cutoff = game_date.and_then(|date| date.checked_add_months(Months::new(12)));
-        let total_clubs: u64 = self.conn.query_row(
-            "SELECT COUNT(*) FROM clubs WHERE save_id = ?1",
-            params![save_id],
-            |row| row.get(0),
-        )?;
-
-        let mut statement = self.conn.prepare(
-            "SELECT p.age, p.ca, p.pa, p.transfer_value, p.club_uid, p.club_name,
-                    c.end_date, c.on_loan
-             FROM players p
-             LEFT JOIN contracts c ON c.save_id = p.save_id AND c.player_uid = p.uid
-             WHERE p.save_id = ?1",
-        )?;
-        let rows = statement.query_map(params![save_id], |row| {
-            Ok((
-                row.get::<_, Option<i32>>(0)?,
-                row.get::<_, u16>(1)?,
-                row.get::<_, Option<i16>>(2)?,
-                row.get::<_, Option<u32>>(3)?,
-                row.get::<_, Option<u32>>(4)?,
-                row.get::<_, Option<String>>(5)?,
-                row.get::<_, Option<String>>(6)?,
-                row.get::<_, Option<bool>>(7)?,
-            ))
-        })?;
-
-        let mut player_count = 0u64;
-        let mut age_sum = 0i64;
-        let mut age_count = 0u64;
-        let mut ca_values = Vec::new();
-        let mut total_value = 0u64;
-        let mut free_agents = 0u64;
-        let mut loanees = 0u64;
-        let mut expiring = 0u64;
-        let mut age_counts: HashMap<&'static str, u64> = HashMap::new();
-        let mut ca_counts: HashMap<&'static str, u64> = HashMap::new();
-        let mut contract_years: HashMap<u16, u64> = HashMap::new();
-        let mut clubs: HashMap<u32, (String, u64, u64, u16, u64, u64)> = HashMap::new();
-
-        for row in rows {
-            let (age, ca, _pa, value, row_club_uid, club_name, contract_end, on_loan) = row?;
-            let in_scope = club_uid.is_none() || row_club_uid == club_uid;
-            if in_scope {
-                player_count += 1;
-                if let Some(age) = age {
-                    age_sum += age as i64;
-                    age_count += 1;
-                    *age_counts.entry(age_band_label(age)).or_default() += 1;
-                }
-                if ca > 0 {
-                    ca_values.push(ca);
-                    *ca_counts.entry(ca_band_label(ca)).or_default() += 1;
-                }
-                if let Some(value) = value {
-                    total_value += value as u64;
-                }
-                if row_club_uid.is_none() {
-                    free_agents += 1;
-                }
-                if on_loan == Some(true) {
-                    loanees += 1;
-                }
-                if let (Some(end), Some(cutoff)) = (contract_end.as_deref(), cutoff) {
-                    if end <= cutoff.format("%Y-%m-%d").to_string().as_str()
-                        && game_date.is_none_or(|start| {
-                            end >= start.format("%Y-%m-%d").to_string().as_str()
-                        })
-                    {
-                        expiring += 1;
-                    }
-                }
-                if let Some(year) = contract_end.as_deref().and_then(contract_year) {
-                    *contract_years.entry(year).or_default() += 1;
-                }
-            }
-            if let (Some(uid), Some(name)) = (row_club_uid, club_name) {
-                let entry = clubs.entry(uid).or_insert((name, 0, 0, 0, 0, 0));
-                entry.1 += 1;
-                entry.2 += ca as u64;
-                entry.3 = entry.3.max(ca);
-                if let Some(age) = age {
-                    entry.4 += age as u64;
-                }
-                if let Some(value) = value {
-                    entry.5 += value as u64;
-                }
-            }
-        }
-
-        ca_values.sort_unstable();
-        let median_ca = ca_values.get(ca_values.len() / 2).copied().unwrap_or(0);
-        let mut top_clubs: Vec<ClubOverview> = clubs
-            .iter()
-            .filter(|(_, (_, players, _, _, _, _))| *players >= 10)
-            .map(
-                |(club_uid, (club_name, players, ca_sum, max_ca, age_sum, value))| ClubOverview {
-                    club_uid: *club_uid,
-                    club_name: club_name.clone(),
-                    players: *players,
-                    avg_ca: round1(*ca_sum as f64 / *players as f64),
-                    max_ca: *max_ca,
-                    avg_age: round1(*age_sum as f64 / *players as f64),
-                    total_value: *value,
-                },
-            )
-            .collect();
-        let by_strength = |left: &ClubOverview, right: &ClubOverview| {
-            right
-                .avg_ca
-                .total_cmp(&left.avg_ca)
-                .then_with(|| right.players.cmp(&left.players))
-        };
-        top_clubs.sort_by(by_strength);
-        top_clubs.truncate(12);
-        if let Some(scope_uid) = club_uid
-            && !top_clubs.iter().any(|club| club.club_uid == scope_uid)
-            && let Some((club_name, players, ca_sum, max_ca, age_sum, value)) =
-                clubs.get(&scope_uid)
-            && *players > 0
-        {
-            top_clubs.push(ClubOverview {
-                club_uid: scope_uid,
-                club_name: club_name.clone(),
-                players: *players,
-                avg_ca: round1(*ca_sum as f64 / *players as f64),
-                max_ca: *max_ca,
-                avg_age: round1(*age_sum as f64 / *players as f64),
-                total_value: *value,
-            });
-            top_clubs.sort_by(by_strength);
-        }
-
-        Ok(AnalysisOverview {
-            total_players: player_count,
-            total_clubs,
-            average_age: round1(age_sum as f64 / age_count.max(1) as f64),
-            median_ca,
-            total_value,
-            free_agents,
-            loanees,
-            expiring_contracts: expiring,
-            game_date: game_date_text,
-            age_bands: distribution(&AGE_BANDS, &age_counts),
-            ca_bands: distribution(&CA_BANDS, &ca_counts),
-            contract_years: contract_year_bands(contract_years),
-            top_clubs,
-        })
-    }
-
     pub fn squad_analysis(&self, save_id: i64, club_uid: u32) -> Result<SquadAnalysis> {
         let page = self.query_players(&PlayerQuery {
             save_id,
@@ -2406,6 +2527,7 @@ impl Store {
             }
         }
 
+        let teams = self.squad_teams(save_id, &page.rows)?;
         Ok(SquadAnalysis {
             club_uid,
             club_name,
@@ -2420,7 +2542,81 @@ impl Store {
             age_bands: distribution(&AGE_BANDS, &age_counts),
             contract_years: contract_year_bands(contract_years),
             players: page.rows,
+            teams,
         })
+    }
+
+    fn squad_teams(&self, save_id: i64, players: &[PlayerRow]) -> Result<Vec<SquadTeam>> {
+        let mut by_slot: HashMap<u8, (u32, Vec<i32>)> = HashMap::new();
+        for player in players {
+            let (Some(team_id), Some(slot)) = (player.team_id, player.team_slot) else {
+                continue;
+            };
+            let (_, ages) = by_slot.entry(slot).or_insert_with(|| (team_id, Vec::new()));
+            if let Some(age) = player.age {
+                ages.push(age);
+            }
+        }
+        if by_slot.is_empty() {
+            return Ok(Vec::new());
+        }
+        let target: std::collections::HashSet<u32> =
+            by_slot.values().map(|(team_id, _)| *team_id).collect();
+        let mut statement = self.conn.prepare(
+            "SELECT tc.team_id, tc.competition_id, c.name, tc.fixtures
+             FROM team_competitions tc
+             LEFT JOIN competitions c
+               ON c.save_id = tc.save_id AND c.id = tc.competition_id
+             WHERE tc.save_id = ?1
+             ORDER BY tc.team_id, tc.fixtures DESC, tc.competition_id",
+        )?;
+        let mut rows = statement.query(params![save_id])?;
+        let mut competitions_by_team: HashMap<u32, Vec<TeamCompetitionRow>> = HashMap::new();
+        while let Some(row) = rows.next()? {
+            let team_id: u32 = row.get(0)?;
+            if !target.contains(&team_id) {
+                continue;
+            }
+            competitions_by_team
+                .entry(team_id)
+                .or_default()
+                .push(TeamCompetitionRow {
+                    competition_id: row.get(1)?,
+                    name: row.get(2)?,
+                    fixtures: u64::try_from(row.get::<_, i64>(3)?).unwrap_or(0),
+                });
+        }
+
+        let mut slots: Vec<u8> = by_slot.keys().copied().collect();
+        slots.sort_unstable();
+        let mut teams = Vec::with_capacity(slots.len());
+        for slot in slots {
+            let (team_id, ages) = &by_slot[&slot];
+            let rows = competitions_by_team
+                .get(team_id)
+                .map(Vec::as_slice)
+                .unwrap_or(&[]);
+            let primary = rows
+                .iter()
+                .find(|row| !row.name.as_deref().is_some_and(is_friendly_competition));
+            let (label, inferred) = if slot == 0 {
+                (SquadTeamLabel::first_team(), false)
+            } else if let Some(name) = primary.and_then(|row| row.name.as_deref()) {
+                (label_from_competition(name, slot), false)
+            } else {
+                (inferred_squad_label(ages), true)
+            };
+            teams.push(SquadTeam {
+                team_id: *team_id,
+                slot: Some(slot),
+                competition_id: primary.map(|row| row.competition_id),
+                competition_name: primary.and_then(|row| row.name.clone()),
+                fixture_count: primary.map_or(0, |row| row.fixtures),
+                label,
+                inferred,
+            });
+        }
+        Ok(teams)
     }
 
     pub fn query_clubs(&self, query: &ClubQuery) -> Result<ClubPage> {
@@ -3176,6 +3372,8 @@ fn migrate(conn: &Connection) -> Result<()> {
         ("players", "nation_name", "TEXT"),
         ("players", "league_competition_id", "INTEGER"),
         ("players", "league_name", "TEXT"),
+        ("players", "team_id", "INTEGER"),
+        ("players", "team_slot", "INTEGER"),
         ("players", "gender", "INTEGER"),
         ("players", "best_role_id", "TEXT"),
         ("players", "best_role_name", "TEXT"),
@@ -3283,6 +3481,10 @@ fn map_player_row(row: &Row<'_>, include_hidden: bool) -> rusqlite::Result<Playe
         age: row.get(2)?,
         club_uid: row.get(3)?,
         club_name: row.get(4)?,
+        team_id: row.get(37)?,
+        team_slot: row
+            .get::<_, Option<i64>>(38)?
+            .and_then(|value| u8::try_from(value).ok()),
         league_competition_id: row.get(5)?,
         league_name: row.get(6)?,
         nation_id: row.get(7)?,
@@ -4041,7 +4243,6 @@ fn staff_sort_expression(by: &str) -> String {
 }
 
 const AGE_BANDS: [&str; 6] = ["≤17", "18–21", "22–25", "26–29", "30–33", "34+"];
-const CA_BANDS: [&str; 6] = ["<100", "100–119", "120–139", "140–159", "160–179", "180+"];
 const SQUAD_GROUPS: [&str; 4] = ["门将", "后卫", "中场", "前锋"];
 
 fn round1(value: f64) -> f64 {
@@ -4056,17 +4257,6 @@ fn age_band_label(age: i32) -> &'static str {
         26..=29 => "26–29",
         30..=33 => "30–33",
         _ => "34+",
-    }
-}
-
-fn ca_band_label(ca: u16) -> &'static str {
-    match ca {
-        0..=99 => "<100",
-        100..=119 => "100–119",
-        120..=139 => "120–139",
-        140..=159 => "140–159",
-        160..=179 => "160–179",
-        _ => "180+",
     }
 }
 
@@ -4120,6 +4310,112 @@ fn career_key(parsed: &ParsedSave) -> String {
 
 pub fn summary_from_parse(parsed: &ParsedSave) -> SaveSummary {
     parsed.summary.clone()
+}
+
+struct TeamCompetitionRow {
+    competition_id: u32,
+    name: Option<String>,
+    fixtures: u64,
+}
+
+fn is_friendly_competition(name: &str) -> bool {
+    name.eq_ignore_ascii_case("friendly")
+}
+
+fn label_from_competition(name: &str, slot: u8) -> SquadTeamLabel {
+    if let Some(age) = parse_age_marker(name) {
+        return SquadTeamLabel::youth(Some(age));
+    }
+    let lower = name.to_ascii_lowercase();
+    if lower.contains("primavera") {
+        return SquadTeamLabel::youth(Some(20));
+    }
+    if lower.contains("youth") || lower.contains("academy") {
+        return SquadTeamLabel::youth(None);
+    }
+    if lower.contains("reserve") || lower.contains("b team") {
+        return SquadTeamLabel::reserves();
+    }
+    if slot > 0 {
+        SquadTeamLabel::reserves()
+    } else {
+        SquadTeamLabel::first_team()
+    }
+}
+
+/// Read U19 / Under 19 / Sub-20 style age markers without inventing one from a
+/// competition with no age in its name.
+fn parse_age_marker(name: &str) -> Option<u8> {
+    let lower = name.to_ascii_lowercase();
+    if let Some(age) = age_after_word(&lower, "under") {
+        return Some(age);
+    }
+    if let Some(age) = age_after_word(&lower, "sub") {
+        return Some(age);
+    }
+    let bytes = lower.as_bytes();
+    for (index, byte) in bytes.iter().enumerate() {
+        if *byte == b'u'
+            && (index == 0 || !bytes[index - 1].is_ascii_alphabetic())
+            && let Some(age) = age_after(bytes, index + 1)
+        {
+            return Some(age);
+        }
+    }
+    None
+}
+
+fn age_after_word(text: &str, word: &str) -> Option<u8> {
+    let bytes = text.as_bytes();
+    let mut from = 0;
+    while let Some(found) = text[from..].find(word) {
+        let index = from + found;
+        let before_ok = index == 0 || !bytes[index - 1].is_ascii_alphabetic();
+        if before_ok && let Some(age) = age_after(bytes, index + word.len()) {
+            return Some(age);
+        }
+        from = index + word.len();
+        if from >= text.len() {
+            break;
+        }
+    }
+    None
+}
+
+fn age_after(bytes: &[u8], mut index: usize) -> Option<u8> {
+    while index < bytes.len() && matches!(bytes[index], b' ' | b'-' | b'_') {
+        index += 1;
+    }
+    if index + 1 >= bytes.len()
+        || !bytes[index].is_ascii_digit()
+        || !bytes[index + 1].is_ascii_digit()
+    {
+        return None;
+    }
+    let age = (bytes[index] - b'0') * 10 + (bytes[index + 1] - b'0');
+    (13..=23).contains(&age).then_some(age)
+}
+
+fn inferred_squad_label(ages: &[i32]) -> SquadTeamLabel {
+    let known: Vec<i32> = ages
+        .iter()
+        .copied()
+        .filter(|age| (10..=60).contains(age))
+        .collect();
+    if known.len() < 3 {
+        return SquadTeamLabel::unknown();
+    }
+    let young = known.iter().filter(|age| **age <= 20).count();
+    let adult = known.iter().filter(|age| **age >= 18).count();
+    let minimum = known.iter().copied().min().unwrap_or(0);
+    let average = known.iter().sum::<i32>() as f64 / known.len() as f64;
+    if young * 10 >= known.len() * 7 || (minimum <= 17 && young * 2 >= known.len()) {
+        return SquadTeamLabel::youth(None);
+    }
+    if adult * 10 >= known.len() * 7 && average >= 19.0 {
+        return SquadTeamLabel::reserves();
+    }
+    SquadTeamLabel::unknown()
 }
 
 pub fn report_from_parse(parsed: &ParsedSave) -> ParseReport {
@@ -4263,7 +4559,7 @@ mod tests {
     }
 
     #[test]
-    fn analysis_overview_scopes_to_one_club_and_reads_the_managed_club() {
+    fn reads_the_managed_club() {
         let store = Store::open_in_memory().expect("store");
         store
             .conn
@@ -4287,24 +4583,6 @@ mod tests {
         assert_eq!(managed.club_uid, 1099);
         assert_eq!(managed.club_name, "Milan");
         assert_eq!(managed.manager_name.as_deref(), Some("Alice"));
-
-        let global = store.analysis_overview(1, None).expect("global overview");
-        assert_eq!(global.total_players, 3);
-        assert_eq!(global.total_value, 6000);
-
-        let scoped = store
-            .analysis_overview(1, Some(1099))
-            .expect("scoped overview");
-        assert_eq!(scoped.total_players, 2);
-        assert_eq!(scoped.average_age, 22.0);
-        assert_eq!(scoped.median_ca, 150);
-        assert_eq!(scoped.total_value, 3000);
-        assert!(
-            scoped
-                .top_clubs
-                .iter()
-                .any(|club| club.club_uid == 1099 && club.players == 2)
-        );
     }
 
     #[test]
@@ -4947,5 +5225,114 @@ mod tests {
         assert_eq!(priced.fair_price, Some(1234.0));
         assert_eq!(priced.value_gap_pct, Some(12.5));
         assert_eq!(priced.bargain_score, Some(61.5));
+    }
+
+    #[test]
+    fn parses_age_markers_and_labels_across_naming_styles() {
+        assert_eq!(parse_age_marker("English U21 Premier Division 1"), Some(21));
+        assert_eq!(
+            parse_age_marker("French Under 19 National - Group A"),
+            Some(19)
+        );
+        assert_eq!(parse_age_marker("French Under-19 National"), Some(19));
+        assert_eq!(parse_age_marker("Italian U20 Primavera 1"), Some(20));
+        assert_eq!(parse_age_marker("Brazilian Sub-20"), Some(20));
+        assert_eq!(parse_age_marker("UEFA Youth League"), None);
+        assert_eq!(parse_age_marker("Premier League"), None);
+
+        let youth = label_from_competition("UEFA Youth League", 2);
+        assert_eq!(youth.kind, "youth");
+        assert_eq!(youth.age, None);
+        assert_eq!(
+            label_from_competition("Argentina Reserves Division", 2).kind,
+            "reserves"
+        );
+        assert_eq!(
+            label_from_competition("Spanish Second Division", 2).kind,
+            "reserves"
+        );
+        assert_eq!(
+            label_from_competition("Italian Serie A", 0).kind,
+            "firstTeam"
+        );
+    }
+
+    #[test]
+    fn infers_a_label_from_the_squad_age_profile() {
+        assert_eq!(inferred_squad_label(&[19, 20, 21, 22, 23]).kind, "reserves");
+        assert_eq!(inferred_squad_label(&[15, 16, 17, 18, 19]).kind, "youth");
+        assert_eq!(inferred_squad_label(&[15, 25, 33]).kind, "unknown");
+        assert_eq!(inferred_squad_label(&[19, 20]).kind, "unknown");
+    }
+
+    #[test]
+    fn labels_squad_teams_from_competitions_and_age_profiles() {
+        let store = Store::open_in_memory().expect("store");
+        store
+            .conn
+            .execute_batch(
+                "INSERT INTO saves
+                   (id, path, file_name, file_size, mtime_ns, fingerprint, game, build,
+                    parser_version, parsed_at)
+                 VALUES (1, '/tmp/test.fm', 'test.fm', 1, 1, 'fp', 'FM27', '27.0.0',
+                         'test', 'now');
+                 INSERT INTO competitions
+                   (save_id, id, database_id, name, stage_count, stage_ids_json)
+                 VALUES
+                   (1, 22, 29, 'Italian Serie A', 1, '[347]'),
+                   (1, 3560, 43344138, 'Italian U20 Primavera 1', 1, '[354]'),
+                   (1, 3572, 43344150, 'Italian U18 Division 1 Group A', 1, '[365]');
+                 INSERT INTO team_competitions
+                   (save_id, team_id, competition_id, fixtures)
+                 VALUES
+                   (1, 900, 22, 38),
+                   (1, 901, 3560, 38),
+                   (1, 902, 3572, 26);
+                 INSERT INTO players
+                   (save_id, uid, name, age, ca, club_uid, club_name, team_id, team_slot,
+                    positions_json, attributes_json, raw_attributes_json, data_json)
+                 VALUES
+                   (1, 1, 'First A', 27, 150, 1099, 'Milan', 900, 0, '{}', '{}', '{}', '{}'),
+                   (1, 2, 'First B', 24, 140, 1099, 'Milan', 900, 0, '{}', '{}', '{}', '{}'),
+                   (1, 3, 'First C', 30, 130, 1099, 'Milan', 900, 0, '{}', '{}', '{}', '{}'),
+                   (1, 4, 'U20 A', 18, 120, 1099, 'Milan', 901, 1, '{}', '{}', '{}', '{}'),
+                   (1, 5, 'U20 B', 19, 110, 1099, 'Milan', 901, 1, '{}', '{}', '{}', '{}'),
+                   (1, 6, 'U20 C', 20, 100, 1099, 'Milan', 901, 1, '{}', '{}', '{}', '{}'),
+                   (1, 7, 'U18 A', 16, 90, 1099, 'Milan', 902, 2, '{}', '{}', '{}', '{}'),
+                   (1, 8, 'U18 B', 17, 80, 1099, 'Milan', 902, 2, '{}', '{}', '{}', '{}'),
+                   (1, 9, 'U18 C', 18, 70, 1099, 'Milan', 902, 2, '{}', '{}', '{}', '{}'),
+                   (1, 10, 'Reserve A', 20, 60, 1099, 'Milan', 903, 3, '{}', '{}', '{}', '{}'),
+                   (1, 11, 'Reserve B', 21, 60, 1099, 'Milan', 903, 3, '{}', '{}', '{}', '{}'),
+                   (1, 12, 'Reserve C', 22, 60, 1099, 'Milan', 903, 3, '{}', '{}', '{}', '{}'),
+                   (1, 13, 'Youth A', 15, 50, 1099, 'Milan', 904, 4, '{}', '{}', '{}', '{}'),
+                   (1, 14, 'Youth B', 16, 50, 1099, 'Milan', 904, 4, '{}', '{}', '{}', '{}'),
+                   (1, 15, 'Youth C', 17, 50, 1099, 'Milan', 904, 4, '{}', '{}', '{}', '{}'),
+                   (1, 16, 'Mixed A', 15, 50, 1099, 'Milan', 905, 5, '{}', '{}', '{}', '{}'),
+                   (1, 17, 'Mixed B', 25, 50, 1099, 'Milan', 905, 5, '{}', '{}', '{}', '{}'),
+                   (1, 18, 'Mixed C', 33, 50, 1099, 'Milan', 905, 5, '{}', '{}', '{}', '{}');",
+            )
+            .expect("seed");
+
+        let analysis = store.squad_analysis(1, 1099).expect("squad");
+        let team = |slot: u8| {
+            analysis
+                .teams
+                .iter()
+                .find(|team| team.slot == Some(slot))
+                .expect("team")
+        };
+        assert_eq!(team(0).label.kind, "firstTeam");
+        assert_eq!(team(0).competition_name.as_deref(), Some("Italian Serie A"));
+        assert_eq!(team(1).label.kind, "youth");
+        assert_eq!(team(1).label.age, Some(20));
+        assert_eq!(team(1).fixture_count, 38);
+        assert_eq!(team(2).label.kind, "youth");
+        assert_eq!(team(2).label.age, Some(18));
+        assert!(team(3).inferred);
+        assert_eq!(team(3).label.kind, "reserves");
+        assert!(team(4).inferred);
+        assert_eq!(team(4).label.kind, "youth");
+        assert!(team(5).inferred);
+        assert_eq!(team(5).label.kind, "unknown");
     }
 }

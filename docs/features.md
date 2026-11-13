@@ -29,6 +29,10 @@
 - Competitions: 1,724 competitions and 3,459 stage rows from the save's stage
   table; 1,586 carry an editor database id, which links to the optional user name
   CSV.
+- Team competitions: the fixture calendar in the unlisted span is scanned and
+  joined through stages to competitions for the save's current season. The
+  result labels reserve and youth squads in the Analysis centre; no scores,
+  venues or match summaries are decoded.
 - Contracts: 44,341 records with wages, start/end dates, loans and clauses.
 - SQLite cache and server-side pagination; the CLI and desktop app share
   `fm27-core`.
@@ -54,16 +58,22 @@
   with sortable headers, and facility ratings use the game's ten named tiers.
 - 2–4 player comparison.
 - CSV/JSON export.
-- Scouting modes: Full shows CA/PA and attributes; Fair play hides CA/PA, growth
-  and hidden attributes; Moneyball also hides attributes and role scores and
-  prices players without CA/PA. Exports still contain CA/PA and show a warning
-  outside Full mode.
-- Hidden-attribute toggle, off by default (Full mode only).
+- Scouting modes: Full shows CA/PA and attributes; Fair play hides CA/PA and
+  growth; Moneyball also hides attributes, hidden attributes, personality and
+  role scores and prices players without CA/PA. Exports still contain CA/PA and
+  show a warning outside Full mode.
+- Hidden attributes and personality are always included in the attribute views
+  (table, filters, profile and comparison); no separate toggle is required.
 - Light and dark themes.
 - Analysis centre: the save's managed club is detected from the `humans` section
-  and checked against the save summary. Overview, squad depth and needs follow
-  that club; the overview keeps a save-wide club strength ranking so the managed
-  club can be compared with the rest of the database.
+  and checked against the save summary. The Overview tab opens on that club's
+  squad: size, age, CA/PA, wages, value, position depth and contract expiry. The
+  player list has an All tab plus one tab per registered team, with the first
+  team first. Other sides are named from the competition they played in during
+  the current season (for example U20 or U18); a named senior competition reads
+  as Reserves, and an unnamed competition or a side with no competitive fixtures
+  falls back to its squad age profile (Youth or Reserves, marked inferred) or
+  the existing Squad N label.
 - Quick filters: wonderkids, expiring contracts, high potential, injured /
   injury history / suspended / on loan / free agent / available.
 - Player origin: system-generated newgens are marked in the table and profile and
@@ -86,10 +96,18 @@
   and the advanced model only scores rows with the advanced stat block. Contract,
   market, confidence, injury and fee filters are available, and the current view
   exports to CSV or JSON.
-- Squad needs: the analysis centre's Needs tab and the club inspector's squad tab
-  rank a club's weakest position groups by current stats quality and list same-tier,
-  fee-known upgrades with quality gain, fair price and value gap. They use 300+ minute
-  samples and exclude loanee stats.
+- Squad needs: the club inspector's squad tab ranks a club's weakest position
+  groups by current stats quality and lists same-tier, fee-known upgrades with
+  quality gain, fair price and value gap. It uses 300+ minute samples and excludes
+  loanee stats.
+- Transfer scouting (Full mode): the Scouting tab works from the managed club and
+  separates role fit from signing probability. Advice is relative to the club's own
+  squad (first team, rotation, future), uses an optional role filter, and explains
+  every probability with named reasons. Fee and wage estimates account for contract
+  length, listing, squad status, release clauses, the transfer budget and wage room.
+  The same tab shows a line-by-line squad depth chart and the players a scout would
+  sell, loan out or release. Unknown values stay unknown and are never treated as
+  zero.
 - Growth history: each parse records a snapshot keyed by save name + game date;
   the detail panel shows CA / PA / value history.
 - Linked filtering: club, nationality, gender and status counts update live with
